@@ -1,0 +1,376 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  SUPER_ADMIN
+  FINANCE_MANAGER
+  OPERATIONS_CLERK
+  PAYMENT_CLERK
+  CUSTOMER
+}
+
+enum IdType {
+  NATIONAL_ID
+  PASSPORT
+  DRIVERS_LICENSE
+  OTHER
+}
+
+enum PackageStatus {
+  RECEIVED
+  IN_WAREHOUSE
+  IN_PACKING_LIST
+  SHIPPED
+  ARRIVED
+  DELIVERED
+  CANCELLED
+}
+
+enum ContainerStatus {
+  PLANNED
+  LOADED
+  SHIPPED
+  ARRIVED
+  CLOSED
+}
+
+enum ShippingMode {
+  SEA
+  AIR
+}
+
+enum AirShippingType {
+  NORMAL_AIR
+  EXPRESS_AIR
+  BATTERY_GOODS
+  PHONES
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  POSTED
+  PAID
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationType {
+  PACKAGE_INTAKE
+  INVOICE_ISSUED
+  PAYMENT_RECEIVED
+  SHIPMENT_UPDATE
+  CONTAINER_ARRIVAL
+}
+
+// Models
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  username          String    @unique
+  password          String
+  firstName         String
+  lastName          String
+  role              UserRole
+  isActive          Boolean   @default(true)
+  twoFactorEnabled  Boolean   @default(false)
+  twoFactorSecret   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLogin         DateTime?
+  
+  // Relations
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  packagesCreated   Package[]      @relation("PackageCreatedBy")
+  packagesUpdated   Package[]      @relation("PackageUpdatedBy")
+  paymentsProcessed Payment[]      @relation("PaymentProcessedBy")
+  exchangeRatesSet  ExchangeRate[] @relation("ExchangeRateSetBy")
+  
+  @@index([email])
+  @@index([role])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+  
+  @@index([token])
+  @@index([userId])
+}
+
+model Customer {
+  id                  String              @id @default(uuid())
+  customerCode        String              @unique
+  firstName           String
+  lastName            String
+  email               String?
+  phoneNumber         String              // Mandatory
+  alternatePhone      String?
+  address             String?
+  city                String?
+  country             String?
+  idType              IdType?
+  idNumber            String?
+  preferredChannel    NotificationChannel @default(EMAIL)
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  
+  // Relations
+  packages            Package[]
+  invoices            Invoice[]
+  payments            Payment[]
+  notifications       Notification[]
+  
+  @@index([customerCode])
+  @@index([email])
+  @@index([phoneNumber])
+}
+
+model Package {
+  id                String        @id @default(uuid())
+  trackingCode      String        @unique
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  description       String
+  weight            Float         // in KG
+  cbm               Float?        // Cubic meters for sea shipping
+  quantity          Int           @default(1)
+  value             Float?
+  shippingMode      ShippingMode
+  airShippingType   AirShippingType?
+  status            PackageStatus @default(RECEIVED)
+  receivedDate      DateTime      @default(now())
+  warehouseLocation String?
+  daysInWarehouse   Int           @default(0)
+  photos            PackagePhoto[]
+  notes             String?
+  
+  // Packing list relation
+  packingListId     String?
+  packingList       PackingList?  @relation(fields: [packingListId], references: [id])
+  
+  // Invoice relation
+  invoiceId         String?
+  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+  
+  // Payment status
+  paymentStatus     PaymentStatus @default(PENDING)
+  
+  // Audit fields
+  createdById       String
+  createdBy         User          @relation("PackageCreatedBy", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?         @relation("PackageUpdatedBy", fields: [updatedById], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@index([trackingCode])
+  @@index([customerId])
+  @@index([status])
+  @@index([packingListId])
+}
+
+model PackagePhoto {
+  id          String   @id @default(uuid())
+  packageId   String
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  url         String
+  key         String   // S3 key
+  uploadedAt  DateTime @default(now())
+  
+  @@index([packageId])
+}
+
+model ShippingRate {
+  id              String           @id @default(uuid())
+  shippingMode    ShippingMode
+  airShippingType AirShippingType?
+  ratePerUnit     Float            // Per CBM for sea, per KG for air
+  currency        String           @default("USD")
+  effectiveFrom   DateTime         @default(now())
+  effectiveTo     DateTime?
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  @@unique([shippingMode, airShippingType, effectiveFrom])
+  @@index([shippingMode, isActive])
+}
+
+model Container {
+  id              String          @id @default(uuid())
+  containerNumber String          @unique
+  loadingDate     DateTime
+  departureCity   String
+  destinationCity String
+  eta             DateTime        // Estimated arrival (40-45 days)
+  actualArrival   DateTime?
+  status          ContainerStatus @default(PLANNED)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  packingLists    PackingList[]
+  
+  @@index([containerNumber])
+  @@index([status])
+}
+
+model PackingList {
+  id            String    @id @default(uuid())
+  name          String    @unique // Default to loading date
+  containerId   String
+  container     Container @relation(fields: [containerId], references: [id])
+  loadingDate   DateTime
+  totalPackages Int       @default(0)
+  totalCBM      Float     @default(0)
+  totalWeight   Float     @default(0)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  packages      Package[]
+  invoices      Invoice[]
+  
+  @@index([containerId])
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  packingListId   String
+  packingList     PackingList   @relation(fields: [packingListId], references: [id])
+  totalAmount     Float
+  currency        String        @default("USD")
+  exchangeRate    Float         @default(1)
+  localAmount     Float         // Amount in local currency
+  status          InvoiceStatus @default(POSTED)
+  dueDate         DateTime
+  paidAmount      Float         @default(0)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  packages        Package[]
+  payments        Payment[]
+  
+  @@index([invoiceNumber])
+  @@index([customerId])
+  @@index([status])
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  paymentCode     String        @unique
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  amount          Float
+  currency        String
+  exchangeRateId  String
+  exchangeRate    ExchangeRate  @relation(fields: [exchangeRateId], references: [id])
+  localAmount     Float
+  paymentMethod   String        // CASH, BANK_TRANSFER, MOBILE_MONEY, etc.
+  reference       String?       // Transaction reference
+  notes           String?
+  processedById   String
+  processedBy     User          @relation("PaymentProcessedBy", fields: [processedById], references: [id])
+  processedAt     DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  
+  // Relations
+  invoices        Invoice[]
+  
+  @@index([paymentCode])
+  @@index([customerId])
+}
+
+model ExchangeRate {
+  id            String    @id @default(uuid())
+  fromCurrency  String    @default("USD")
+  toCurrency    String
+  rate          Float
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  isActive      Boolean   @default(true)
+  setById       String
+  setBy         User      @relation("ExchangeRateSetBy", fields: [setById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  payments      Payment[]
+  
+  @@unique([fromCurrency, toCurrency, effectiveFrom])
+  @@index([isActive])
+}
+
+model Notification {
+  id          String              @id @default(uuid())
+  customerId  String
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  type        NotificationType
+  channel     NotificationChannel
+  recipient   String              // Email or phone number
+  subject     String?
+  content     String
+  status      String              @default("PENDING") // PENDING, SENT, FAILED
+  sentAt      DateTime?
+  failReason  String?
+  metadata    Json?               // Additional data
+  createdAt   DateTime            @default(now())
+  
+  @@index([customerId])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String   // CREATE, UPDATE, DELETE, STATUS_CHANGE
+  entity      String   // Model name
+  entityId    String   // ID of the affected record
+  before      Json?    // Previous values
+  after       Json?    // New values
+  metadata    Json?    // Additional context
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+}
