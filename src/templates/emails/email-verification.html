@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email - AOSTP</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 0;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); padding: 40px 20px; text-align: center;">
+            <img src="{{logoUrl}}" alt="AOSTP" style="height: 50px; margin-bottom: 20px;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Verify Your Email Address</h1>
+        </div>
+        
+        <!-- Content -->
+        <div style="padding: 40px 30px;">
+            <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 20px;">
+                Hi {{firstName}},
+            </p>
+            
+            <p style="color: #666666; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                Welcome to AOSTP! We're excited to have you join our marketplace community. To get started, please verify your email address by clicking the button below.
+            </p>
+            
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 40px 0;">
+                <a href="{{verificationUrl}}" 
+                   style="display: inline-block; background-color: #007bff; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);">
+                    Verify Email Address
+                </a>
+            </div>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+                If the button doesn't work, you can also copy and paste this link into your browser:
+            </p>
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; margin-bottom: 30px;">
+                <p style="color: #007bff; font-size: 14px; word-break: break-all; margin: 0;">
+                    {{verificationUrl}}
+                </p>
+            </div>
+            
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 15px; margin-bottom: 30px;">
+                <p style="color: #856404; font-size: 14px; margin: 0;">
+                    <strong>⏰ Important:</strong> This verification link will expire in 24 hours for security reasons.
+                </p>
+            </div>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6;">
+                If you didn't create an account with AOSTP, you can safely ignore this email.
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e9ecef;">
+            <p style="color: #6c757d; font-size: 14px; margin-bottom: 10px;">
+                Need help? Contact our support team at 
+                <a href="mailto:support@AOSTP.com" style="color: #007bff; text-decoration: none;">support@AOSTP.com</a>
+            </p>
+            <p style="color: #6c757d; font-size: 12px; margin: 0;">
+                Best regards,<br>
+                <strong>The AOSTP Team</strong>
+            </p>
+            <div style="margin-top: 20px;">
+                <a href="{{websiteUrl}}" style="color: #007bff; text-decoration: none; font-size: 12px; margin: 0 10px;">Website</a>
+                <a href="{{privacyUrl}}" style="color: #007bff; text-decoration: none; font-size: 12px; margin: 0 10px;">Privacy Policy</a>
+                <a href="{{termsUrl}}" style="color: #007bff; text-decoration: none; font-size: 12px; margin: 0 10px;">Terms of Service</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

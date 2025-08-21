@@ -15,7 +15,7 @@ import {
 import { PackagesService } from './packages.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { PackageFilterDto } from './dto/package-filter.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -54,21 +54,15 @@ export class PackagesController {
     UserRole.PAYMENT_CLERK,
   )
   @ApiOperation({ summary: 'Get all packages with pagination and filters' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'customerId', required: false, type: String })
-  @ApiQuery({ name: 'status', required: false, enum: PackageStatus })
-  @ApiQuery({ name: 'packingListId', required: false, type: String })
-  @ApiQuery({ name: 'paymentStatus', required: false, type: String })
-  @ApiQuery({ name: 'search', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('customerId') customerId?: string,
-    @Query('status') status?: PackageStatus,
-    @Query('packingListId') packingListId?: string,
-    @Query('paymentStatus') paymentStatus?: string,
-    @Query('search') search?: string,
-  ) {
+  findAll(@Query() filterDto: PackageFilterDto) {
+    const {
+      customerId,
+      status,
+      packingListId,
+      paymentStatus,
+      search,
+      ...paginationDto
+    } = filterDto;
     return this.packagesService.findAll(paginationDto, {
       customerId,
       status,

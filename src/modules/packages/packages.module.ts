@@ -5,10 +5,7 @@ import { PrismaModule } from '../../shared/prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    forwardRef(() => NotificationsModule),
-  ],
+  imports: [PrismaModule, forwardRef(() => NotificationsModule)],
   controllers: [PackagesController],
   providers: [PackagesService],
   exports: [PackagesService],

@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -36,6 +35,22 @@ export class CustomersService {
 
       if (emailExists) {
         throw new ConflictException('Customer with this email already exists');
+      }
+    }
+
+    // Check if ID number is provided and unique
+    if (createCustomerDto.idType && createCustomerDto.idNumber) {
+      const idExists = await this.prisma.customer.findFirst({
+        where: {
+          idType: createCustomerDto.idType,
+          idNumber: createCustomerDto.idNumber,
+        },
+      });
+
+      if (idExists) {
+        throw new ConflictException(
+          `Customer with this ${createCustomerDto.idType.toLowerCase().replace('_', ' ')} already exists`,
+        );
       }
     }
 
@@ -236,6 +251,29 @@ export class CustomersService {
 
       if (emailExists) {
         throw new ConflictException('Email already in use');
+      }
+    }
+
+    // Check if ID is being updated and is unique
+    if (updateCustomerDto.idType && updateCustomerDto.idNumber) {
+      const isIdChanged =
+        updateCustomerDto.idType !== customer.idType ||
+        updateCustomerDto.idNumber !== customer.idNumber;
+
+      if (isIdChanged) {
+        const idExists = await this.prisma.customer.findFirst({
+          where: {
+            idType: updateCustomerDto.idType,
+            idNumber: updateCustomerDto.idNumber,
+            NOT: { id },
+          },
+        });
+
+        if (idExists) {
+          throw new ConflictException(
+            `Customer with this ${updateCustomerDto.idType.toLowerCase().replace('_', ' ')} already exists`,
+          );
+        }
       }
     }
 

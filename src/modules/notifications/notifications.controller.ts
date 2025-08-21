@@ -42,7 +42,10 @@ export class NotificationsController {
     @Param('customerId') customerId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.notificationsService.getCustomerNotifications(customerId, limit);
+    return this.notificationsService.getCustomerNotifications(
+      customerId,
+      limit,
+    );
   }
 
   @Post('retry-failed')

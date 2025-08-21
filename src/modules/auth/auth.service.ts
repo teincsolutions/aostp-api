@@ -10,8 +10,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { JwtPayload, RefreshTokenPayload } from '../../shared/interfaces';
 import { User } from '@prisma/client';
+import { TwoFactorService } from './two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +21,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private twoFactorService: TwoFactorService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -67,12 +70,9 @@ export class AuthService {
 
     try {
       // Verify refresh token
-      const payload = this.jwtService.verify<RefreshTokenPayload>(
-        refreshToken,
-        {
-          secret: this.configService.get('JWT_REFRESH_SECRET'),
-        },
-      );
+      this.jwtService.verify<RefreshTokenPayload>(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
 
       // Check if refresh token exists in database
       const storedToken = await this.prisma.refreshToken.findUnique({
@@ -205,24 +205,92 @@ export class AuthService {
   }
 
   private sanitizeUser(user: User) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, twoFactorSecret, ...sanitized } = user;
     return sanitized;
   }
 
-  // Two-factor authentication methods (optional implementation)
+  // Two-factor authentication methods
   async enableTwoFactor(userId: string) {
-    // Implementation for enabling 2FA
-    // Generate secret, create QR code, etc.
-    throw new BadRequestException('2FA not implemented yet');
+    return this.twoFactorService.generateSecret(userId);
   }
 
-  async verifyTwoFactor(userId: string, token: string) {
-    // Implementation for verifying 2FA token
-    throw new BadRequestException('2FA not implemented yet');
+  async verifyAndEnableTwoFactor(
+    userId: string,
+    verifyDto: VerifyTwoFactorDto,
+    phoneNumber?: string,
+  ) {
+    return this.twoFactorService.verifyAndEnable(
+      userId,
+      verifyDto.token,
+      phoneNumber,
+    );
   }
 
-  async disableTwoFactor(userId: string) {
-    // Implementation for disabling 2FA
-    throw new BadRequestException('2FA not implemented yet');
+  async verifyTwoFactor(userId: string, token: string): Promise<boolean> {
+    return this.twoFactorService.verify(userId, token);
+  }
+
+  async disableTwoFactor(userId: string, token: string) {
+    return this.twoFactorService.disable(userId, token);
+  }
+
+  async requestSmsBackupCode(userId: string) {
+    return this.twoFactorService.sendBackupCode(userId);
+  }
+
+  async loginWithTwoFactor(loginDto: LoginDto, twoFactorToken: string) {
+    const { email, password } = loginDto;
+
+    // Find user by email
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if 2FA is enabled
+    if (!user.twoFactorEnabled) {
+      throw new BadRequestException('2FA is not enabled for this account');
+    }
+
+    // Verify 2FA token
+    const is2FAValid = await this.twoFactorService.verify(
+      user.id,
+      twoFactorToken,
+    );
+    if (!is2FAValid) {
+      throw new UnauthorizedException('Invalid 2FA token');
+    }
+
+    // Generate tokens
+    const tokens = await this.generateTokens(user);
+
+    // Update last login
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    });
+
+    // Save refresh token
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
+
+    return {
+      ...tokens,
+      user: this.sanitizeUser(user),
+    };
   }
 }

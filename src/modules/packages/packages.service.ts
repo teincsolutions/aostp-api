@@ -12,6 +12,7 @@ import { UpdatePackageDto } from './dto/update-package.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, PackageStatus, ShippingMode } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 
 @Injectable()
 export class PackagesService {
@@ -21,6 +22,7 @@ export class PackagesService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    private readonly idGeneratorService: IdGeneratorService,
   ) {}
 
   async create(createPackageDto: CreatePackageDto, userId: string) {
@@ -48,18 +50,28 @@ export class PackagesService {
     }
 
     // Generate tracking code if not provided
-    const trackingCode =
-      packageData.trackingCode || (await this.generateTrackingCode());
+    let trackingCode = packageData.trackingCode;
+    if (!trackingCode) {
+      trackingCode =
+        await this.idGeneratorService.generatePackageTrackingCode();
+    } else {
+      // Validate provided tracking code format
+      if (!this.idGeneratorService.validateTrackingCodeFormat(trackingCode)) {
+        throw new BadRequestException(
+          'Invalid tracking code format. Tracking code must be at least 3 characters long.',
+        );
+      }
 
-    // Check if tracking code is unique
-    const existingPackage = await this.prisma.package.findUnique({
-      where: { trackingCode },
-    });
+      // Check if provided tracking code is unique
+      const existingPackage = await this.prisma.package.findUnique({
+        where: { trackingCode },
+      });
 
-    if (existingPackage) {
-      throw new BadRequestException(
-        `Tracking code ${trackingCode} already exists`,
-      );
+      if (existingPackage) {
+        throw new BadRequestException(
+          `Tracking code ${trackingCode} already exists`,
+        );
+      }
     }
 
     // Create package with photos in a transaction
@@ -387,8 +399,6 @@ export class PackagesService {
   }
 
   async removePhoto(id: string, photoId: string, userId: string) {
-    const packageRecord = await this.findOne(id);
-
     // Ensure at least one photo remains
     const photoCount = await this.prisma.packagePhoto.count({
       where: { packageId: id },
@@ -526,29 +536,5 @@ export class PackagesService {
 
     await Promise.all(updates);
     this.logger.log(`Updated warehouse days for ${updates.length} packages`);
-  }
-
-  private async generateTrackingCode(): Promise<string> {
-    const prefix = 'PKG';
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-
-    // Get the count of packages created today
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
-    const count = await this.prisma.package.count({
-      where: {
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
-    const sequence = (count + 1).toString().padStart(4, '0');
-    return `${prefix}${year}${month}${day}${sequence}`;
   }
 }

@@ -9,12 +9,16 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
+import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly idGeneratorService: IdGeneratorService,
+  ) {}
 
   async create(
     createPaymentDto: CreatePaymentDto,
@@ -89,8 +93,8 @@ export class PaymentsService {
     // Calculate local amount using exchange rate
     const localAmount = amount * exchangeRate.rate;
 
-    // Generate payment code
-    const paymentCode = await this.generatePaymentCode();
+    // Generate payment code (receipt number)
+    const paymentCode = await this.idGeneratorService.generateReceiptNumber();
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Create payment

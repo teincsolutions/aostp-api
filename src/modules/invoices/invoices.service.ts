@@ -9,12 +9,16 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Invoice, InvoiceStatus, ShippingMode } from '@prisma/client';
+import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly idGeneratorService: IdGeneratorService,
+  ) {}
 
   async generateFromPackingList(
     packingListId: string,
@@ -118,7 +122,8 @@ export class InvoicesService {
       const localAmount = totalAmount * exchangeRate.rate;
 
       // Generate invoice number
-      const invoiceNumber = await this.generateInvoiceNumber();
+      const invoiceNumber =
+        await this.idGeneratorService.generateInvoiceNumber();
 
       // Calculate due date (30 days from now)
       const dueDate = new Date();
@@ -324,7 +329,7 @@ export class InvoicesService {
     }
 
     const localAmount = totalAmount * exchangeRateRecord.rate;
-    const invoiceNumber = await this.generateInvoiceNumber();
+    const invoiceNumber = await this.idGeneratorService.generateInvoiceNumber();
 
     const result = await this.prisma.$transaction(async (tx) => {
       const invoice = await tx.invoice.create({

@@ -3,9 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validate } from './config/env.validation';
 import { PrismaModule } from './shared/prisma/prisma.module';
+import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { PackagesModule } from './modules/packages/packages.module';
+import { PackingListsModule } from './modules/packing-lists/packing-lists.module';
 import { ContainersModule } from './modules/containers/containers.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ExchangeRatesModule } from './modules/exchange-rates/exchange-rates.module';
@@ -27,9 +29,11 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
       cache: true,
     }),
     PrismaModule,
+    SharedModule,
     AuthModule,
     CustomersModule,
     PackagesModule,
+    PackingListsModule,
     ContainersModule,
     NotificationsModule,
     ExchangeRatesModule,

@@ -23,6 +23,7 @@ enum IdType {
   NATIONAL_ID
   PASSPORT
   DRIVERS_LICENSE
+  VOTER_ID
   OTHER
 }
 
@@ -152,6 +153,8 @@ model Customer {
   @@index([customerCode])
   @@index([email])
   @@index([phoneNumber])
+  @@index([idNumber])
+  @@unique([idType, idNumber])
 }
 
 model Package {
