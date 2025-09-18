@@ -20,11 +20,11 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { GetUserDto } from './dto/get-user.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -49,14 +49,13 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false, enum: UserRole })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   @ApiQuery({ name: 'search', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('role') role?: UserRole,
-    @Query('isActive') isActive?: boolean,
-    @Query('search') search?: string,
-  ) {
-    const filters = { role, isActive, search };
-    return this.usersService.findAll(paginationDto, filters);
+  findAll(@Query() userSearchDto: GetUserDto) {
+    const filters = {
+      role: userSearchDto.role,
+      isActive: userSearchDto.isActive,
+      search: userSearchDto.search,
+    };
+    return this.usersService.findAll(userSearchDto, filters);
   }
 
   @Get('stats')

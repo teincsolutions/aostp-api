@@ -101,7 +101,7 @@ export class UsersService {
   async findAll(
     paginationDto: PaginationDto,
     filters?: {
-      role?: UserRole;
+      role?: UserRole | null;
       isActive?: boolean;
       search?: string;
     },
@@ -112,6 +112,13 @@ export class UsersService {
     const where: Prisma.UserWhereInput = {};
 
     if (filters?.role) {
+      // Validate that the role is a valid UserRole enum value
+      const validRoles = Object.values(UserRole);
+      if (!validRoles.includes(filters.role)) {
+        throw new BadRequestException(
+          `Invalid role: ${filters.role}. Valid roles are: ${validRoles.join(', ')}`,
+        );
+      }
       where.role = filters.role;
     }
 
