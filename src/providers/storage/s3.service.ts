@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -268,6 +269,23 @@ export class S3Service {
     }
 
     return { valid: true };
+  }
+
+  /**
+   * Health check for S3 service
+   */
+  async healthCheck(): Promise<boolean> {
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: this.bucketName,
+        MaxKeys: 1,
+      });
+      await this.s3Client.send(command);
+      return true;
+    } catch (error: any) {
+      this.logger.error('S3 health check failed', error);
+      return false;
+    }
   }
 
   /**

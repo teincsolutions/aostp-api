@@ -22,7 +22,12 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+    } catch (error) {
+      console.error('Failed to connect to database on startup:', error);
+      // Allow app to continue starting even if DB connection fails
+    }
   }
 
   async onModuleDestroy() {
