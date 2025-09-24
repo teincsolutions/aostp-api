@@ -7,8 +7,7 @@ pipeline {
 
     environment {
         // Customize these credentials and variables for your project
-        SLACK_WEBHOOK_URL = credentials('slack-webhook') // Optional: Remove if not using Slack notifications
-        DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
+        SLACK_WEBHOOK_URL = credentials('slack-webhook')
         DOCKER_IMAGE_NAME = "${DOCKER_HUB_CREDENTIALS_USR}/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
@@ -42,10 +41,6 @@ pipeline {
                 """
             }
         }
-
-        // Optional security scans - uncomment and configure if needed
-        // stage('Security Scan - OWASP Dependency Check') { ... }
-        // stage('Security Scan - Docker Image') { ... }
 
         stage('Test Docker Image') {
             steps {
@@ -92,14 +87,20 @@ pipeline {
                     branch 'test'
                 }
             }
-            steps {
-                echo '📦 Pushing Docker image...'
-                sh '''
+            steps {  withCredentials(bindings: [
+                            usernamePassword(credentialsId: 'docker-hub-credentials',
+                            usernameVariable: 'DOCKER_HUB_CREDENTIALS_USR',
+                            passwordVariable: 'DOCKER_HUB_CREDENTIALS_PSW')
+                ]) {
+                    echo '📦 Pushing Docker image...'
+                    sh '''
+
                     echo "${DOCKER_HUB_CREDENTIALS_PSW}" | docker login -u "${DOCKER_HUB_CREDENTIALS_USR}" --password-stdin
                     docker push "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
                     docker push "${DOCKER_IMAGE_NAME}:latest"
                     docker logout
                 '''
+                }
             }
         }
 
