@@ -8,7 +8,6 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('slack-webhook')
-        DOCKER_HUB_CREDENTIALS = credentials('docker-hub-credentials')
         DOCKER_IMAGE_NAME = "${DOCKER_HUB_CREDENTIALS_USR}/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
@@ -31,8 +30,9 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo '🐳 Building Docker image...'
-                sh """
+                withDockerRegistry([ credentialsId: 'docker-hub-credentials', url: '' ]) {
+                    echo '🐳 Building Docker image...'
+                    sh """
                     docker build --network=host --target production \\
                         --tag "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}" \\
                         --tag "${DOCKER_IMAGE_NAME}:latest" \\
@@ -40,6 +40,7 @@ pipeline {
                         .
                     docker images "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
                 """
+                }
             }
         }
 
@@ -88,13 +89,13 @@ pipeline {
                 }
             }
             steps {
-                echo '📦 Pushing Docker image...'
-                sh '''
-                    echo "${DOCKER_HUB_CREDENTIALS_PSW}" | docker login -u "${DOCKER_HUB_CREDENTIALS_USR}" --password-stdin
-                    docker push "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
-                    docker push "${DOCKER_IMAGE_NAME}:latest"
-                    docker logout
-                '''
+                withDockerRegistry([ credentialsId: 'docker-hub-credentials', url: '' ]) {
+                    echo '📦 Pushing Docker image...'
+                    sh '''
+                        docker push "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                        docker push "${DOCKER_IMAGE_NAME}:latest"
+                    '''
+                }
             }
         }
 
