@@ -181,7 +181,7 @@ pipeline {
                     done
                     rm -f .env.production .env.prod
                 '''
-                                            }
+               }
             }
         }
     }
