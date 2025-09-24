@@ -52,10 +52,9 @@ pipeline {
                     # Cleanup any existing test containers first
                     docker stop aostp-api-test || true
                     docker rm aostp-api-test || true
-
-                    # Assume .env.production and scripts exist; customize as needed
+                    # Prepare .env.test from .env.example if it exists
                     if [ -f .env.example ]; then
-                        cp .env.example .env.test
+                          envsubst < .env.example > .env.test
                     fi
 
                     # Start the container for testing
@@ -114,8 +113,8 @@ pipeline {
                             cp .env.example .env.test
                         fi
 
-                    DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.yml down || true
-                    DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.yml up -d
+                    docker compose -f docker-compose.yml down || true
+                    docker compose -f docker-compose.yml up -d
 
                     sleep 30
                     # Add migration/seeding if scripts exist
@@ -136,7 +135,7 @@ pipeline {
 
                     rm -f .env.test
                 '''
-              }
+                                            }
             }
         }
 
@@ -152,11 +151,11 @@ pipeline {
                                             string(credentialsId: 's3-secret-access-key-prod', variable: 'S3_SECRET_ACCESS_KEY')]) {
                     sh '''
                         if [ -f .env.example ]; then
-                            cp .env.example .env.production || cp .env.example .env.prod
+                              envsubst < .env.example > .env.production
                         fi
 
-                    DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.production.yml down || true
-                    DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.production.yml up -d
+                    docker compose -f docker-compose.production.yml down || true
+                    docker compose -f docker-compose.production.yml up -d
 
                     sleep 30
                     # Add migration/seeding if scripts exist
@@ -176,7 +175,7 @@ pipeline {
                     done
                     rm -f .env.production .env.prod
                 '''
-              }
+                                            }
             }
         }
     }

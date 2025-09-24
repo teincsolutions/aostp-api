@@ -1,0 +1,9 @@
+
+services:
+  app:
+    image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
+    restart: always
+    env_file:
+      - .env.test
+    ports:
+      - "3000:3000"

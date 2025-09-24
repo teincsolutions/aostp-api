@@ -1,27 +1,9 @@
 
 services:
   app:
-    image: aostp-api:test
+    image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
+    restart: always
     env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql://postgres:admin@localhost:5432/aostp_db?schema=public
+      - .env.production
     ports:
       - "3000:3000"
-    depends_on:
-      - db
-    command: ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
-
-  db:
-    image: postgres:14-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=admin
-      - POSTGRES_DB=aostp_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
