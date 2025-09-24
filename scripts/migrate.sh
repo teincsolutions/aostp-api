@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 echo "🚀 Starting database migration and seeding process..."
 
