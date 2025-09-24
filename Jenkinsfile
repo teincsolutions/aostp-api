@@ -12,9 +12,6 @@ pipeline {
         DOCKER_IMAGE_NAME = "${DOCKER_HUB_CREDENTIALS_USR}/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
-        // Add your specific environment variables here, e.g., database URLs, secrets
-        // DATABASE_URL_TEST = credentials('database-url-test')
-        // DATABASE_URL_PROD = credentials('database-url-prod')
     }
 
     stages {
@@ -53,9 +50,9 @@ pipeline {
         stage('Test Docker Image') {
             steps {
                 echo '🧪 Testing Docker image...'
-                // Add credentials bindings here, e.g.:
-                // withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'), ...]) {
-                sh '''
+                // Add credentials bindings
+                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL')]) {
+                    sh '''
                     # Cleanup any existing test containers first
                     docker stop aostp-api-test || true
                     docker rm aostp-api-test || true
@@ -66,12 +63,12 @@ pipeline {
                     fi
 
                     # Start the container for testing
-                    docker run -d --name aostp-api-test --env-file .env.test -p 3003:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    docker run -d --name aostp-api-test --env-file .env.test -p 3000:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
                     sleep 30
                     for i in {1..10}; do
-                        if curl -f http://localhost:3003/health; then
+                        if curl -f http://localhost:3000/api/v1/health; then
                             echo "✅ Health check passed"
                             break
                         fi
@@ -79,17 +76,12 @@ pipeline {
                         sleep 5
                     done
 
-                    # Additional tests if scripts exist
-                    if [ -f scripts/migrate.sh ]; then
-                        docker exec aostp-api-test ./scripts/migrate.sh || echo "Migration script not found or failed"
-                    fi
-
                     # Cleanup
                     docker stop aostp-api-test || true
                     docker rm aostp-api-test || true
                     rm -f .env.test
                 '''
-                // }
+                }
             }
         }
 
@@ -117,11 +109,14 @@ pipeline {
             }
             steps {
                 echo '🚀 Deploying to test environment...'
-                // withCredentials(bindings: [...]) {
-                sh '''
-                    if [ -f .env.example ]; then
-                        cp .env.example .env.test
-                    fi
+                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
+                                            string(credentialsId: 's3-bucket-url-test', variable: 'S3_BUCKET_URL'),
+                                            string(credentialsId: 's3-access-key-id-test', variable: 'S3_ACCESS_KEY_ID'),
+                                            string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY')]) {
+                    sh '''
+                        if [ -f .env.example ]; then
+                            cp .env.example .env.test
+                        fi
 
                     DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.yml down || true
                     DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.yml up -d
@@ -131,9 +126,21 @@ pipeline {
                     if [ -f scripts/migrate.sh ]; then
                         docker exec aostp-api-test ./scripts/migrate.sh
                     fi
+
+                     # Wait and health check
+                    sleep 30
+                    for i in {1..10}; do
+                        if curl -f http://localhost:3000/api/v1/health; then
+                            echo "✅ Health check passed"
+                            break
+                        fi
+                        echo "Retry $i/10..."
+                        sleep 5
+                    done
+
                     rm -f .env.test
                 '''
-                // }
+                                            }
             }
         }
 
@@ -143,11 +150,14 @@ pipeline {
             }
             steps {
                 echo '🚀 Deploying to production environment...'
-                // withCredentials(bindings: [...]) {
-                sh '''
-                    if [ -f .env.example ]; then
-                        cp .env.example .env.production || cp .env.example .env.prod
-                    fi
+                withCredentials(bindings: [string(credentialsId: 'database-url-prod', variable: 'DATABASE_URL'),
+                                            string(credentialsId: 's3-bucket-url-prod', variable: 'S3_BUCKET_URL'),
+                                            string(credentialsId: 's3-access-key-id-prod', variable: 'S3_ACCESS_KEY_ID'),
+                                            string(credentialsId: 's3-secret-access-key-prod', variable: 'S3_SECRET_ACCESS_KEY')]) {
+                    sh '''
+                        if [ -f .env.example ]; then
+                            cp .env.example .env.production || cp .env.example .env.prod
+                        fi
 
                     DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.production.yml down || true
                     DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" DOCKER_TAG="${DOCKER_TAG}" docker compose -f docker-compose.production.yml up -d
@@ -157,15 +167,22 @@ pipeline {
                     if [ -f scripts/migrate.sh ]; then
                         docker exec aostp-api-production ./scripts/migrate.sh
                     fi
+
+                     # Wait and health check
+                    sleep 30
+                    for i in {1..10}; do
+                        if curl -f http://localhost:3000/api/v1/health; then
+                            echo "✅ Health check passed"
+                            break
+                        fi
+                        echo "Retry $i/10..."
+                        sleep 5
+                    done
                     rm -f .env.production .env.prod
                 '''
-                // }
+                                            }
             }
         }
-
-        // Optional post-deploy tests - uncomment and customize
-        // stage('Post-Deploy Tests - Test Environment') { ... }
-        // stage('Post-Deploy Tests - Production Environment') { ... }
     }
 
     post {
