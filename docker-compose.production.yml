@@ -1,7 +1,8 @@
 
 services:
-  app:
+  aostp-api:
     image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
+    container_name: aostp-api-production
     restart: always
     env_file:
       - .env.production
