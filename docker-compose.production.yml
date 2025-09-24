@@ -5,7 +5,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:admin@db:5432/aostp_db?schema=public
+      - DATABASE_URL=postgresql://postgres:admin@localhost:5432/aostp_db?schema=public
     ports:
       - "3000:3000"
     depends_on:
