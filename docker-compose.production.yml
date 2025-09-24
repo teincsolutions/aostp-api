@@ -1,0 +1,27 @@
+
+services:
+  app:
+    image: aostp-api:test
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:admin@db:5432/aostp_db?schema=public
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
+
+  db:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=aostp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
