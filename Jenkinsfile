@@ -62,15 +62,16 @@ pipeline {
                     docker run -d --name aostp-api-test -p 3003:3000 --env-file .env.test "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
-                    sleep 30
-                    docker exec aostp-api-test sh -c '
-                            if curl -f http://localhost:3003/api/v1/health; then
-                                echo "✅ Health check passed"
-                                exit 0
-                            fi
-                            echo "❌ Health check failed"
-                            exit 1
-                    '
+                    sleep 10
+                                
+                    if curl -f http://localhost:3003/api/v1/health; then
+                        echo "✅ Health check passed"
+                        exit 0
+                    else
+                        echo "❌ Health check failed"
+                        exit 1
+                    fi
+
                     # Cleanup
                     docker stop aostp-api-test || true
                     docker rm aostp-api-test || true
@@ -116,14 +117,13 @@ pipeline {
                     docker compose -f docker-compose.test.yml down || true
                     docker compose -f docker-compose.test.yml up -d
 
-                    sleep 30
+                    sleep 10
                     # Add migration/seeding if scripts exist
                     if [ -f scripts/migrate.sh ]; then
                         docker exec aostp-api-test ./scripts/migrate.sh
                     fi
 
                      # Wait and health check
-                    sleep 30
                     for i in {1..10}; do
                         if curl -f http://localhost:3001/api/v1/health; then
                             echo "✅ Health check passed"
@@ -157,14 +157,13 @@ pipeline {
                     docker compose -f docker-compose.production.yml down || true
                     docker compose -f docker-compose.production.yml up -d
 
-                    sleep 30
+                    sleep 10
                     # Add migration/seeding if scripts exist
                     if [ -f scripts/migrate.sh ]; then
                         docker exec aostp-api-production ./scripts/migrate.sh
                     fi
 
                      # Wait and health check
-                    sleep 30
                     for i in {1..10}; do
                         if curl -f http://localhost:3000/api/v1/health; then
                             echo "✅ Health check passed"
@@ -173,9 +172,9 @@ pipeline {
                         echo "Retry $i/10..."
                         sleep 5
                     done
-                    rm -f .env.production .env.prod
+                    rm -f .env.production .env.production
                 '''
-                                            }
+                }
             }
         }
     }
