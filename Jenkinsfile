@@ -63,8 +63,8 @@ pipeline {
 
                     # Wait and health check
                     sleep 10
-                                
-                    if curl -I http://aostp-api-test:3000 then
+
+                    if curl -I http://aostp-api-test:3000; then
                         echo "✅ Health check passed"
                     else
                         echo "❌ Health check failed"
