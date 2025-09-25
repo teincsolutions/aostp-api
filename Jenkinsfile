@@ -55,7 +55,7 @@ pipeline {
                     docker rm aostp-api-test || true
                     # Prepare .env.test from .env.example if it exists
                     if [ -f .env.example ]; then
-                          envsubst < .env.example > .env.test
+                        envsubst < .env.example > .env.test
                     fi
 
                     # Start the container for testing
