@@ -4,9 +4,13 @@ services:
     image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
     container_name: aostp-api-production
     restart: always
-    extra_hosts:
-      - host.docker.internal:host-gateway
     env_file:
       - .env.production
     ports:
       - "3000:3000"
+    networks:
+      - aostp-internal-net
+
+networks:
+  aostp-internal-net:
+    external: true
