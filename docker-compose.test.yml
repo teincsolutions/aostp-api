@@ -2,10 +2,10 @@
 services:
   aostp-api:
     image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
-    container_name: aostp-api-production
+    container_name: aostp-api-test
     restart: always
     env_file:
-      - .env.production
+      - .env.test
     ports:
       - "3001:3000"
     networks:
