@@ -62,16 +62,15 @@ pipeline {
                     docker run -d --name aostp-api-test --network=host --env-file .env.test -p 3003:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
-                    sleep 30
-                    for i in {1..10}; do
-                        if curl -f http://localhost:3003/api/v1/health; then
-                            echo "✅ Health check passed"
-                            break
-                        fi
-                        echo "Retry $i/10..."
-                        sleep 5
-                    done
-
+                    sleep 10
+                    docker exec aostp-api-test sh -c '
+                            if curl -f http://localhost:3000/api/v1/health; then
+                                echo "✅ Health check passed"
+                                exit 0
+                            fi
+                            echo "❌ Health check failed"
+                            exit 1
+                    '
                     # Cleanup
                     docker stop aostp-api-test || true
                     docker rm aostp-api-test || true
