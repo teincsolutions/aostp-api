@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         // Customize these credentials and variables for your project
-        SLACK_WEBHOOK_URL = credentials('slack-webhook')
+        SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
         DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
