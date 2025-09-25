@@ -59,10 +59,10 @@ pipeline {
                     fi
 
                     # Start the container for testing
-                    docker run -d --name aostp-api-test --network=host --env-file .env.test -p 3003:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    docker run -d --name aostp-api-test --env-file .env.test "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
-                    sleep 10
+                    sleep 30
                     docker exec aostp-api-test sh -c '
                             if curl -f http://localhost:3000/api/v1/health; then
                                 echo "✅ Health check passed"
