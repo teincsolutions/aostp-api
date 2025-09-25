@@ -59,7 +59,7 @@ pipeline {
                     fi
 
                     # Start the container for testing
-                    docker run -d --name aostp-api-test -p 3003:3000 --env-file .env.test "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    docker run -d --name aostp-api-test --network aostp-internal-net -p 3003:3000 --env-file .env.test "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
                     sleep 10
