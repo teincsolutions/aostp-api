@@ -59,12 +59,12 @@ pipeline {
                     fi
 
                     # Start the container for testing
-                    docker run -d --name aostp-api-test --env-file .env.test -p 3000:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    docker run -d --name aostp-api-test --env-file .env.test -p 3003:3000 "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
 
                     # Wait and health check
                     sleep 30
                     for i in {1..10}; do
-                        if curl -f http://localhost:3000/api/v1/health; then
+                        if curl -f http://localhost:3003/api/v1/health; then
                             echo "✅ Health check passed"
                             break
                         fi
@@ -114,8 +114,8 @@ pipeline {
                             cp .env.example .env.test
                         fi
 
-                    docker compose -f docker-compose.yml down || true
-                    docker compose -f docker-compose.yml up -d
+                    docker compose -f docker-compose.test.yml down || true
+                    docker compose -f docker-compose.test.yml up -d
 
                     sleep 30
                     # Add migration/seeding if scripts exist
@@ -126,7 +126,7 @@ pipeline {
                      # Wait and health check
                     sleep 30
                     for i in {1..10}; do
-                        if curl -f http://localhost:3000/api/v1/health; then
+                        if curl -f http://localhost:3001/api/v1/health; then
                             echo "✅ Health check passed"
                             break
                         fi
