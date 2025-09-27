@@ -108,7 +108,10 @@ pipeline {
                 withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
                                             string(credentialsId: 's3-bucket-url-test', variable: 'S3_BUCKET_URL'),
                                             string(credentialsId: 's3-access-key-id-test', variable: 'S3_ACCESS_KEY_ID'),
-                                            string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY')]) {
+                                            string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY'),
+                                            string(credentialsId: 'jwt-secret-test', variable: 'JWT_SECRET'),
+                                            string(credentialsId: 'jwt-refresh-secret-test', variable: 'JWT_REFRESH_SECRET'),
+                                            string(credentialsId: 'encryption-key-test', variable: 'ENCRYPTION_KEY')]) {
                     sh '''
                         if [ -f .env.example ]; then
                             cp .env.example .env.test
@@ -148,7 +151,10 @@ pipeline {
                 withCredentials(bindings: [string(credentialsId: 'database-url-prod', variable: 'DATABASE_URL'),
                                             string(credentialsId: 's3-bucket-url-prod', variable: 'S3_BUCKET_URL'),
                                             string(credentialsId: 's3-access-key-id-prod', variable: 'S3_ACCESS_KEY_ID'),
-                                            string(credentialsId: 's3-secret-access-key-prod', variable: 'S3_SECRET_ACCESS_KEY')]) {
+                                            string(credentialsId: 's3-secret-access-key-prod', variable: 'S3_SECRET_ACCESS_KEY'),
+                                            string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
+                                            string(credentialsId: 'jwt-refresh-secret-prod', variable: 'JWT_REFRESH_SECRET'),
+                                            string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY')]) {
                     sh '''
                         if [ -f .env.example ]; then
                               envsubst < .env.example > .env.production
