@@ -12,6 +12,8 @@ pipeline {
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
+        JWT_EXPIRATION = '15m'
+        JWT_REFRESH_EXPIRATION = '7d'
     }
 
     stages {
@@ -150,6 +152,7 @@ pipeline {
                 echo '🚀 Deploying to production environment...'
                 withCredentials(bindings: [string(credentialsId: 'database-url-prod', variable: 'DATABASE_URL'),
                                             string(credentialsId: 's3-bucket-url-prod', variable: 'S3_BUCKET_URL'),
+                                            string(credentialsId: 's3-region-prod', variable: 'AWS_REGION'),
                                             string(credentialsId: 's3-access-key-id-prod', variable: 'S3_ACCESS_KEY_ID'),
                                             string(credentialsId: 's3-secret-access-key-prod', variable: 'S3_SECRET_ACCESS_KEY'),
                                             string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
