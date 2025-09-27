@@ -11,6 +11,7 @@ pipeline {
         DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
+        CORS_ORIGIN = 'https://aostp.akomapacargo.com
     }
 
     stages {
