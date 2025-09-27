@@ -1,5 +1,5 @@
-import { PrismaClient, UserRole } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+const { PrismaClient, UserRole } = require('@prisma/client');
+const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
@@ -140,7 +140,7 @@ async function main() {
 
     if (!existingCustomer) {
       const customer = await prisma.customer.create({
-        data: customerData as any,
+        data: customerData,
       });
 
       console.log('Created customer:', {
