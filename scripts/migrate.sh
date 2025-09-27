@@ -9,6 +9,6 @@ npm run prisma:migrate:deploy
 
 # Seed the database
 echo "🌱 Seeding the database..."
-npm run prisma:seed
+node dist/seed.command.js
 
 echo "✅ Database migration and seeding completed successfully!"
