@@ -51,7 +51,14 @@ pipeline {
             steps {
                 echo '🧪 Testing Docker image...'
                 // Add credentials bindings
-                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL')]) {
+                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
+                                            string(credentialsId: 's3-bucket-url-test', variable: 'S3_BUCKET_URL'),
+                                            string(credentialsId: 's3-region-test', variable: 'AWS_REGION'),
+                                            string(credentialsId: 's3-access-key-id-test', variable: 'S3_ACCESS_KEY_ID'),
+                                            string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY'),
+                                            string(credentialsId: 'jwt-secret-test', variable: 'JWT_SECRET'),
+                                            string(credentialsId: 'jwt-refresh-secret-test', variable: 'JWT_REFRESH_SECRET'),
+                                            string(credentialsId: 'encryption-key-test', variable: 'ENCRYPTION_KEY')]) {
                     sh '''
                     # Cleanup any existing test containers first
                     docker stop aostp-api-test || true
@@ -109,6 +116,7 @@ pipeline {
                 echo '🚀 Deploying to test environment...'
                 withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
                                             string(credentialsId: 's3-bucket-url-test', variable: 'S3_BUCKET_URL'),
+                                            string(credentialsId: 's3-region-test', variable: 'AWS_REGION'),
                                             string(credentialsId: 's3-access-key-id-test', variable: 'S3_ACCESS_KEY_ID'),
                                             string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY'),
                                             string(credentialsId: 'jwt-secret-test', variable: 'JWT_SECRET'),
