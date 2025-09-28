@@ -15,7 +15,7 @@ import {
 import { ContainersService } from './containers.service';
 import { CreateContainerDto } from './dto/create-container.dto';
 import { UpdateContainerDto } from './dto/update-container.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { ContainerFilterDto } from './dto/container-filter.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -52,19 +52,9 @@ export class ContainersController {
     UserRole.FINANCE_MANAGER,
   )
   @ApiOperation({ summary: 'Get all containers with pagination and filters' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'status', required: false, enum: ContainerStatus })
-  @ApiQuery({ name: 'departureCity', required: false, type: String })
-  @ApiQuery({ name: 'destinationCity', required: false, type: String })
-  @ApiQuery({ name: 'search', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('status') status?: ContainerStatus,
-    @Query('departureCity') departureCity?: string,
-    @Query('destinationCity') destinationCity?: string,
-    @Query('search') search?: string,
-  ) {
+  findAll(@Query() filterDto: ContainerFilterDto) {
+    const { status, departureCity, destinationCity, search, ...paginationDto } =
+      filterDto;
     return this.containersService.findAll(paginationDto, {
       status,
       departureCity,
