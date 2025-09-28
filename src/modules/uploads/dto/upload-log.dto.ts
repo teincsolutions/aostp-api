@@ -1,4 +1,5 @@
 import { IsOptional, IsString, IsEnum } from 'class-validator';
+import { BucketType } from './index';
 
 export enum LogFolder {
   SYSTEM = 'system',
@@ -7,6 +8,9 @@ export enum LogFolder {
 }
 
 export class UploadLogDto {
+  @IsEnum(BucketType)
+  bucketType?: BucketType;
+
   @IsString()
   @IsOptional()
   fileName?: string;

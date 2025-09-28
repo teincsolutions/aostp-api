@@ -55,7 +55,13 @@ export class EnvironmentVariables {
   AWS_SECRET_ACCESS_KEY: string;
 
   @IsString()
-  AWS_S3_BUCKET_NAME: string;
+  AWS_PACKAGES_BUCKET_NAME: string;
+
+  @IsString()
+  AWS_USERS_BUCKET_NAME: string;
+
+  @IsString()
+  AWS_LOGS_BUCKET_NAME: string;
 
   @IsString()
   @IsOptional()

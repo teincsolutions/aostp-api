@@ -27,15 +27,18 @@ export interface PresignedUrlResult {
 export class S3Service {
   private readonly logger = new Logger(S3Service.name);
   private readonly s3Client: S3Client;
-  private readonly bucketName: string;
   private readonly region: string;
+  private readonly defaultBucket: string;
+  private readonly endpoint?: string;
 
   constructor(private readonly configService: ConfigService) {
     this.region = this.configService.get<string>('AWS_REGION', 'us-east-1');
-    this.bucketName =
-      this.configService.getOrThrow<string>('AWS_S3_BUCKET_NAME');
+    this.defaultBucket = this.configService.getOrThrow<string>(
+      'AWS_PACKAGES_BUCKET_NAME',
+    );
+    this.endpoint = this.configService.get<string>('AWS_S3_ENDPOINT');
 
-    this.s3Client = new S3Client({
+    const s3Config: any = {
       region: this.region,
       credentials: {
         accessKeyId: this.configService.getOrThrow<string>('AWS_ACCESS_KEY_ID'),
@@ -43,9 +46,21 @@ export class S3Service {
           'AWS_SECRET_ACCESS_KEY',
         ),
       },
-    });
+    };
 
-    this.logger.log(`S3 Service initialized for bucket: ${this.bucketName}`);
+    if (this.endpoint) {
+      s3Config.endpoint = this.endpoint;
+      s3Config.forcePathStyle = true; // Path style addressing for Hetzner compatibility
+    }
+
+    this.s3Client = new S3Client(s3Config);
+
+    this.logger.log(
+      `S3 Service initialized with default bucket: ${this.defaultBucket}${this.endpoint ? ` and custom endpoint: ${this.endpoint}` : ''}`,
+    );
+    this.logger.log(
+      `S3 Configuration: region=${this.region}, defaultBucket=${this.defaultBucket}, endpoint=${this.endpoint || 'us-east-1 (AWS default)'}`,
+    );
   }
 
   /**
@@ -58,10 +73,11 @@ export class S3Service {
   ): Promise<PresignedUrlResult> {
     try {
       const command = new PutObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         Key: key,
         ContentType: contentType,
-        ServerSideEncryption: 'AES256',
+        // Note: Hetzner Object Storage may not support ServerSideEncryption
+        // ServerSideEncryption: 'AES256',
         Metadata: {
           'uploaded-via': 'presigned-url',
           'upload-timestamp': new Date().toISOString(),
@@ -94,7 +110,7 @@ export class S3Service {
   ): Promise<string> {
     try {
       const command = new GetObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         Key: key,
       });
 
@@ -122,7 +138,13 @@ export class S3Service {
     contentType: string,
     metadata?: Record<string, string>,
   ): Promise<S3UploadResult> {
-    return this.uploadFileWithBucket(this.bucketName, key, buffer, contentType, metadata);
+    return this.uploadFileWithBucket(
+      this.defaultBucket,
+      key,
+      buffer,
+      contentType,
+      metadata,
+    );
   }
 
   /**
@@ -141,7 +163,8 @@ export class S3Service {
         Key: key,
         Body: buffer,
         ContentType: contentType,
-        ServerSideEncryption: 'AES256',
+        // Note: Hetzner Object Storage may not support ServerSideEncryption
+        // ServerSideEncryption: 'AES256',
         Metadata: {
           'uploaded-via': 'server-side',
           'upload-timestamp': new Date().toISOString(),
@@ -151,9 +174,13 @@ export class S3Service {
 
       await this.s3Client.send(command);
 
-      const url = `https://${bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+      const url = this.endpoint
+        ? `${this.endpoint}/${bucketName}/${key}`
+        : `https://${bucketName}.s3.${this.region}.amazonaws.com/${key}`;
 
-      this.logger.log(`File uploaded successfully: ${key} to bucket ${bucketName}`);
+      this.logger.log(
+        `File uploaded successfully: ${key} to bucket ${bucketName}`,
+      );
 
       return {
         key,
@@ -162,8 +189,51 @@ export class S3Service {
         size: buffer.length,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload file ${key} to bucket ${bucketName}`, error);
-      throw new Error(`Failed to upload file: ${error.message}`);
+      this.logger.error(
+        `Failed to upload file ${key} to bucket ${bucketName}`,
+        {
+          error: error.message,
+          name: error.name,
+          code: error.name,
+          httpStatusCode: error.$metadata?.httpStatusCode,
+          serviceId: error.$metadata?.serviceId,
+          metadataRegion: error.$metadata?.region,
+          retryAttempts: error.$metadata?.attempts,
+          extendedRequestId: error.$metadata?.extendedRequestId,
+          cfId: error.$metadata?.cfId,
+          stack: error.stack,
+          bucket: bucketName,
+          key: key,
+          s3Config: {
+            region: this.region,
+            endpoint: this.endpoint,
+            bucket: bucketName,
+          },
+        },
+      );
+
+      // Log additional details for S3-compatible services
+      if (error.name === 'InvalidArgument' || error.name === 'UnknownError') {
+        this.logger.error(
+          'S3-compatible service specific error. Please check:',
+          {
+            'S3 Endpoint': this.endpoint,
+            Region: this.region,
+            Bucket: bucketName,
+            'Possible solutions': [
+              '1. Check if bucket exists',
+              '2. Verify endpoint URL format',
+              '3. Check credentials',
+              '4. Verify region is correct for Hetzner S3',
+              '5. Check if virtual host or path style addressing is required',
+            ],
+          },
+        );
+      }
+
+      throw new Error(
+        `Failed to upload file: ${error.name} - ${error.message}`,
+      );
     }
   }
 
@@ -173,7 +243,7 @@ export class S3Service {
   async deleteFile(key: string): Promise<void> {
     try {
       const command = new DeleteObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         Key: key,
       });
 
@@ -191,7 +261,7 @@ export class S3Service {
   async fileExists(key: string): Promise<boolean> {
     try {
       const command = new HeadObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         Key: key,
       });
 
@@ -212,7 +282,7 @@ export class S3Service {
   async getFileMetadata(key: string): Promise<any> {
     try {
       const command = new HeadObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         Key: key,
       });
 
@@ -290,7 +360,7 @@ export class S3Service {
   async healthCheck(): Promise<boolean> {
     try {
       const command = new ListObjectsV2Command({
-        Bucket: this.bucketName,
+        Bucket: this.defaultBucket,
         MaxKeys: 1,
       });
       await this.s3Client.send(command);
@@ -305,6 +375,6 @@ export class S3Service {
    * Get public URL for a file (if bucket is configured for public access)
    */
   getPublicUrl(key: string): string {
-    return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+    return `https://${this.defaultBucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 }
