@@ -37,8 +37,8 @@ export class IdGeneratorService {
   }
 
   /**
-   * Generate package tracking code: PKG-YYYYMMDD-XXX
-   * Format: PKG-20250821-001
+   * Generate package tracking code: PKG-YYYYMMDD-XXXX
+   * Format: PKG-20250821-0001
    */
   async generatePackageTrackingCode(): Promise<string> {
     const config = ID_FORMATS.PACKAGE_TRACKING;
@@ -62,7 +62,9 @@ export class IdGeneratorService {
       },
     });
 
-    const sequence = (count + 1).toString().padStart(3, '0');
+    const sequence = (count + 1)
+      .toString()
+      .padStart(config.SEQUENCE_LENGTH, '0');
     return `${config.PREFIX}-${dateStr}-${sequence}`;
   }
 
@@ -160,8 +162,8 @@ export class IdGeneratorService {
       return false;
     }
 
-    // Check if it matches the auto-generated format (PKG-YYYYMMDD-XXX)
-    const autoGenPattern = /^PKG-\d{8}-\d{3}$/;
+    // Check if it matches the auto-generated format (PKG-YYYYMMDD-XXXX)
+    const autoGenPattern = /^PKG-\d{8}-\d{4}$/;
 
     // Allow either auto-generated format or any manual format (3+ characters)
     return autoGenPattern.test(trackingCode) || trackingCode.trim().length >= 3;
