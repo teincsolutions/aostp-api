@@ -122,9 +122,22 @@ export class S3Service {
     contentType: string,
     metadata?: Record<string, string>,
   ): Promise<S3UploadResult> {
+    return this.uploadFileWithBucket(this.bucketName, key, buffer, contentType, metadata);
+  }
+
+  /**
+   * Upload a file directly to S3 with specific bucket (server-side upload)
+   */
+  async uploadFileWithBucket(
+    bucketName: string,
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+    metadata?: Record<string, string>,
+  ): Promise<S3UploadResult> {
     try {
       const command = new PutObjectCommand({
-        Bucket: this.bucketName,
+        Bucket: bucketName,
         Key: key,
         Body: buffer,
         ContentType: contentType,
@@ -138,18 +151,18 @@ export class S3Service {
 
       await this.s3Client.send(command);
 
-      const url = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+      const url = `https://${bucketName}.s3.${this.region}.amazonaws.com/${key}`;
 
-      this.logger.log(`File uploaded successfully: ${key}`);
+      this.logger.log(`File uploaded successfully: ${key} to bucket ${bucketName}`);
 
       return {
         key,
         url,
-        bucket: this.bucketName,
+        bucket: bucketName,
         size: buffer.length,
       };
     } catch (error) {
-      this.logger.error(`Failed to upload file ${key}`, error);
+      this.logger.error(`Failed to upload file ${key} to bucket ${bucketName}`, error);
       throw new Error(`Failed to upload file: ${error.message}`);
     }
   }

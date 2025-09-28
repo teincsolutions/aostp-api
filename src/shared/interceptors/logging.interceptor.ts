@@ -3,14 +3,14 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
-  Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { LoggingService } from '../logging/logging.service';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger('HTTP');
+  constructor(private readonly loggingService: LoggingService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -21,27 +21,39 @@ export class LoggingInterceptor implements NestInterceptor {
 
     const now = Date.now();
 
-    this.logger.log(`[${correlationId}] ${method} ${url} - ${userAgent} ${ip}`);
+    // Log request with basic info
+    this.loggingService.info(
+      `[${correlationId}] ${method} ${url} - ${userAgent} ${ip}`,
+      {
+        correlationId,
+        method,
+        url,
+        userAgent,
+        ip,
+      },
+    );
 
     if (method !== 'GET' && body) {
-      this.logger.debug(
-        `[${correlationId}] Request body: ${JSON.stringify(body)}`,
-      );
+      // Log request with body for non-GET requests
+      this.loggingService.debug(`[${correlationId}] Request body`, {
+        correlationId,
+        body: JSON.stringify(body),
+      });
     }
 
     return next.handle().pipe(
       tap({
         next: () => {
           const responseTime = Date.now() - now;
-          this.logger.log(
-            `[${correlationId}] ${method} ${url} - ${response.statusCode} - ${responseTime}ms`,
+          this.loggingService.logHttpRequest(
+            request,
+            responseTime,
+            response.statusCode,
           );
         },
         error: (error) => {
           const responseTime = Date.now() - now;
-          this.logger.error(
-            `[${correlationId}] ${method} ${url} - ${error.status || 500} - ${responseTime}ms - ${error.message}`,
-          );
+          this.loggingService.logHttpError(error, request, responseTime);
         },
       }),
     );

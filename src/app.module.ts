@@ -16,6 +16,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ShippingRatesModule } from './modules/shipping-rates/shipping-rates.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { CorrelationIdInterceptor } from './shared/interceptors/correlation-id.interceptor';
@@ -43,6 +44,7 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
     ShippingRatesModule,
     UsersModule,
     HealthModule,
+    UploadsModule,
   ],
   providers: [
     {
