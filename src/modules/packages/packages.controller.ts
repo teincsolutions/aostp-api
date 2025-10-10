@@ -157,6 +157,18 @@ export class PackagesController {
     return this.packagesService.removePhoto(id, photoId, req.user.id);
   }
 
+  @Get(':id/receipt')
+  @ApiOperation({ summary: 'Get package receipt signed URL' })
+  @ApiParam({ name: 'id', description: 'Package ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns signed URL for package receipt',
+  })
+  @ApiResponse({ status: 404, description: 'Package or receipt not found' })
+  getReceiptUrl(@Param('id') id: string) {
+    return this.packagesService.getReceiptUrl(id);
+  }
+
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete package' })

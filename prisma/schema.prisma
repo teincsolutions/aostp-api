@@ -29,12 +29,19 @@ enum IdType {
 
 enum PackageStatus {
   RECEIVED
+  CONSOLIDATED
   IN_WAREHOUSE
-  IN_PACKING_LIST
+  ASSIGNED
   SHIPPED
   ARRIVED
-  DELIVERED
+  RELEASED
   CANCELLED
+}
+
+enum PackageItemStatus {
+  RECEIVED
+  CONSOLIDATED
+  RELEASED
 }
 
 enum ContainerStatus {
@@ -83,6 +90,12 @@ enum NotificationType {
   PAYMENT_RECEIVED
   SHIPMENT_UPDATE
   CONTAINER_ARRIVAL
+  DELIVERY_RELEASED
+}
+
+enum ContainerType {
+  CONTAINER // Sea freight
+  BAG       // Air freight
 }
 
 // Models
@@ -100,15 +113,17 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   lastLogin         DateTime?
-  
+
   // Relations
   refreshTokens     RefreshToken[]
   auditLogs         AuditLog[]
-  packagesCreated   Package[]      @relation("PackageCreatedBy")
-  packagesUpdated   Package[]      @relation("PackageUpdatedBy")
-  paymentsProcessed Payment[]      @relation("PaymentProcessedBy")
-  exchangeRatesSet  ExchangeRate[] @relation("ExchangeRateSetBy")
-  
+  activityLogs      ActivityLog[]
+  packagesCreated   Package[]        @relation("PackageCreatedBy")
+  packagesUpdated   Package[]        @relation("PackageUpdatedBy")
+  paymentsProcessed Payment[]        @relation("PaymentProcessedBy")
+  exchangeRatesSet  ExchangeRate[]   @relation("ExchangeRateSetBy")
+  deliveriesCreated PackageDelivery[] @relation("DeliveryCreatedBy")
+
   @@index([email])
   @@index([role])
 }
@@ -124,6 +139,25 @@ model RefreshToken {
   
   @@index([token])
   @@index([userId])
+}
+
+model Warehouse {
+  id          String   @id @default(uuid())
+  warehouseId String   @unique // Manual or auto-generated
+  name        String   // e.g., China Main, Accra Branch
+  location    String   // Address
+  contactInfo String?  // phone/email
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  packageItems PackageItem[]
+  packages     Package[]
+  packingLists PackingList[]
+
+  @@index([warehouseId])
+  @@index([isActive])
 }
 
 model Customer {
@@ -143,13 +177,15 @@ model Customer {
   isActive            Boolean             @default(true)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
-  
+
   // Relations
   packages            Package[]
+  packageItems        PackageItem[]
   invoices            Invoice[]
   payments            Payment[]
   notifications       Notification[]
-  
+  deliveries          PackageDelivery[]
+
   @@index([customerCode])
   @@index([email])
   @@index([phoneNumber])
@@ -157,36 +193,86 @@ model Customer {
   @@unique([idType, idNumber])
 }
 
+model PackageItem {
+  id                      String             @id @default(uuid())
+  intakeTrackingCode      String             @unique // Scanned/entered at intake
+  customerId              String
+  customer                Customer           @relation(fields: [customerId], references: [id])
+  warehouseId             String
+  warehouse               Warehouse          @relation(fields: [warehouseId], references: [id])
+  description             String
+  notes                   String?
+  quantity                Int                @default(1)
+  weight                  Float?             // in KG
+  dimensions              String?            // L x W x H
+  cbm                     Float?             // Cubic meters
+  shippingMode            ShippingMode
+  airShippingType         AirShippingType?
+  status                  PackageItemStatus  @default(RECEIVED)
+  intakeDate              DateTime           @default(now())
+
+  // Relations
+  packageId               String?
+  package                 Package?           @relation(fields: [packageId], references: [id])
+  delivery                PackageDelivery?
+
+  // Photos
+  intakePhotos            PackageItemPhoto[]
+
+  @@index([intakeTrackingCode])
+  @@index([customerId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([packageId])
+}
+
+model PackageItemPhoto {
+  id            String      @id @default(uuid())
+  packageItemId String
+  packageItem   PackageItem @relation(fields: [packageItemId], references: [id], onDelete: Cascade)
+  url           String
+  key           String      // S3 key
+  photoType     String      @default("intake") // intake, delivery
+  uploadedAt    DateTime    @default(now())
+
+  @@index([packageItemId])
+}
+
 model Package {
   id                String        @id @default(uuid())
   trackingCode      String        @unique
   customerId        String
   customer          Customer      @relation(fields: [customerId], references: [id])
+  warehouseId       String?
+  warehouse         Warehouse?    @relation(fields: [warehouseId], references: [id])
   description       String
-  weight            Float         // in KG
-  cbm               Float?        // Cubic meters for sea shipping
+  weight            Float?        // in KG (computed from items)
+  cbm               Float?        // Cubic meters (computed from items)
   quantity          Int           @default(1)
-  value             Float?
   shippingMode      ShippingMode
   airShippingType   AirShippingType?
+  isConsolidated    Boolean       @default(false) // True for parent packages
   status            PackageStatus @default(RECEIVED)
   receivedDate      DateTime      @default(now())
-  warehouseLocation String?
   daysInWarehouse   Int           @default(0)
   photos            PackagePhoto[]
   notes             String?
-  
-  // Packing list relation
+
+  // Relations
   packingListId     String?
   packingList       PackingList?  @relation(fields: [packingListId], references: [id])
-  
-  // Invoice relation
   invoiceId         String?
   invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
-  
+
+  // Two-table structure
+  items             PackageItem[]
+
   // Payment status
   paymentStatus     PaymentStatus @default(PENDING)
-  
+
+  // Receipt
+  receiptKey        String?       // S3 key for package intake receipt PDF
+
   // Audit fields
   createdById       String
   createdBy         User          @relation("PackageCreatedBy", fields: [createdById], references: [id])
@@ -194,11 +280,38 @@ model Package {
   updatedBy         User?         @relation("PackageUpdatedBy", fields: [updatedById], references: [id])
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  
+
   @@index([trackingCode])
   @@index([customerId])
+  @@index([warehouseId])
   @@index([status])
   @@index([packingListId])
+}
+
+model PackageDelivery {
+  id            String        @id @default(uuid())
+  deliveryId    String        @unique // Auto-generated
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  packageItemId String
+  packageItem   PackageItem   @relation(fields: [packageItemId], references: [id])
+  receiverName  String?       // Optional receiver name
+  quantity      Int           @default(1)
+  warehouseId   String
+  releaseDate   DateTime      @default(now())
+  notes         String?
+  photos        String[]      // URLs for delivery photos
+
+  // Relations
+  createdById   String
+  createdBy     User          @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
+
+  @@index([deliveryId])
+  @@index([customerId])
+  @@index([invoiceId])
+  @@unique([packageItemId], map: "PackageDelivery_packageItemId_unique")
 }
 
 model PackagePhoto {
@@ -231,6 +344,7 @@ model ShippingRate {
 model Container {
   id              String          @id @default(uuid())
   containerNumber String          @unique
+  containerType   ContainerType   // For air/sea mode filtering
   loadingDate     DateTime
   departureCity   String
   destinationCity String
@@ -240,32 +354,36 @@ model Container {
   notes           String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
-  
+
   // Relations
   packingLists    PackingList[]
-  
+
   @@index([containerNumber])
   @@index([status])
+  @@index([containerType])
 }
 
 model PackingList {
-  id            String    @id @default(uuid())
-  name          String    @unique // Default to loading date
+  id            String      @id @default(uuid())
+  name          String      @unique // Default to loading date
   containerId   String
-  container     Container @relation(fields: [containerId], references: [id])
+  container     Container   @relation(fields: [containerId], references: [id])
+  warehouseId   String?
+  warehouse     Warehouse?  @relation(fields: [warehouseId], references: [id])
   loadingDate   DateTime
-  totalPackages Int       @default(0)
-  totalCBM      Float     @default(0)
-  totalWeight   Float     @default(0)
+  totalPackages Int         @default(0)
+  totalCBM      Float       @default(0)
+  totalWeight   Float       @default(0)
   notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
   // Relations
   packages      Package[]
   invoices      Invoice[]
-  
+
   @@index([containerId])
+  @@index([warehouseId])
 }
 
 model Invoice {
@@ -285,11 +403,12 @@ model Invoice {
   notes           String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
-  
+
   // Relations
   packages        Package[]
   payments        Payment[]
-  
+  deliveries      PackageDelivery[]
+
   @@index([invoiceNumber])
   @@index([customerId])
   @@index([status])
@@ -372,8 +491,31 @@ model AuditLog {
   ipAddress   String?
   userAgent   String?
   timestamp   DateTime @default(now())
-  
+
   @@index([userId])
   @@index([entity, entityId])
   @@index([timestamp])
+}
+
+model ActivityLog {
+  id          String        @id @default(uuid())
+  level       String        // error, warn, info, debug
+  message     String
+  correlationId String?
+  timestamp   DateTime      @default(now())
+  userId      String?       // If associated with user action
+  user        User?         @relation(fields: [userId], references: [id])
+  ipAddress   String?
+  userAgent   String?
+  method      String?       // HTTP method
+  url         String?       // Request URL
+  statusCode  Int?          // Response status
+  responseTime Int?         // Response time in ms
+  metadata    Json?         // Additional data
+  error       String?       // Error message if any
+
+  @@index([level])
+  @@index([timestamp])
+  @@index([correlationId])
+  @@index([userId])
 }

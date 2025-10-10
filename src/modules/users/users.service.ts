@@ -256,6 +256,9 @@ export class UsersService {
       updateData.password = await hash(updateUserDto.password, saltRounds);
     }
 
+    // Check if role is being changed
+    const roleChanged = updateUserDto.role && updateUserDto.role !== existingUser.role;
+
     const result = await this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
         where: { id },
@@ -275,7 +278,35 @@ export class UsersService {
         },
       });
 
-      // Log the action
+      // If role changed, invalidate all refresh tokens
+      if (roleChanged) {
+        await tx.refreshToken.updateMany({
+          where: { userId: id },
+          data: { revokedAt: new Date() },
+        });
+
+        // Log role change and session invalidation
+        await tx.auditLog.create({
+          data: {
+            userId: updaterId,
+            action: 'SECURITY_EVENT',
+            entity: 'User',
+            entityId: id,
+            metadata: {
+              action: 'ROLE_CHANGE_SESSION_INVALIDATION',
+              oldRole: existingUser.role,
+              newRole: updatedUser.role,
+              sessionsInvalidated: true,
+            },
+          },
+        });
+
+        this.logger.log(
+          `User role changed from ${existingUser.role} to ${updatedUser.role} - all sessions invalidated for ${updatedUser.email}`,
+        );
+      }
+
+      // Log the general update action
       await tx.auditLog.create({
         data: {
           userId: updaterId,
@@ -289,6 +320,12 @@ export class UsersService {
 
       return updatedUser;
     });
+
+    if (roleChanged) {
+      this.logger.warn(
+        `Security Alert: User role change detected - sessions invalidated for user ${result.email}`,
+      );
+    }
 
     this.logger.log(`User updated: ${result.email}`);
     return result as User;

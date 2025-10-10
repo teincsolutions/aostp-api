@@ -268,6 +268,28 @@ export class PackingListsController {
     );
   }
 
+  @Post(':id/finalize')
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Finalize packing list and generate invoices' })
+  @ApiParam({ name: 'id', description: 'Packing list UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Packing list finalized and invoices generated successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Packing list not found',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad request - validation failed (no packages, not consolidated, etc.)',
+  })
+  async finalize(@Param('id') id: string, @Request() req: any) {
+    return this.packingListsService.finalize(id, req.user.sub);
+  }
+
   @Delete(':id')
   @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete packing list' })

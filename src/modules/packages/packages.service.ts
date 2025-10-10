@@ -13,6 +13,11 @@ import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, PackageStatus, ShippingMode } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
+import {
+  PDFService,
+  PackageIntakeReceiptData,
+} from '../../providers/pdf/pdf.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PackagesService {
@@ -20,13 +25,15 @@ export class PackagesService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly pdfService: PDFService,
+    private readonly configService: ConfigService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
     private readonly idGeneratorService: IdGeneratorService,
   ) {}
 
   async create(createPackageDto: CreatePackageDto, userId: string) {
-    const { photos, ...packageData } = createPackageDto;
+    const { photos, warehouseId, ...packageData } = createPackageDto;
 
     // Validate customer exists
     const customer = await this.prisma.customer.findUnique({
@@ -39,6 +46,27 @@ export class PackagesService {
       );
     }
 
+    // Validate warehouse if specified
+    let warehouse;
+    if (warehouseId) {
+      warehouse = await this.prisma.warehouse.findUnique({
+        where: { id: warehouseId },
+      });
+      if (!warehouse) {
+        throw new NotFoundException(
+          `Warehouse with ID ${warehouseId} not found`,
+        );
+      }
+    } else {
+      // Default to first active warehouse
+      warehouse = await this.prisma.warehouse.findFirst({
+        where: { isActive: true },
+      });
+      if (!warehouse) {
+        throw new BadRequestException('No active warehouse found');
+      }
+    }
+
     // Validate air shipping type is provided for air mode
     if (
       packageData.shippingMode === ShippingMode.AIR &&
@@ -49,47 +77,59 @@ export class PackagesService {
       );
     }
 
-    // Generate tracking code if not provided
-    let trackingCode = packageData.trackingCode;
-    if (!trackingCode) {
-      trackingCode =
-        await this.idGeneratorService.generatePackageTrackingCode();
-    } else {
-      // Validate provided tracking code format
-      if (!this.idGeneratorService.validateTrackingCodeFormat(trackingCode)) {
-        throw new BadRequestException(
-          'Invalid tracking code format. Tracking code must be at least 3 characters long.',
-        );
-      }
-
-      // Check if provided tracking code is unique
-      const existingPackage = await this.prisma.package.findUnique({
-        where: { trackingCode },
-      });
-
-      if (existingPackage) {
-        throw new BadRequestException(
-          `Tracking code ${trackingCode} already exists`,
-        );
-      }
+    // Validate provided tracking code format
+    const packageTrackingCode = packageData.trackingCode;
+    if (
+      !this.idGeneratorService.validateTrackingCodeFormat(packageTrackingCode)
+    ) {
+      throw new BadRequestException(
+        'Invalid tracking code format. Tracking code must be at least 3 characters long.',
+      );
     }
 
-    // Create package with photos in a transaction
+    // Check if provided tracking code is unique
+    const existingPackage = await this.prisma.package.findUnique({
+      where: { trackingCode: packageTrackingCode },
+    });
+
+    if (existingPackage) {
+      throw new BadRequestException(
+        `Tracking code ${packageTrackingCode} already exists`,
+      );
+    }
+
+    // Create package in a transaction
     const result = await this.prisma.$transaction(async (tx) => {
+      // Create package (simplified - single package without PackageItem complexity)
       const newPackage = await tx.package.create({
         data: {
-          ...packageData,
-          trackingCode,
+          trackingCode: packageTrackingCode,
+          customerId: packageData.customerId,
+          warehouseId: warehouse.id,
+          description: packageData.description,
+          weight: packageData.weight,
+          cbm: packageData.cbm,
+          quantity: packageData.quantity,
+          shippingMode: packageData.shippingMode,
+          airShippingType: packageData.airShippingType,
+          status: packageData.status || PackageStatus.RECEIVED,
+          notes: packageData.notes,
+          isConsolidated: false,
           createdById: userId,
           photos: {
-            create: photos,
+            create: photos.map((photo) => ({
+              url: photo.url,
+              key: photo.key,
+            })),
           },
         },
         include: {
           customer: true,
+          warehouse: true,
           photos: true,
           packingList: true,
           invoice: true,
+          items: true, // Keep for backward compatibility if needed
           createdBy: {
             select: {
               id: true,
@@ -109,6 +149,10 @@ export class PackagesService {
           entity: 'Package',
           entityId: newPackage.id,
           after: newPackage as any,
+          metadata: {
+            action: 'PACKAGE_INTAKE',
+            trackingCode: packageTrackingCode,
+          },
         },
       });
 
@@ -123,9 +167,25 @@ export class PackagesService {
       // Don't fail the operation if notification fails
     }
 
-    this.logger.log(
-      `Package created with tracking code: ${result.trackingCode}`,
-    );
+    // Generate package intake receipt PDF (run asynchronously after response)
+    try {
+      this.generatePackageReceipt(result, result.trackingCode).catch(
+        (error) => {
+          this.logger.error(
+            `Failed to generate receipt for package ${result.trackingCode}`,
+            error,
+          );
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to start receipt generation for package ${result.trackingCode}`,
+        error,
+      );
+      // Don't fail package creation if receipt generation fails
+    }
+
+    this.logger.log(`Package intake: Package ${result.trackingCode}`);
     return result;
   }
 
@@ -175,10 +235,12 @@ export class PackagesService {
         take: limit,
         include: {
           customer: true,
+          warehouse: true,
           photos: true,
           packingList: {
             include: {
               container: true,
+              warehouse: true,
             },
           },
           invoice: true,
@@ -204,15 +266,23 @@ export class PackagesService {
       where: { id },
       include: {
         customer: true,
+        warehouse: true,
         photos: true,
         packingList: {
           include: {
             container: true,
+            warehouse: true,
           },
         },
         invoice: {
           include: {
             payments: true,
+          },
+        },
+        items: {
+          include: {
+            intakePhotos: true,
+            warehouse: true,
           },
         },
         createdBy: {
@@ -246,10 +316,12 @@ export class PackagesService {
       where: { trackingCode },
       include: {
         customer: true,
+        warehouse: true,
         photos: true,
         packingList: {
           include: {
             container: true,
+            warehouse: true,
           },
         },
         invoice: {
@@ -536,5 +608,130 @@ export class PackagesService {
 
     await Promise.all(updates);
     this.logger.log(`Updated warehouse days for ${updates.length} packages`);
+  }
+
+  /**
+   * Get package receipt signed URL - with regen if not exists
+   */
+  async getReceiptUrl(packageId: string): Promise<{ url: string }> {
+    const pkg = await this.findOne(packageId);
+
+    if (!pkg) {
+      throw new NotFoundException(`Package with ID ${packageId} not found`);
+    }
+
+    if (pkg.receiptKey) {
+      // Check if receipt exists in S3
+      const exists = await this.pdfService.checkFileExists(pkg.receiptKey);
+      if (exists) {
+        // Return signed URL for existing receipt
+        const signedUrl = await this.pdfService.generateSignedDownloadUrl(
+          pkg.receiptKey,
+        );
+        return { url: signedUrl };
+      }
+    }
+
+    // Receipt doesn't exist or package has no receiptKey - regenerate
+    this.logger.log(
+      `Receipt not found for package ${pkg.trackingCode}, regenerating...`,
+    );
+
+    await this.generatePackageReceipt(
+      pkg,
+      pkg.items[0]?.intakeTrackingCode || '',
+    );
+
+    // Fetch updated package to get the new receipt key
+    const updatedPkg = await this.findOne(packageId);
+    if (!updatedPkg.receiptKey) {
+      throw new BadRequestException('Failed to generate package receipt');
+    }
+
+    const signedUrl = await this.pdfService.generateSignedDownloadUrl(
+      updatedPkg.receiptKey,
+    );
+    return { url: signedUrl };
+  }
+
+  /**
+   * Generate package intake receipt PDF asynchronously
+   */
+  private async generatePackageReceipt(
+    pkg: any,
+    trackingCode: string,
+  ): Promise<void> {
+    try {
+      // Get company information from config
+      const companyInfo = {
+        name: this.configService.get<string>('COMPANY_NAME', 'AOSTP Logistics'),
+        address: this.configService.get<string>(
+          'COMPANY_ADDRESS',
+          'Accra, Ghana',
+        ),
+        phone: this.configService.get<string>(
+          'COMPANY_PHONE',
+          '+233 XX XXX XXXX',
+        ),
+        email: this.configService.get<string>(
+          'COMPANY_EMAIL',
+          'info@aostp.com',
+        ),
+      };
+
+      const receiptData: PackageIntakeReceiptData = {
+        company: companyInfo,
+        receipt: {
+          number: pkg.trackingCode,
+          date: new Date().toLocaleDateString(),
+          warehouse: pkg.warehouse?.name || 'Default Warehouse',
+        },
+        customer: {
+          code: pkg.customer.customerCode,
+          name: `${pkg.customer.firstName} ${pkg.customer.lastName}`,
+          phone: pkg.customer.phoneNumber,
+          email: pkg.customer.email || undefined,
+        },
+        package: {
+          trackingCode: pkg.trackingCode,
+          description: pkg.description,
+          shippingMode: pkg.shippingMode,
+          quantity: pkg.quantity,
+          weight: pkg.weight,
+          notes: pkg.notes,
+        },
+        items: [
+          {
+            intakeTrackingCode: pkg.trackingCode,
+            description: pkg.description,
+            quantity: pkg.quantity,
+            weight: pkg.weight,
+          },
+        ],
+        warehouse: {
+          name: pkg.warehouse?.name || 'Default Warehouse',
+          location: pkg.warehouse?.location || 'Accra, Ghana',
+        },
+      };
+
+      const result =
+        await this.pdfService.generatePackageIntakeReceiptPDF(receiptData);
+
+      // Update package with receipt key
+      await this.prisma.package.update({
+        where: { id: pkg.id },
+        data: { receiptKey: result.key },
+      });
+
+      this.logger.log(
+        `Package intake receipt generated for ${pkg.trackingCode}: ${result.key}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate package receipt for ${pkg.trackingCode}`,
+        error,
+      );
+      throw error;
+    }
   }
 }

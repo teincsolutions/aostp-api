@@ -10,6 +10,7 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
+import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 
 @Injectable()
 export class PaymentsService {
@@ -18,6 +19,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
+    private readonly paymentGatewayService: PaymentGatewayService,
   ) {}
 
   async create(
@@ -525,13 +527,148 @@ export class PaymentsService {
   // TODO: Implement refund functionality
   // This would require proper integration with payment gateways
   // and more complex business logic for handling refunds
+  // Automated reconciliation for payments
+  async reconcilePayments(dateFrom?: Date, dateTo?: Date) {
+    const where: any = {
+      processedAt: {
+        gte: dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        lte: dateTo || new Date(),
+      },
+    };
+
+    // Find all payments in the period
+    const payments = await this.prisma.payment.findMany({
+      where,
+      include: {
+        customer: true,
+        exchangeRate: true,
+        invoices: {
+          include: {
+            _count: {
+              select: { packages: true },
+            },
+          },
+        },
+      },
+      orderBy: { processedAt: 'desc' },
+    });
+
+    this.logger.log(`Starting reconciliation for ${payments.length} payments`);
+
+    const reconciliationResults = {
+      totalPayments: payments.length,
+      totalAmount: 0,
+      reconciledPayments: 0,
+      discrepancies: [] as any[],
+    };
+
+    for (const payment of payments) {
+      reconciliationResults.totalAmount += payment.amount;
+
+      // Basic reconciliation checks
+      const checks = await this.performReconciliationChecks(payment);
+
+      if (checks.hasDiscrepancy) {
+        reconciliationResults.discrepancies.push({
+          paymentId: payment.id,
+          paymentCode: payment.paymentCode,
+          customerCode: payment.customer.customerCode,
+          amount: payment.amount,
+          issues: checks.discrepancies,
+        });
+      } else {
+        reconciliationResults.reconciledPayments++;
+
+        // Mark as reconciled if needed
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            notes: payment.notes
+              ? `${payment.notes}\nAUTO RECONCILED on ${new Date().toISOString()}`
+              : `AUTO RECONCILED on ${new Date().toISOString()}`,
+          },
+        });
+      }
+    }
+
+    // Log reconciliation summary
+    await this.prisma.auditLog.create({
+      data: {
+        action: 'SYSTEM_RECONCILIATION',
+        entity: 'Payment',
+        entityId: 'SYSTEM', // Use a system-level identifier
+        metadata: {
+          period: {
+            from: dateFrom?.toISOString(),
+            to: dateTo?.toISOString(),
+          },
+          results: reconciliationResults,
+        },
+      },
+    });
+
+    this.logger.log(
+      `Reconciliation completed: ${reconciliationResults.reconciledPayments}/${reconciliationResults.totalPayments} payments reconciled`,
+    );
+
+    return reconciliationResults;
+  }
+
+  private async performReconciliationChecks(payment: any) {
+    const discrepancies: string[] = [];
+
+    // Check 1: Exchange rate consistency
+    if (payment.amount > 0 && payment.localAmount === 0) {
+      discrepancies.push('Local amount not calculated from exchange rate');
+    }
+
+    // Check 2: Invoice payment linkage
+    if (payment.invoices.length === 0) {
+      discrepancies.push('No associated invoices found');
+    }
+
+    // Check 3: Payment method validation (using gateway)
+    try {
+      const gatewayStatus = await this.paymentGatewayService.getPaymentStatus(
+        payment.paymentMethod,
+        payment.paymentCode, // Assuming paymentCode is used as gateway reference
+      );
+
+      // Add any gateway validation errors
+      if (gatewayStatus === 'FAILED') {
+        discrepancies.push('Gateway status indicates failed payment');
+      }
+    } catch (error) {
+      discrepancies.push(`Gateway validation failed: ${error.message}`);
+    }
+
+    // Check 4: Amount consistency with linked invoices
+    if (payment.invoices.length > 0) {
+      const totalInvoiceAmount = payment.invoices.reduce(
+        (sum: number, inv: any) => sum + inv.totalAmount,
+        0,
+      );
+
+      if (Math.abs(totalInvoiceAmount - payment.amount) > 0.01) {
+        discrepancies.push(
+          `Invoice total (${totalInvoiceAmount}) doesn't match payment amount (${payment.amount})`,
+        );
+      }
+    }
+
+    return {
+      hasDiscrepancy: discrepancies.length > 0,
+      discrepancies,
+    };
+  }
+
+  // Legacy refund method with gateway integration
   async processRefund(
     paymentId: string,
     refundAmount: number,
     reason: string,
     userId: string,
   ) {
-    // Simplified refund - just log for now
     const payment = await this.findOne(paymentId);
 
     if (refundAmount > payment.amount) {
@@ -540,30 +677,64 @@ export class PaymentsService {
       );
     }
 
-    // Log the refund request
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action: 'REFUND_REQUEST',
-        entity: 'Payment',
-        entityId: payment.id,
-        metadata: {
-          refundAmount,
-          reason,
-          originalAmount: payment.amount,
-          status: 'PENDING',
+    // Process refund via payment gateway
+    try {
+      const refundResult = await this.paymentGatewayService.processRefund(
+        payment.paymentMethod,
+        payment.paymentCode,
+        refundAmount,
+        reason,
+      );
+
+      if (!refundResult.success) {
+        throw new BadRequestException(
+          `Refund failed: ${refundResult.errorMessage}`,
+        );
+      }
+
+      // Log successful refund
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'REFUND_COMPLETED',
+          entity: 'Payment',
+          entityId: payment.id,
+          metadata: {
+            refundAmount,
+            reason,
+            originalAmount: payment.amount,
+            refundId: refundResult.refundId,
+          },
         },
-      },
-    });
+      });
 
-    this.logger.log(
-      `Refund requested for payment ${payment.paymentCode} - Amount: ${refundAmount} ${payment.currency}`,
-    );
+      this.logger.log(
+        `Refund processed for payment ${payment.paymentCode} - Amount: ${refundAmount} ${payment.currency}`,
+      );
 
-    return {
-      message: 'Refund request logged - manual processing required',
-      refundAmount,
-      paymentCode: payment.paymentCode,
-    };
+      return {
+        success: true,
+        refundAmount,
+        refundId: refundResult.refundId,
+        paymentCode: payment.paymentCode,
+      };
+    } catch (error) {
+      // Log failed refund attempt
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'REFUND_FAILED',
+          entity: 'Payment',
+          entityId: payment.id,
+          metadata: {
+            refundAmount,
+            reason,
+            error: error.message,
+          },
+        },
+      });
+
+      throw error;
+    }
   }
 }

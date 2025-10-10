@@ -61,15 +61,15 @@ export class CreateCustomerDto {
   @IsOptional()
   alternatePhone?: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Customer address',
     example: '123 Main Street, Accra',
     maxLength: 200,
   })
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   @MaxLength(200)
-  address?: string;
+  address: string;
 
   @ApiPropertyOptional({
     description: 'City',
@@ -111,12 +111,12 @@ export class CreateCustomerDto {
   @IsValidIdNumber()
   idNumber?: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Preferred communication channel',
     enum: NotificationChannel,
     example: NotificationChannel.SMS,
+    default: NotificationChannel.SMS,
   })
   @IsEnum(NotificationChannel)
-  @IsOptional()
-  preferredChannel?: NotificationChannel;
+  preferredChannel: NotificationChannel = NotificationChannel.SMS;
 }

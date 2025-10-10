@@ -17,12 +17,16 @@ import { ShippingRatesModule } from './modules/shipping-rates/shipping-rates.mod
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { ConsolidationModule } from './modules/consolidation/consolidation.module';
+import { PackageDeliveryModule } from './modules/package-delivery/package-delivery.module';
+import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { LoggingModule } from './shared/logging/logging.module';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { CorrelationIdInterceptor } from './shared/interceptors/correlation-id.interceptor';
 import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -34,6 +38,7 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
     PrismaModule,
     SharedModule,
     LoggingModule,
+    AuditLogsModule,
     AuthModule,
     CustomersModule,
     PackagesModule,
@@ -47,6 +52,9 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
     UsersModule,
     HealthModule,
     UploadsModule,
+    ConsolidationModule,
+    PackageDeliveryModule,
+    WarehousesModule,
   ],
   providers: [
     {

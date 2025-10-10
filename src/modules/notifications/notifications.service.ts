@@ -213,6 +213,37 @@ Thank you for choosing AOSTP Logistics.`;
     });
   }
 
+  async notifyDeliveryReleased(
+    customer: Customer,
+    pkg: Package,
+    delivery: any,
+  ) {
+    const content = `Dear ${customer.firstName} ${customer.lastName},
+
+We are pleased to inform you that your package has been released for delivery.
+
+Tracking Code: ${pkg.trackingCode}
+Package Description: ${pkg.description}
+Delivery ID: ${delivery.deliveryId}
+Released Quantity: ${delivery.quantity}
+Receiver: ${delivery.receiverName || 'As indicated'}
+
+Please contact us if you need any assistance with collection.
+
+Thank you for choosing AOSTP Logistics.`;
+
+    return this.sendNotification({
+      customer,
+      type: NotificationType.DELIVERY_RELEASED,
+      content,
+      metadata: {
+        packageId: pkg.id,
+        trackingCode: pkg.trackingCode,
+        deliveryId: delivery.deliveryId,
+      },
+    });
+  }
+
   async notifyInvoiceIssued(invoice: Invoice & { customer: Customer }) {
     const content = `Dear ${invoice.customer.firstName} ${invoice.customer.lastName},
 

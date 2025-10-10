@@ -144,6 +144,35 @@ export class IdGeneratorService {
   }
 
   /**
+   * Generate package delivery ID: DLV-YYYYMMDD-XXXX
+   */
+  async generatePackageDeliveryId(): Promise<string> {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+
+    const dateStr = `${year}${month}${day}`;
+    const prefix = `DLV-${dateStr}-`;
+
+    // Get the count of deliveries created today
+    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
+
+    const count = await this.prisma.packageDelivery.count({
+      where: {
+        releaseDate: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+    });
+
+    const sequence = (count + 1).toString().padStart(4, '0');
+    return `${prefix}${sequence}`;
+  }
+
+  /**
    * Generate barcode for package tracking
    * This is a simple barcode generation - in production you might want to use a more sophisticated library
    */

@@ -19,10 +19,13 @@ export class UpdatePackageDto extends PartialType(
   @IsEnum(PackageStatus)
   status?: PackageStatus;
 
-  @ApiPropertyOptional({ description: 'Warehouse location' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Warehouse ID for the packing list',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @IsString()
-  warehouseLocation?: string;
+  @IsOptional()
+  warehouseId?: string;
 
   @ApiPropertyOptional({
     description: 'Days in warehouse',

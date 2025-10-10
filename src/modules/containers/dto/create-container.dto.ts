@@ -6,13 +6,21 @@ import {
   IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ContainerStatus } from '@prisma/client';
+import { ContainerStatus, ContainerType } from '@prisma/client';
 
 export class CreateContainerDto {
   @ApiProperty({ description: 'Container number (unique identifier)' })
   @IsString()
   @IsNotEmpty()
   containerNumber: string;
+
+  @ApiProperty({
+    description: 'Container type (for air/sea filtering)',
+    enum: ContainerType,
+    example: ContainerType.CONTAINER,
+  })
+  @IsEnum(ContainerType)
+  containerType: ContainerType;
 
   @ApiProperty({ description: 'Loading date', example: '2024-01-15T00:00:00Z' })
   @IsDateString()

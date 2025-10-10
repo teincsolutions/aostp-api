@@ -1,17 +1,17 @@
-import { IsArray, IsUUID, ArrayNotEmpty } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AddPackagesToPackingListDto {
   @ApiProperty({
     description: 'Array of package IDs to add to the packing list',
+    type: [String],
     example: [
       '123e4567-e89b-12d3-a456-426614174000',
-      '456e7890-e89b-12d3-a456-426614174001',
+      '123e4567-e89b-12d3-a456-426614174001',
     ],
-    type: [String],
   })
   @IsArray()
-  @ArrayNotEmpty()
-  @IsUUID(4, { each: true })
+  @ArrayNotEmpty({ message: 'At least one package ID is required' })
+  @IsUUID('4', { each: true, message: 'Each package ID must be a valid UUID' })
   packageIds: string[];
 }

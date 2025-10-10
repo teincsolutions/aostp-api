@@ -18,6 +18,14 @@ export class CreatePackingListDto {
   @IsUUID()
   containerId: string;
 
+  @ApiPropertyOptional({
+    description: 'Warehouse ID for the packing list',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsString()
+  @IsOptional()
+  warehouseId?: string;
+
   @ApiProperty({
     description: 'Loading date for the container',
     example: '2024-01-15T08:00:00.000Z',

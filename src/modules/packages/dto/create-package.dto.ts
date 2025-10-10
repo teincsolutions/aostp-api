@@ -36,10 +36,11 @@ export class CreatePackageDto {
   @IsNotEmpty()
   description: string;
 
-  @ApiProperty({ description: 'Weight in KG', minimum: 0 })
+  @ApiPropertyOptional({ description: 'Weight in KG', minimum: 0 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  weight: number;
+  weight?: number;
 
   @ApiPropertyOptional({
     description: 'Cubic meters for sea shipping',
@@ -54,12 +55,6 @@ export class CreatePackageDto {
   @IsNumber()
   @Min(1)
   quantity: number = 1;
-
-  @ApiPropertyOptional({ description: 'Package value', minimum: 0 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  value?: number;
 
   @ApiProperty({ enum: ShippingMode, description: 'Shipping mode' })
   @IsEnum(ShippingMode)
@@ -82,10 +77,13 @@ export class CreatePackageDto {
   @IsEnum(PackageStatus)
   status?: PackageStatus = PackageStatus.RECEIVED;
 
-  @ApiPropertyOptional({ description: 'Warehouse location' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Warehouse ID for the package',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @IsString()
-  warehouseLocation?: string;
+  @IsOptional()
+  warehouseId?: string;
 
   @ApiPropertyOptional({ description: 'Additional notes' })
   @IsOptional()
@@ -102,10 +100,11 @@ export class CreatePackageDto {
   @Type(() => CreatePackagePhotoDto)
   photos: CreatePackagePhotoDto[];
 
-  @ApiPropertyOptional({
-    description: 'Custom tracking code (auto-generated if not provided)',
+  @ApiProperty({
+    description: 'Tracking code for the package',
+    example: 'PKG-123456789',
   })
-  @IsOptional()
   @IsString()
-  trackingCode?: string;
+  @IsNotEmpty()
+  trackingCode: string;
 }

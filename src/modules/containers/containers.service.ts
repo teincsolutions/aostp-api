@@ -62,6 +62,7 @@ export class ContainersService {
     paginationDto: PaginationDto,
     filters?: {
       status?: ContainerStatus;
+      containerType?: any; // Import ContainerType when needed
       departureCity?: string;
       destinationCity?: string;
       search?: string;
@@ -74,6 +75,10 @@ export class ContainersService {
 
     if (filters?.status) {
       where.status = filters.status;
+    }
+
+    if (filters?.containerType) {
+      where.containerType = filters.containerType;
     }
 
     if (filters?.departureCity) {

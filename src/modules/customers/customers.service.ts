@@ -9,7 +9,6 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { PaginatedResult } from '../../shared/interfaces';
 import { Customer, Prisma } from '@prisma/client';
-import { CUSTOMER_CODE_PREFIX } from '../../shared/constants';
 
 @Injectable()
 export class CustomersService {
@@ -54,8 +53,29 @@ export class CustomersService {
       }
     }
 
-    // Generate customer code
-    const customerCode = await this.generateCustomerCode();
+    // Generate customer code: 3 letters from name + last 5 digits of phone
+    const namePart =
+      `${createCustomerDto.firstName}${createCustomerDto.lastName}`
+        .replace(/\s/g, '')
+        .substring(0, 3)
+        .toUpperCase();
+    const phonePart = createCustomerDto.phoneNumber.slice(-5);
+    let customerCode = `${namePart}${phonePart}`;
+    let counter = 0;
+
+    // Ensure uniqueness
+    while (true) {
+      const existingCustomer = await this.prisma.customer.findFirst({
+        where: { customerCode },
+      });
+
+      if (!existingCustomer) {
+        break;
+      }
+
+      counter++;
+      customerCode = `${namePart}${phonePart}${counter}`;
+    }
 
     return this.prisma.customer.create({
       data: {
@@ -340,14 +360,14 @@ export class CustomersService {
         where: {
           customerId: id,
           status: {
-            in: ['RECEIVED', 'IN_WAREHOUSE', 'IN_PACKING_LIST', 'SHIPPED'],
+            in: ['RECEIVED', 'IN_WAREHOUSE', 'ASSIGNED', 'SHIPPED'],
           },
         },
       }),
       this.prisma.package.count({
         where: {
           customerId: id,
-          status: 'DELIVERED',
+          status: 'RELEASED',
         },
       }),
       this.prisma.invoice.count({
@@ -380,31 +400,5 @@ export class CustomersService {
         totalSpent: totalSpent._sum.amount || 0,
       },
     };
-  }
-
-  private async generateCustomerCode(): Promise<string> {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-
-    // Get the last customer code for this month
-    const lastCustomer = await this.prisma.customer.findFirst({
-      where: {
-        customerCode: {
-          startsWith: `${CUSTOMER_CODE_PREFIX}${year}${month}`,
-        },
-      },
-      orderBy: {
-        customerCode: 'desc',
-      },
-    });
-
-    let sequence = 1;
-    if (lastCustomer) {
-      const lastSequence = parseInt(lastCustomer.customerCode.slice(-4));
-      sequence = lastSequence + 1;
-    }
-
-    return `${CUSTOMER_CODE_PREFIX}${year}${month}${sequence.toString().padStart(4, '0')}`;
   }
 }

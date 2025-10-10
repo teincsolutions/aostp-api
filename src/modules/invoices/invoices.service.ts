@@ -49,24 +49,7 @@ export class InvoicesService {
       );
     }
 
-    // Get current USD to local currency exchange rate
-    const exchangeRate = await this.prisma.exchangeRate.findFirst({
-      where: {
-        fromCurrency: 'USD',
-        isActive: true,
-        effectiveFrom: {
-          lte: new Date(),
-        },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
-      },
-      orderBy: { effectiveFrom: 'desc' },
-    });
-
-    if (!exchangeRate) {
-      throw new BadRequestException(
-        'No active exchange rate found for USD conversion',
-      );
-    }
+    // Note: Currency conversion removed - per Use Case rule, FX only at payment time
 
     // Group packages by customer
     const packagesByCustomer = packingList.packages.reduce((acc, pkg) => {
@@ -115,11 +98,9 @@ export class InvoicesService {
         if (pkg.shippingMode === ShippingMode.SEA) {
           totalAmount += (pkg.cbm || 0) * rate;
         } else {
-          totalAmount += pkg.weight * rate;
+          totalAmount += (pkg.weight || 0) * rate;
         }
       }
-
-      const localAmount = totalAmount * exchangeRate.rate;
 
       // Generate invoice number
       const invoiceNumber =
@@ -130,7 +111,7 @@ export class InvoicesService {
       dueDate.setDate(dueDate.getDate() + 30);
 
       const result = await this.prisma.$transaction(async (tx) => {
-        // Create invoice
+        // Create invoice - NO currency conversion at invoice time per Use Case rule
         const invoice = await tx.invoice.create({
           data: {
             invoiceNumber,
@@ -138,8 +119,7 @@ export class InvoicesService {
             packingListId,
             totalAmount,
             currency: 'USD',
-            exchangeRate: exchangeRate.rate,
-            localAmount,
+            localAmount: 0, // FX deferred to payment time
             status: InvoiceStatus.POSTED,
             dueDate,
           },
@@ -291,30 +271,7 @@ export class InvoicesService {
       );
     }
 
-    // Get exchange rate
-    let exchangeRateRecord;
-    if (providedRate) {
-      // Use provided rate (create a temporary record for calculation)
-      exchangeRateRecord = { rate: providedRate };
-    } else {
-      exchangeRateRecord = await this.prisma.exchangeRate.findFirst({
-        where: {
-          fromCurrency: 'USD',
-          isActive: true,
-          effectiveFrom: { lte: new Date() },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
-        },
-        orderBy: { effectiveFrom: 'desc' },
-      });
-
-      if (!exchangeRateRecord) {
-        throw new BadRequestException(
-          'No active exchange rate found for USD conversion',
-        );
-      }
-    }
-
-    // Calculate total amount
+    // Calculate total amount - NO currency conversion per Use Case rule
     let totalAmount = 0;
     for (const pkg of packingList.packages) {
       const rate = await this.getShippingRate(
@@ -324,11 +281,10 @@ export class InvoicesService {
       if (pkg.shippingMode === ShippingMode.SEA) {
         totalAmount += (pkg.cbm || 0) * rate;
       } else {
-        totalAmount += pkg.weight * rate;
+        totalAmount += (pkg.weight || 0) * rate;
       }
     }
 
-    const localAmount = totalAmount * exchangeRateRecord.rate;
     const invoiceNumber = await this.idGeneratorService.generateInvoiceNumber();
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -339,8 +295,7 @@ export class InvoicesService {
           packingListId,
           totalAmount,
           currency,
-          exchangeRate: exchangeRateRecord.rate,
-          localAmount,
+          localAmount: 0, // FX conversion deferred to payment time per use case rule
           status: InvoiceStatus.POSTED,
           dueDate: dueDate
             ? new Date(dueDate)
