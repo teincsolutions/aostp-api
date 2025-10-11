@@ -23,7 +23,9 @@ export class WarehousesService {
     });
 
     if (existingWarehouse) {
-      throw new BadRequestException(`Warehouse with name "${createWarehouseDto.name}" already exists`);
+      throw new BadRequestException(
+        `Warehouse with name "${createWarehouseDto.name}" already exists`,
+      );
     }
 
     // Generate unique warehouseId (e.g., WH001, WH002)
@@ -117,16 +119,25 @@ export class WarehousesService {
     return warehouse;
   }
 
-  async update(id: string, updateWarehouseDto: UpdateWarehouseDto, userId: string) {
+  async update(
+    id: string,
+    updateWarehouseDto: UpdateWarehouseDto,
+    userId: string,
+  ) {
     const existingWarehouse = await this.findOne(id);
 
     // Check name uniqueness if updating name
-    if (updateWarehouseDto.name && updateWarehouseDto.name !== existingWarehouse.name) {
+    if (
+      updateWarehouseDto.name &&
+      updateWarehouseDto.name !== existingWarehouse.name
+    ) {
       const duplicate = await this.prisma.warehouse.findFirst({
         where: { name: updateWarehouseDto.name },
       });
       if (duplicate) {
-        throw new BadRequestException(`Warehouse with name "${updateWarehouseDto.name}" already exists`);
+        throw new BadRequestException(
+          `Warehouse with name "${updateWarehouseDto.name}" already exists`,
+        );
       }
     }
 
@@ -150,7 +161,9 @@ export class WarehousesService {
       },
     });
 
-    this.logger.log(`Warehouse "${updatedWarehouse.name}" updated by user ${userId}`);
+    this.logger.log(
+      `Warehouse "${updatedWarehouse.name}" updated by user ${userId}`,
+    );
     return updatedWarehouse;
   }
 
@@ -163,7 +176,9 @@ export class WarehousesService {
     });
 
     if (packageCount > 0) {
-      throw new BadRequestException(`Cannot delete warehouse with ${packageCount} packages`);
+      throw new BadRequestException(
+        `Cannot delete warehouse with ${packageCount} packages`,
+      );
     }
 
     await this.prisma.warehouse.delete({
@@ -207,7 +222,9 @@ export class WarehousesService {
       });
 
       if (activeCount === 0) {
-        throw new BadRequestException('Cannot deactivate the last active warehouse');
+        throw new BadRequestException(
+          'Cannot deactivate the last active warehouse',
+        );
       }
     }
 
@@ -228,7 +245,9 @@ export class WarehousesService {
       },
     });
 
-    this.logger.log(`Warehouse "${warehouse.name}" status changed to ${newStatus ? 'active' : 'inactive'}`);
+    this.logger.log(
+      `Warehouse "${warehouse.name}" status changed to ${newStatus ? 'active' : 'inactive'}`,
+    );
     return updatedWarehouse;
   }
 }

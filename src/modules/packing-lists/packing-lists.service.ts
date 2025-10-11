@@ -228,14 +228,8 @@ export class PackingListsService {
       this.prisma.packingList.count({ where }),
     ]);
 
-    // Add package count to each packing list
-    const dataWithPackageCount = data.map((packingList) => ({
-      ...packingList,
-      packageCount: packingList.packages.length,
-    }));
-
     return {
-      data: dataWithPackageCount,
+      data: data,
       meta: {
         total,
         page,
@@ -580,6 +574,7 @@ export class PackingListsService {
         name: packingList.name,
         loadingDate: packingList.loadingDate,
         totalPackages: packingList.totalPackages,
+        totalCustomers: packingList.totalCustomers,
         totalWeight: packingList.totalWeight,
         totalCBM: packingList.totalCBM,
         container: packingList.container,
@@ -605,12 +600,14 @@ export class PackingListsService {
       0,
     );
     const totalCBM = packages.reduce((sum, pkg) => sum + (pkg.cbm || 0), 0);
+    const totalCustomers = new Set(packages.map((pkg) => pkg.customerId)).size;
 
     // Update the packing list totals
     return prisma.packingList.update({
       where: { id: packingListId },
       data: {
         totalPackages,
+        totalCustomers,
         totalWeight,
         totalCBM,
       },
@@ -641,7 +638,7 @@ export class PackingListsService {
       packingList: summary.packingList,
       customerData: summary.customerSummaries,
       exportDate: new Date(),
-      totalCustomers: summary.customerSummaries.length,
+      totalCustomers: summary.packingList.totalCustomers,
     };
   }
 

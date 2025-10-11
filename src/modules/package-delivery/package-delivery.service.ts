@@ -85,7 +85,8 @@ export class PackageDeliveryService {
     }
 
     // Generate delivery ID
-    const deliveryId = await this.idGeneratorService.generatePackageDeliveryId();
+    const deliveryId =
+      await this.idGeneratorService.generatePackageDeliveryId();
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Create delivery record
@@ -125,7 +126,9 @@ export class PackageDeliveryService {
           select: { status: true },
         });
 
-        const allReleased = allItems.every(item => item.status === 'RELEASED');
+        const allReleased = allItems.every(
+          (item) => item.status === 'RELEASED',
+        );
 
         if (allReleased) {
           await tx.package.update({

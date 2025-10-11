@@ -38,7 +38,9 @@ export class MobileMoneyProvider implements PaymentGatewayProvider {
   }
 
   async refundPayment(data: RefundPaymentData): Promise<RefundResult> {
-    this.logger.log(`Processing mobile money refund: ${data.gatewayTransactionId}`);
+    this.logger.log(
+      `Processing mobile money refund: ${data.gatewayTransactionId}`,
+    );
 
     // Mobile money refunds can be processed automatically
     return {

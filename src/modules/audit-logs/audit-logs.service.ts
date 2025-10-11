@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { GetAuditLogsDto } from './dto/get-audit-logs.dto';
-import { AuditEntityType } from './audit-log.types';
 
 @Injectable()
 export class AuditLogsService {
@@ -16,11 +15,14 @@ export class AuditLogsService {
       entity,
       entityId,
       ipAddress,
+      search,
+      dateFrom,
+      dateTo,
     } = getAuditLogsDto;
     let { sortBy, sortOrder } = getAuditLogsDto;
 
-    // Default sort by timestamp
-    if (!sortBy) {
+    // Default sort by timestamp, map createdAt/updatedAt to timestamp if used
+    if (!sortBy || sortBy === 'createdAt' || sortBy === 'updatedAt') {
       sortBy = 'timestamp';
     }
     if (!sortOrder) {
@@ -51,7 +53,30 @@ export class AuditLogsService {
       where.ipAddress = ipAddress;
     }
 
-    const [rawData, total] = await Promise.all([
+    if (dateFrom || dateTo) {
+      where.timestamp = {};
+      if (dateFrom) {
+        where.timestamp.gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        where.timestamp.lte = new Date(dateTo);
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { action: { contains: search, mode: 'insensitive' } },
+        { entity: { contains: search, mode: 'insensitive' } },
+        { entityId: { contains: search, mode: 'insensitive' } },
+        { ipAddress: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { username: { contains: search, mode: 'insensitive' } } },
+        { user: { firstName: { contains: search, mode: 'insensitive' } } },
+        { user: { lastName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         skip,
@@ -74,26 +99,6 @@ export class AuditLogsService {
       }),
       this.prisma.auditLog.count({ where }),
     ]);
-
-    // Transform data to match the AuditLog interface
-    const data = rawData.map((log) => ({
-      id: log.id,
-      timestamp: log.timestamp.toISOString(),
-      actor: log.user
-        ? {
-            id: log.user.id,
-            name: `${log.user.firstName} ${log.user.lastName}`,
-            email: log.user.email,
-            role: log.user.role,
-          }
-        : null,
-      entityType: log.entity as AuditEntityType,
-      entityId: log.entityId,
-      action: log.action,
-      before: log.before as Record<string, unknown> | null,
-      after: log.after as Record<string, unknown> | null,
-      metadata: log.metadata as Record<string, unknown> | undefined,
-    }));
 
     const totalPages = Math.ceil(total / limit);
 
@@ -132,23 +137,6 @@ export class AuditLogsService {
     }
 
     // Transform to match the AuditLog interface
-    return {
-      id: log.id,
-      timestamp: log.timestamp.toISOString(),
-      actor: log.user
-        ? {
-            id: log.user.id,
-            name: `${log.user.firstName} ${log.user.lastName}`,
-            email: log.user.email,
-            role: log.user.role,
-          }
-        : null,
-      entityType: log.entity as AuditEntityType,
-      entityId: log.entityId,
-      action: log.action,
-      before: log.before as Record<string, unknown> | null,
-      after: log.after as Record<string, unknown> | null,
-      metadata: log.metadata as Record<string, unknown> | undefined,
-    };
+    return log;
   }
 }

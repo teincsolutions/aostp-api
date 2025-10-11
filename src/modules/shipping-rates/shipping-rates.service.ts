@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateShippingRateDto } from './dto/create-shipping-rate.dto';
 import { UpdateShippingRateDto } from './dto/update-shipping-rate.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { FindShippingRatesDto } from './dto/find-shipping-rates.dto';
 import {
   Prisma,
   ShippingRate,
@@ -118,39 +118,32 @@ export class ShippingRatesService {
     return result;
   }
 
-  async findAll(
-    paginationDto: PaginationDto,
-    filters?: {
-      shippingMode?: ShippingMode;
-      airShippingType?: AirShippingType;
-      isActive?: boolean;
-      currency?: string;
-    },
-  ) {
-    const { page = 1, limit = 20 } = paginationDto;
+  async findAll(query: FindShippingRatesDto) {
+    const { page = 1, limit = 20, ...filters } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ShippingRateWhereInput = {};
 
-    if (filters?.shippingMode) {
+    if (filters.shippingMode) {
       where.shippingMode = filters.shippingMode;
     }
 
-    if (filters?.airShippingType) {
+    if (filters.airShippingType) {
       where.airShippingType = filters.airShippingType;
     }
 
-    if (filters?.isActive !== undefined) {
+    if (filters.isActive !== undefined) {
       where.isActive = filters.isActive;
     }
 
-    if (filters?.currency) {
+    if (filters.currency) {
       where.currency = filters.currency;
     }
 
     const [data, total] = await Promise.all([
       this.prisma.shippingRate.findMany({
         where,
+        include: { city: true },
         skip,
         take: limit,
         orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
@@ -172,6 +165,7 @@ export class ShippingRatesService {
   async findOne(id: string): Promise<ShippingRate> {
     const shippingRate = await this.prisma.shippingRate.findUnique({
       where: { id },
+      include: { city: true },
     });
 
     if (!shippingRate) {
@@ -195,6 +189,7 @@ export class ShippingRatesService {
         },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
       },
+      include: { city: true },
       orderBy: { effectiveFrom: 'desc' },
     });
 

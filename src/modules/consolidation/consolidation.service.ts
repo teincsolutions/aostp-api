@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { Prisma, ShippingMode } from '@prisma/client';
@@ -42,16 +38,24 @@ export class ConsolidationService {
 
     for (const pkg of sourcePackages) {
       if (pkg.customerId !== firstCustomerId) {
-        throw new BadRequestException('All packages must belong to the same customer');
+        throw new BadRequestException(
+          'All packages must belong to the same customer',
+        );
       }
       if (pkg.isConsolidated) {
-        throw new BadRequestException(`Package ${pkg.trackingCode} is already consolidated`);
+        throw new BadRequestException(
+          `Package ${pkg.trackingCode} is already consolidated`,
+        );
       }
       if (pkg.shippingMode !== shippingMode) {
-        throw new BadRequestException('All packages must have the same shipping mode');
+        throw new BadRequestException(
+          'All packages must have the same shipping mode',
+        );
       }
       if (!['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status)) {
-        throw new BadRequestException(`Package ${pkg.trackingCode} has invalid status for consolidation`);
+        throw new BadRequestException(
+          `Package ${pkg.trackingCode} has invalid status for consolidation`,
+        );
       }
     }
 
@@ -60,14 +64,25 @@ export class ConsolidationService {
       where: { trackingCode: targetTrackingCode },
     });
     if (existingPackage) {
-      throw new BadRequestException(`Tracking code ${targetTrackingCode} already exists`);
+      throw new BadRequestException(
+        `Tracking code ${targetTrackingCode} already exists`,
+      );
     }
 
     // Calculate totals from package items
-    const packageItems = sourcePackages.flatMap(pkg => pkg.items);
-    const totalWeight = packageItems.reduce((sum, item) => sum + (item.weight || 0), 0);
-    const totalCBM = packageItems.reduce((sum, item) => sum + (item.cbm || 0), 0);
-    const totalQuantity = packageItems.reduce((sum, item) => sum + item.quantity, 0);
+    const packageItems = sourcePackages.flatMap((pkg) => pkg.items);
+    const totalWeight = packageItems.reduce(
+      (sum, item) => sum + (item.weight || 0),
+      0,
+    );
+    const totalCBM = packageItems.reduce(
+      (sum, item) => sum + (item.cbm || 0),
+      0,
+    );
+    const totalQuantity = packageItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Create consolidated parent package
@@ -89,7 +104,7 @@ export class ConsolidationService {
       // Link all package items to the parent package
       await tx.packageItem.updateMany({
         where: {
-          packageId: { in: sourcePackages.map(p => p.id) },
+          packageId: { in: sourcePackages.map((p) => p.id) },
         },
         data: {
           packageId: parentPackage.id,
@@ -100,7 +115,7 @@ export class ConsolidationService {
       // Mark old single packages as consolidated children
       await tx.package.updateMany({
         where: {
-          id: { in: sourcePackages.map(p => p.id) },
+          id: { in: sourcePackages.map((p) => p.id) },
         },
         data: {
           status: 'CONSOLIDATED',
@@ -141,7 +156,7 @@ export class ConsolidationService {
           totalQuantity,
           itemCount: packageItems.length,
         },
-        consolidatedPackages: sourcePackages.map(p => ({
+        consolidatedPackages: sourcePackages.map((p) => ({
           id: p.id,
           trackingCode: p.trackingCode,
         })),

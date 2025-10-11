@@ -257,7 +257,8 @@ export class UsersService {
     }
 
     // Check if role is being changed
-    const roleChanged = updateUserDto.role && updateUserDto.role !== existingUser.role;
+    const roleChanged =
+      updateUserDto.role && updateUserDto.role !== existingUser.role;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({

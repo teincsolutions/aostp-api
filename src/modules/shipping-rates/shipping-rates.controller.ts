@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,7 +21,12 @@ import {
 import { ShippingRatesService } from './shipping-rates.service';
 import { CreateShippingRateDto } from './dto/create-shipping-rate.dto';
 import { UpdateShippingRateDto } from './dto/update-shipping-rate.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { CalculateShippingCostDto } from './dto/calculate-shipping-cost.dto';
+import { FindShippingRatesDto } from './dto/find-shipping-rates.dto';
+import {
+  ShippingRatePathParamsDto,
+  ShippingRateQueryParamsDto,
+} from './dto/shipping-rate-path-params.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -60,27 +66,8 @@ export class ShippingRatesController {
   @ApiOperation({
     summary: 'Get all shipping rates with filters and pagination',
   })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'shippingMode', required: false, enum: ShippingMode })
-  @ApiQuery({ name: 'airShippingType', required: false, enum: AirShippingType })
-  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
-  @ApiQuery({ name: 'currency', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('shippingMode') shippingMode?: ShippingMode,
-    @Query('airShippingType') airShippingType?: AirShippingType,
-    @Query('isActive') isActive?: boolean,
-    @Query('currency') currency?: string,
-  ) {
-    const filters = {
-      shippingMode,
-      airShippingType,
-      isActive,
-      currency,
-    };
-
-    return this.shippingRatesService.findAll(paginationDto, filters);
+  findAll(@Query() query: FindShippingRatesDto) {
+    return this.shippingRatesService.findAll(query);
   }
 
   @Get('active')
@@ -101,24 +88,12 @@ export class ShippingRatesController {
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({ summary: 'Calculate shipping cost' })
-  @ApiQuery({ name: 'shippingMode', required: true, enum: ShippingMode })
-  @ApiQuery({ name: 'airShippingType', required: false, enum: AirShippingType })
-  @ApiQuery({ name: 'weight', required: true, type: Number })
-  @ApiQuery({ name: 'cbm', required: false, type: Number })
-  calculateCost(
-    @Query('shippingMode') shippingMode: ShippingMode,
-    @Query('airShippingType') airShippingType?: AirShippingType,
-    @Query('weight') weight?: number,
-    @Query('cbm') cbm?: number,
-  ) {
-    if (!weight) {
-      throw new Error('Weight is required for shipping cost calculation');
-    }
+  calculateCost(@Query() query: CalculateShippingCostDto) {
     return this.shippingRatesService.calculateShippingCost(
-      shippingMode,
-      airShippingType,
-      weight,
-      cbm,
+      query.shippingMode,
+      query.airShippingType,
+      query.weight,
+      query.cbm,
     );
   }
 
@@ -129,31 +104,29 @@ export class ShippingRatesController {
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({ summary: 'Get current rate for shipping mode' })
-  @ApiQuery({ name: 'airShippingType', required: false, enum: AirShippingType })
   findCurrentRate(
-    @Param('shippingMode') shippingMode: ShippingMode,
-    @Query('airShippingType') airShippingType?: AirShippingType,
+    @Param('shippingMode', new ParseEnumPipe(ShippingMode))
+    shippingMode: ShippingMode,
+    @Query() queryParams?: ShippingRateQueryParamsDto,
   ) {
     return this.shippingRatesService.getCurrentRate(
       shippingMode,
-      airShippingType,
+      queryParams?.airShippingType,
     );
   }
 
   @Get('history/:shippingMode')
   @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get historical rates for shipping mode' })
-  @ApiQuery({ name: 'airShippingType', required: false, enum: AirShippingType })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   findHistoricalRates(
-    @Param('shippingMode') shippingMode: ShippingMode,
-    @Query('airShippingType') airShippingType?: AirShippingType,
-    @Query('limit') limit?: number,
+    @Param('shippingMode', new ParseEnumPipe(ShippingMode))
+    shippingMode: ShippingMode,
+    @Query() queryParams?: ShippingRateQueryParamsDto,
   ) {
     return this.shippingRatesService.getHistoricalRates(
       shippingMode,
-      airShippingType,
-      limit,
+      queryParams?.airShippingType,
+      queryParams?.limit,
     );
   }
 

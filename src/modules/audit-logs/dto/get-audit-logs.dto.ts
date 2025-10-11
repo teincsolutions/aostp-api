@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
-import { AuditAction, AuditEntityType } from '../audit-log.types';
+import { AuditAction, AuditEntity } from '../audit-log.types';
 
 export class GetAuditLogsDto extends PaginationDto {
   @ApiPropertyOptional({
@@ -23,12 +23,12 @@ export class GetAuditLogsDto extends PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Filter by entity type',
-    enum: AuditEntityType,
+    enum: AuditEntity,
     example: 'User',
   })
   @IsOptional()
-  @IsEnum(AuditEntityType)
-  entity?: AuditEntityType;
+  @IsEnum(AuditEntity)
+  entity?: AuditEntity;
 
   @ApiPropertyOptional({
     description: 'Filter by entity ID',
@@ -45,4 +45,29 @@ export class GetAuditLogsDto extends PaginationDto {
   @IsOptional()
   @IsString()
   ipAddress?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Search in action, entity, entity ID, IP address, and user (email, username, name)',
+    example: 'CREATE',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by creation timestamp from date (ISO 8601 format)',
+    example: '2023-01-01T00:00:00.000Z',
+  })
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by creation timestamp to date (ISO 8601 format)',
+    example: '2023-12-31T23:59:59.999Z',
+  })
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
 }

@@ -22,7 +22,9 @@ export class AuditLogsController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get all audit logs with filters and pagination' })
+  @ApiOperation({
+    summary: 'Get all audit logs with filters, search, and pagination',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
@@ -32,6 +34,9 @@ export class AuditLogsController {
   @ApiQuery({ name: 'entity', required: false, type: String })
   @ApiQuery({ name: 'entityId', required: false, type: String })
   @ApiQuery({ name: 'ipAddress', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'dateFrom', required: false, type: String })
+  @ApiQuery({ name: 'dateTo', required: false, type: String })
   @ApiResponse({
     status: 200,
     description: 'Audit logs retrieved successfully',

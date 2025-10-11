@@ -397,6 +397,7 @@ model PackingList {
   loadingDate     DateTime
   status          PackingListStatus  @default(DRAFT) // Status of packing list
   totalPackages   Int                @default(0)
+  totalCustomers  Int                @default(0)
   totalCBM        Float              @default(0)
   totalWeight     Float              @default(0)
   notes           String?

@@ -6,7 +6,7 @@ export enum AuditAction {
   EXPORT = 'EXPORT',
 }
 
-export enum AuditEntityType {
+export enum AuditEntity {
   User = 'User',
   Customer = 'Customer',
   Package = 'Package',
@@ -31,7 +31,7 @@ export interface AuditLog {
     email: string;
     role: string;
   };
-  entityType: AuditEntityType;
+  entity: AuditEntity;
   entityId: string;
   action: AuditAction;
   before: Record<string, unknown> | null;
