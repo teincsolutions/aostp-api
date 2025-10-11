@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsEnum,
   Min,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ShippingMode, AirShippingType } from '@prisma/client';
@@ -22,6 +23,10 @@ export class CreateShippingRateDto {
   @IsOptional()
   @IsEnum(AirShippingType)
   airShippingType?: AirShippingType;
+
+  @ApiProperty({ description: 'City ID' })
+  @IsUUID()
+  cityId: string;
 
   @ApiProperty({
     description: 'Rate per unit (CBM for sea, KG for air)',

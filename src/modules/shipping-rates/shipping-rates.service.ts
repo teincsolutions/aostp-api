@@ -28,6 +28,7 @@ export class ShippingRatesService {
     const {
       shippingMode,
       airShippingType,
+      cityId,
       ratePerUnit,
       currency = 'USD',
       effectiveFrom,
@@ -57,6 +58,7 @@ export class ShippingRatesService {
       where: {
         shippingMode,
         airShippingType: airShippingType || null,
+        cityId,
         isActive: true,
         effectiveTo: null,
       },
@@ -79,6 +81,7 @@ export class ShippingRatesService {
         data: {
           shippingMode,
           airShippingType,
+          cityId,
           ratePerUnit,
           currency,
           effectiveFrom: effectiveFromDate,

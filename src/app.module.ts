@@ -27,6 +27,7 @@ import { CorrelationIdInterceptor } from './shared/interceptors/correlation-id.i
 import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { CitiesModule } from './modules/cities/cities.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
     LoggingModule,
     AuditLogsModule,
     AuthModule,
+    CitiesModule,
     CustomersModule,
     PackagesModule,
     PackingListsModule,
