@@ -237,13 +237,8 @@ export class PackagesService {
           customer: true,
           warehouse: true,
           photos: true,
-          packingList: {
-            include: {
-              container: true,
-              warehouse: true,
-            },
-          },
           invoice: true,
+          items: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -563,27 +558,100 @@ export class PackagesService {
     return { success: true };
   }
 
-  async getWarehousePackages(daysThreshold?: number) {
-    const where: Prisma.PackageWhereInput = {
-      status: 'IN_WAREHOUSE',
-    };
+  async getWarehousePackages(
+    filters?: {
+      warehouseId?: string;
+      status?: string;
+      daysThreshold?: number;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+    },
+    paginationDto?: PaginationDto,
+  ) {
+    const { page = 1, limit = 10 } = paginationDto || {};
+    const { sortBy = 'daysInWarehouse', sortOrder = 'desc' } =
+      paginationDto || {};
+    const skip = (page - 1) * limit;
 
-    if (daysThreshold) {
+    const where: Prisma.PackageWhereInput = {};
+
+    // Apply default filter for warehouse packages if no status specified
+    if (filters?.status) {
+      where.status = filters.status as any;
+    } else {
+      where.status = PackageStatus.IN_WAREHOUSE;
+    }
+
+    if (filters?.warehouseId) {
+      where.warehouseId = filters.warehouseId;
+    }
+
+    if (filters?.daysThreshold) {
       where.daysInWarehouse = {
-        gte: daysThreshold,
+        gte: filters.daysThreshold,
       };
     }
 
-    return this.prisma.package.findMany({
-      where,
-      include: {
-        customer: true,
-        photos: true,
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.createdAt = {};
+      if (filters.dateFrom) {
+        where.createdAt.gte = new Date(`${filters.dateFrom}T00:00:00.000Z`);
+      }
+      if (filters.dateTo) {
+        where.createdAt.lte = new Date(`${filters.dateTo}T23:59:59.999Z`);
+      }
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        { trackingCode: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { notes: { contains: filters.search, mode: 'insensitive' } },
+        {
+          customer: {
+            firstName: { contains: filters.search, mode: 'insensitive' },
+          },
+        },
+        {
+          customer: {
+            lastName: { contains: filters.search, mode: 'insensitive' },
+          },
+        },
+        {
+          customer: {
+            customerCode: { contains: filters.search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.package.findMany({
+        where,
+        include: {
+          customer: true,
+          photos: true,
+          warehouse: true,
+        },
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.package.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: {
-        daysInWarehouse: 'desc',
-      },
-    });
+    };
   }
 
   async updateWarehouseDays() {

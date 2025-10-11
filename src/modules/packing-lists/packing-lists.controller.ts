@@ -24,6 +24,7 @@ import { CreatePackingListDto } from './dto/create-packing-list.dto';
 import { UpdatePackingListDto } from './dto/update-packing-list.dto';
 import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
+import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -65,29 +66,12 @@ export class PackingListsController {
   @ApiOperation({
     summary: 'Get all packing lists with pagination and filters',
   })
-  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
-  @ApiQuery({ name: 'containerId', required: false, type: String })
-  @ApiQuery({ name: 'dateFrom', required: false, type: String })
-  @ApiQuery({ name: 'dateTo', required: false, type: String })
-  @ApiQuery({ name: 'search', required: false, type: String })
   @ApiResponse({
     status: 200,
     description: 'List of packing lists retrieved successfully',
   })
-  async findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('containerId') containerId?: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-    @Query('search') search?: string,
-  ) {
-    return this.packingListsService.findAll(paginationDto, {
-      containerId,
-      dateFrom,
-      dateTo,
-      search,
-    });
+  async findAll(@Query() queryDto: GetPackingListsQueryDto) {
+    return this.packingListsService.findAll(queryDto);
   }
 
   @Get(':id')

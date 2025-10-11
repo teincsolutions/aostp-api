@@ -16,6 +16,7 @@ import { PackagesService } from './packages.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
 import { PackageFilterDto } from './dto/package-filter.dto';
+import { WarehousePackagesDto } from './dto/warehouse-packages.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -74,15 +75,30 @@ export class PackagesController {
 
   @Get('warehouse')
   @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
-  @ApiOperation({ summary: 'Get packages in warehouse' })
-  @ApiQuery({
-    name: 'daysThreshold',
-    required: false,
-    type: Number,
-    description: 'Minimum days in warehouse',
+  @ApiOperation({
+    summary: 'Get packages in warehouse with pagination and filters',
   })
-  getWarehousePackages(@Query('daysThreshold') daysThreshold?: number) {
-    return this.packagesService.getWarehousePackages(daysThreshold);
+  getWarehousePackages(@Query() warehouseFilter: WarehousePackagesDto) {
+    const {
+      warehouseId,
+      status,
+      daysThreshold,
+      dateFrom,
+      dateTo,
+      search,
+      ...paginationDto
+    } = warehouseFilter;
+    return this.packagesService.getWarehousePackages(
+      {
+        warehouseId,
+        status,
+        daysThreshold,
+        dateFrom,
+        dateTo,
+        search,
+      },
+      paginationDto,
+    );
   }
 
   @Post('update-warehouse-days')

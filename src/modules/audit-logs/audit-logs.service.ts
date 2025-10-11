@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { GetAuditLogsDto } from './dto/get-audit-logs.dto';
+import { AuditEntityType } from './audit-log.types';
 
 @Injectable()
 export class AuditLogsService {
@@ -35,23 +36,23 @@ export class AuditLogsService {
     }
 
     if (action) {
-      where.level = action; // action is the log level
+      where.action = action;
     }
 
     if (entity) {
-      where.method = entity; // entity is method
+      where.entity = entity;
     }
 
     if (entityId) {
-      where.url = entityId; // entityId is url
+      where.entityId = entityId;
     }
 
     if (ipAddress) {
       where.ipAddress = ipAddress;
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.activityLog.findMany({
+    const [rawData, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
         where,
         skip,
         take: limit,
@@ -71,8 +72,28 @@ export class AuditLogsService {
           [sortBy]: sortOrder,
         },
       }),
-      this.prisma.activityLog.count({ where }),
+      this.prisma.auditLog.count({ where }),
     ]);
+
+    // Transform data to match the AuditLog interface
+    const data = rawData.map((log) => ({
+      id: log.id,
+      timestamp: log.timestamp.toISOString(),
+      actor: log.user
+        ? {
+            id: log.user.id,
+            name: `${log.user.firstName} ${log.user.lastName}`,
+            email: log.user.email,
+            role: log.user.role,
+          }
+        : null,
+      entityType: log.entity as AuditEntityType,
+      entityId: log.entityId,
+      action: log.action,
+      before: log.before as Record<string, unknown> | null,
+      after: log.after as Record<string, unknown> | null,
+      metadata: log.metadata as Record<string, unknown> | undefined,
+    }));
 
     const totalPages = Math.ceil(total / limit);
 
@@ -90,7 +111,7 @@ export class AuditLogsService {
   }
 
   async findOne(id: string) {
-    return await this.prisma.activityLog.findUnique({
+    const log = await this.prisma.auditLog.findUnique({
       where: { id },
       include: {
         user: {
@@ -105,5 +126,29 @@ export class AuditLogsService {
         },
       },
     });
+
+    if (!log) {
+      return null;
+    }
+
+    // Transform to match the AuditLog interface
+    return {
+      id: log.id,
+      timestamp: log.timestamp.toISOString(),
+      actor: log.user
+        ? {
+            id: log.user.id,
+            name: `${log.user.firstName} ${log.user.lastName}`,
+            email: log.user.email,
+            role: log.user.role,
+          }
+        : null,
+      entityType: log.entity as AuditEntityType,
+      entityId: log.entityId,
+      action: log.action,
+      before: log.before as Record<string, unknown> | null,
+      after: log.after as Record<string, unknown> | null,
+      metadata: log.metadata as Record<string, unknown> | undefined,
+    };
   }
 }

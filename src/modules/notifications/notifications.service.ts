@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { GetNotificationsDto } from './dto/notifications.filter.dto';
 import {
   NotificationType,
   NotificationChannel,
@@ -11,11 +12,17 @@ import {
   Container,
 } from '@prisma/client';
 
+interface NotificationChannelContent {
+  channel: NotificationChannel;
+  recipient: string;
+  subject?: string;
+  content: string;
+}
+
 interface NotificationData {
   customer: Customer;
   type: NotificationType;
-  subject?: string;
-  content: string;
+  channels: NotificationChannelContent[];
   metadata?: any;
 }
 
@@ -29,46 +36,21 @@ export class NotificationsService {
   ) {}
 
   async sendNotification(data: NotificationData): Promise<any[]> {
-    const { customer, type, subject, content, metadata } = data;
+    const { customer, type, channels, metadata } = data;
     const notifications: Promise<any>[] = [];
 
-    // Always send email if available
-    if (customer.email) {
+    for (const channelData of channels) {
       notifications.push(
         this.createNotification({
           customerId: customer.id,
           type,
-          channel: NotificationChannel.EMAIL,
-          recipient: customer.email,
-          subject: subject || this.getDefaultSubject(type),
-          content,
+          channel: channelData.channel,
+          recipient: channelData.recipient,
+          subject: channelData.subject || this.getDefaultSubject(type),
+          content: channelData.content,
           metadata,
         }),
       );
-    }
-
-    // Send SMS or WhatsApp based on preference
-    if (customer.phoneNumber) {
-      const channel =
-        customer.preferredChannel === NotificationChannel.WHATSAPP
-          ? NotificationChannel.WHATSAPP
-          : customer.preferredChannel === NotificationChannel.SMS
-            ? NotificationChannel.SMS
-            : null;
-
-      if (channel) {
-        notifications.push(
-          this.createNotification({
-            customerId: customer.id,
-            type,
-            channel,
-            recipient: customer.phoneNumber,
-            subject: subject || this.getDefaultSubject(type),
-            content,
-            metadata,
-          }),
-        );
-      }
     }
 
     // Save notifications to database
@@ -188,24 +170,57 @@ export class NotificationsService {
 
   // Notification templates
   async notifyPackageIntake(pkg: Package & { customer: Customer }) {
-    const content = `Dear ${pkg.customer.firstName} ${pkg.customer.lastName},
+    const channels: NotificationChannelContent[] = [];
 
-Your package has been received and registered in our system.
+    // Email content (HTML)
+    if (pkg.customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Package Received - AOSTP Logistics</h2>
+          <p>Dear ${pkg.customer.firstName} ${pkg.customer.lastName},</p>
+          <p>Your package has been received and registered in our system.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
+            <tr><td><strong>Description:</strong></td><td>${pkg.description}</td></tr>
+            <tr><td><strong>Weight:</strong></td><td>${pkg.weight} KG</td></tr>
+            <tr><td><strong>Shipping Mode:</strong></td><td>${pkg.shippingMode}</td></tr>
+            <tr><td><strong>Status:</strong></td><td>${pkg.status}</td></tr>
+          </table>
+          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> using the tracking code provided.</p>
+          <p>Thank you for choosing AOSTP Logistics.</p>
+        </div>
+      `;
+      channels.push({
+        channel: NotificationChannel.EMAIL,
+        recipient: pkg.customer.email,
+        subject: 'Package Received - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
 
-Tracking Code: ${pkg.trackingCode}
-Description: ${pkg.description}
-Weight: ${pkg.weight} KG
-Shipping Mode: ${pkg.shippingMode}
-Status: ${pkg.status}
+    // SMS/WhatsApp content (short, plain)
+    if (pkg.customer.phoneNumber) {
+      const channel =
+        pkg.customer.preferredChannel === NotificationChannel.WHATSAPP
+          ? NotificationChannel.WHATSAPP
+          : pkg.customer.preferredChannel === NotificationChannel.SMS
+            ? NotificationChannel.SMS
+            : null;
 
-You can track your package using the tracking code provided.
-
-Thank you for choosing AOSTP Logistics.`;
+      if (channel) {
+        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) has been received at AOSTP Logistics. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        channels.push({
+          channel,
+          recipient: pkg.customer.phoneNumber,
+          content,
+        });
+      }
+    }
 
     return this.sendNotification({
       customer: pkg.customer,
       type: NotificationType.PACKAGE_INTAKE,
-      content,
+      channels,
       metadata: {
         packageId: pkg.id,
         trackingCode: pkg.trackingCode,
@@ -218,24 +233,58 @@ Thank you for choosing AOSTP Logistics.`;
     pkg: Package,
     delivery: any,
   ) {
-    const content = `Dear ${customer.firstName} ${customer.lastName},
+    const channels: NotificationChannelContent[] = [];
 
-We are pleased to inform you that your package has been released for delivery.
+    // Email content (HTML)
+    if (customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Package Released for Delivery - AOSTP Logistics</h2>
+          <p>Dear ${customer.firstName} ${customer.lastName},</p>
+          <p>We are pleased to inform you that your package has been released for delivery.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
+            <tr><td><strong>Package Description:</strong></td><td>${pkg.description}</td></tr>
+            <tr><td><strong>Delivery ID:</strong></td><td>${delivery.deliveryId}</td></tr>
+            <tr><td><strong>Released Quantity:</strong></td><td>${delivery.quantity}</td></tr>
+            <tr><td><strong>Receiver:</strong></td><td>${delivery.receiverName || 'As indicated'}</td></tr>
+          </table>
+          <p>Please contact us if you need any assistance with collection.</p>
+          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for updates.</p>
+          <p>Thank you for choosing AOSTP Logistics.</p>
+        </div>
+      `;
+      channels.push({
+        channel: NotificationChannel.EMAIL,
+        recipient: customer.email,
+        subject: 'Package Released for Delivery - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
 
-Tracking Code: ${pkg.trackingCode}
-Package Description: ${pkg.description}
-Delivery ID: ${delivery.deliveryId}
-Released Quantity: ${delivery.quantity}
-Receiver: ${delivery.receiverName || 'As indicated'}
+    // SMS/WhatsApp content (short, plain)
+    if (customer.phoneNumber) {
+      const channel =
+        customer.preferredChannel === NotificationChannel.WHATSAPP
+          ? NotificationChannel.WHATSAPP
+          : customer.preferredChannel === NotificationChannel.SMS
+            ? NotificationChannel.SMS
+            : null;
 
-Please contact us if you need any assistance with collection.
-
-Thank you for choosing AOSTP Logistics.`;
+      if (channel) {
+        const content = `Hi ${customer.firstName}, your package (${pkg.trackingCode}) is ready for collection. Delivery ID: ${delivery.deliveryId}. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        channels.push({
+          channel,
+          recipient: customer.phoneNumber,
+          content,
+        });
+      }
+    }
 
     return this.sendNotification({
       customer,
       type: NotificationType.DELIVERY_RELEASED,
-      content,
+      channels,
       metadata: {
         packageId: pkg.id,
         trackingCode: pkg.trackingCode,
@@ -245,22 +294,56 @@ Thank you for choosing AOSTP Logistics.`;
   }
 
   async notifyInvoiceIssued(invoice: Invoice & { customer: Customer }) {
-    const content = `Dear ${invoice.customer.firstName} ${invoice.customer.lastName},
+    const channels: NotificationChannelContent[] = [];
 
-An invoice has been issued for your shipment.
+    // Email content (HTML)
+    if (invoice.customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Invoice Issued - AOSTP Logistics</h2>
+          <p>Dear ${invoice.customer.firstName} ${invoice.customer.lastName},</p>
+          <p>An invoice has been issued for your shipment.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
+            <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
+            <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
+          </table>
+          <p>Please ensure payment is made before the due date.</p>
+          <p>You can <a href="https://app.aostp.com/invoices/${invoice.invoiceNumber}" target="_blank">view your invoice</a> for details.</p>
+          <p>Thank you for your business.</p>
+        </div>
+      `;
+      channels.push({
+        channel: NotificationChannel.EMAIL,
+        recipient: invoice.customer.email,
+        subject: 'Invoice Issued - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
 
-Invoice Number: ${invoice.invoiceNumber}
-Total Amount: ${invoice.currency} ${invoice.totalAmount}
-Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}
+    // SMS/WhatsApp content (short, plain)
+    if (invoice.customer.phoneNumber) {
+      const channel =
+        invoice.customer.preferredChannel === NotificationChannel.WHATSAPP
+          ? NotificationChannel.WHATSAPP
+          : invoice.customer.preferredChannel === NotificationChannel.SMS
+            ? NotificationChannel.SMS
+            : null;
 
-Please ensure payment is made before the due date.
-
-Thank you for your business.`;
+      if (channel) {
+        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://app.aostp.com/invoices/${invoice.invoiceNumber}`;
+        channels.push({
+          channel,
+          recipient: invoice.customer.phoneNumber,
+          content,
+        });
+      }
+    }
 
     return this.sendNotification({
       customer: invoice.customer,
       type: NotificationType.INVOICE_ISSUED,
-      content,
+      channels,
       metadata: {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
@@ -269,21 +352,55 @@ Thank you for your business.`;
   }
 
   async notifyPaymentReceived(payment: Payment & { customer: Customer }) {
-    const content = `Dear ${payment.customer.firstName} ${payment.customer.lastName},
+    const channels: NotificationChannelContent[] = [];
 
-We have received your payment.
+    // Email content (HTML)
+    if (payment.customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Payment Received - AOSTP Logistics</h2>
+          <p>Dear ${payment.customer.firstName} ${payment.customer.lastName},</p>
+          <p>We have received your payment. Thank you for your prompt payment.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Payment Code:</strong></td><td>${payment.paymentCode}</td></tr>
+            <tr><td><strong>Amount:</strong></td><td>${payment.currency} ${payment.amount}</td></tr>
+            <tr><td><strong>Payment Method:</strong></td><td>${payment.paymentMethod}</td></tr>
+            <tr><td><strong>Date:</strong></td><td>${new Date(payment.processedAt).toLocaleDateString()}</td></tr>
+          </table>
+          <p>You can <a href="https://app.aostp.com/receipts/${payment.paymentCode}" target="_blank">view your receipt</a> for details.</p>
+        </div>
+      `;
+      channels.push({
+        channel: NotificationChannel.EMAIL,
+        recipient: payment.customer.email,
+        subject: 'Payment Received - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
 
-Payment Code: ${payment.paymentCode}
-Amount: ${payment.currency} ${payment.amount}
-Payment Method: ${payment.paymentMethod}
-Date: ${new Date(payment.processedAt).toLocaleDateString()}
+    // SMS/WhatsApp content (short, plain)
+    if (payment.customer.phoneNumber) {
+      const channel =
+        payment.customer.preferredChannel === NotificationChannel.WHATSAPP
+          ? NotificationChannel.WHATSAPP
+          : payment.customer.preferredChannel === NotificationChannel.SMS
+            ? NotificationChannel.SMS
+            : null;
 
-Thank you for your prompt payment.`;
+      if (channel) {
+        const content = `Hi ${payment.customer.firstName}, payment ${payment.currency}${payment.amount} for ${payment.paymentCode} received. Thank you! Receipt: https://app.aostp.com/receipts/${payment.paymentCode}`;
+        channels.push({
+          channel,
+          recipient: payment.customer.phoneNumber,
+          content,
+        });
+      }
+    }
 
     return this.sendNotification({
       customer: payment.customer,
       type: NotificationType.PAYMENT_RECEIVED,
-      content,
+      channels,
       metadata: {
         paymentId: payment.id,
         paymentCode: payment.paymentCode,
@@ -295,22 +412,56 @@ Thank you for your prompt payment.`;
     pkg: Package & { customer: Customer },
     oldStatus: string,
   ) {
-    const content = `Dear ${pkg.customer.firstName} ${pkg.customer.lastName},
+    const channels: NotificationChannelContent[] = [];
 
-Your package status has been updated.
+    // Email content (HTML)
+    if (pkg.customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Package Status Update - AOSTP Logistics</h2>
+          <p>Dear ${pkg.customer.firstName} ${pkg.customer.lastName},</p>
+          <p>Your package status has been updated.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
+            <tr><td><strong>Previous Status:</strong></td><td>${oldStatus}</td></tr>
+            <tr><td><strong>New Status:</strong></td><td>${pkg.status}</td></tr>
+          </table>
+          <p>${this.getStatusMessage(pkg.status)}</p>
+          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for real-time updates.</p>
+          <p>Thank you for choosing AOSTP Logistics.</p>
+        </div>
+      `;
+      channels.push({
+        channel: NotificationChannel.EMAIL,
+        recipient: pkg.customer.email,
+        subject: 'Package Status Update - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
 
-Tracking Code: ${pkg.trackingCode}
-Previous Status: ${oldStatus}
-New Status: ${pkg.status}
+    // SMS/WhatsApp content (short, plain)
+    if (pkg.customer.phoneNumber) {
+      const channel =
+        pkg.customer.preferredChannel === NotificationChannel.WHATSAPP
+          ? NotificationChannel.WHATSAPP
+          : pkg.customer.preferredChannel === NotificationChannel.SMS
+            ? NotificationChannel.SMS
+            : null;
 
-${this.getStatusMessage(pkg.status)}
-
-Thank you for choosing AOSTP Logistics.`;
+      if (channel) {
+        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) status: ${oldStatus} → ${pkg.status}. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        channels.push({
+          channel,
+          recipient: pkg.customer.phoneNumber,
+          content,
+        });
+      }
+    }
 
     return this.sendNotification({
       customer: pkg.customer,
       type: NotificationType.SHIPMENT_UPDATE,
-      content,
+      channels,
       metadata: {
         packageId: pkg.id,
         trackingCode: pkg.trackingCode,
@@ -324,27 +475,60 @@ Thank you for choosing AOSTP Logistics.`;
     container: Container,
     customers: Customer[],
   ): Promise<any[]> {
-    const notifications: Promise<any>[] = [];
+    const notifications: Promise<any[]>[] = [];
 
     for (const customer of customers) {
-      const content = `Dear ${customer.firstName} ${customer.lastName},
+      const channels: NotificationChannelContent[] = [];
 
-We are pleased to inform you that the container carrying your shipment has arrived.
+      // Email content (HTML)
+      if (customer.email) {
+        const emailContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Container Arrival Notice - AOSTP Logistics</h2>
+            <p>Dear ${customer.firstName} ${customer.lastName},</p>
+            <p>We are pleased to inform you that the container carrying your shipment has arrived.</p>
+            <table style="border-collapse: collapse; width: 100%;">
+              <tr><td><strong>Container Number:</strong></td><td>${container.containerNumber}</td></tr>
+              <tr><td><strong>Arrival Date:</strong></td><td>${new Date(container.actualArrival || new Date()).toLocaleDateString()}</td></tr>
+              <tr><td><strong>Origin:</strong></td><td>${container.departureCity}</td></tr>
+              <tr><td><strong>Destination:</strong></td><td>${container.destinationCity}</td></tr>
+            </table>
+            <p>Please prepare for collection of your packages.</p>
+            <p>Thank you for your patience.</p>
+          </div>
+        `;
+        channels.push({
+          channel: NotificationChannel.EMAIL,
+          recipient: customer.email,
+          subject: 'Container Arrival Notice - AOSTP Logistics',
+          content: emailContent,
+        });
+      }
 
-Container Number: ${container.containerNumber}
-Arrival Date: ${new Date(container.actualArrival || new Date()).toLocaleDateString()}
-Origin: ${container.departureCity}
-Destination: ${container.destinationCity}
+      // SMS/WhatsApp content (short, plain)
+      if (customer.phoneNumber) {
+        const channel =
+          customer.preferredChannel === NotificationChannel.WHATSAPP
+            ? NotificationChannel.WHATSAPP
+            : customer.preferredChannel === NotificationChannel.SMS
+              ? NotificationChannel.SMS
+              : null;
 
-Please prepare for collection of your packages.
-
-Thank you for your patience.`;
+        if (channel) {
+          const content = `Hi ${customer.firstName}, container ${container.containerNumber} has arrived from ${container.departureCity} to ${container.destinationCity}. Prepare for package collection.`;
+          channels.push({
+            channel,
+            recipient: customer.phoneNumber,
+            content,
+          });
+        }
+      }
 
       notifications.push(
         this.sendNotification({
           customer,
           type: NotificationType.CONTAINER_ARRIVAL,
-          content,
+          channels,
           metadata: {
             containerId: container.id,
             containerNumber: container.containerNumber,
@@ -353,7 +537,8 @@ Thank you for your patience.`;
       );
     }
 
-    return Promise.all(notifications);
+    const results = await Promise.all(notifications);
+    return results.flat(); // Since each sends multiple, flatten
   }
 
   private getStatusMessage(status: string): string {
@@ -396,6 +581,77 @@ Thank you for your patience.`;
 
     return {
       retried: failedNotifications.length,
+    };
+  }
+
+  // Get all failed notifications
+  async getFailedNotifications(limit = 100) {
+    return this.prisma.notification.findMany({
+      where: { status: 'FAILED' },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
+  // Get all notifications with filters
+  async getAllNotifications(dto: GetNotificationsDto) {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      channel,
+      status,
+      dateFrom,
+      dateTo,
+      customerId,
+      recipient,
+      search,
+    } = dto;
+
+    const where: any = {};
+
+    if (channel) where.channel = channel;
+    if (status) where.status = status;
+    if (customerId) where.customerId = customerId;
+    if (recipient) where.recipient = recipient;
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) where.createdAt.lte = new Date(dateTo);
+    }
+    if (search) {
+      where.OR = [
+        { subject: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+    const sortableFields = ['createdAt', 'sentAt', 'type'];
+    const orderBy: any = {};
+    if (sortableFields.includes(sortBy)) {
+      orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+
+    return {
+      data: notifications,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 }

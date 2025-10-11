@@ -98,6 +98,12 @@ enum ContainerType {
   BAG       // Air freight
 }
 
+enum PackingListStatus {
+  DRAFT      // Initial state when created
+  FINALIZED  // Set when finalize endpoint is called
+  POSTED     // Future use
+}
+
 // Models
 model User {
   id                String    @id @default(uuid())
@@ -364,26 +370,30 @@ model Container {
 }
 
 model PackingList {
-  id            String      @id @default(uuid())
-  name          String      @unique // Default to loading date
-  containerId   String
-  container     Container   @relation(fields: [containerId], references: [id])
-  warehouseId   String?
-  warehouse     Warehouse?  @relation(fields: [warehouseId], references: [id])
-  loadingDate   DateTime
-  totalPackages Int         @default(0)
-  totalCBM      Float       @default(0)
-  totalWeight   Float       @default(0)
-  notes         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String             @id @default(uuid())
+  name            String             @unique // Default to loading date
+  containerId     String
+  container       Container          @relation(fields: [containerId], references: [id])
+  warehouseId     String?
+  warehouse       Warehouse?         @relation(fields: [warehouseId], references: [id])
+  destinationCity String             // Required destination city
+  eta             DateTime?          // Estimated time of arrival
+  loadingDate     DateTime
+  status          PackingListStatus  @default(DRAFT) // Status of packing list
+  totalPackages   Int                @default(0)
+  totalCBM        Float              @default(0)
+  totalWeight     Float              @default(0)
+  notes           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   // Relations
-  packages      Package[]
-  invoices      Invoice[]
+  packages        Package[]
+  invoices        Invoice[]
 
   @@index([containerId])
   @@index([warehouseId])
+  @@index([status])
 }
 
 model Invoice {

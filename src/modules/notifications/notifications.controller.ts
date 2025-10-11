@@ -9,6 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { GetNotificationsDto } from './dto/notifications.filter.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -28,6 +29,13 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Get()
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get all notifications with filters' })
+  async getAllNotifications(@Query() query: GetNotificationsDto) {
+    return this.notificationsService.getAllNotifications(query);
+  }
 
   @Get('customer/:customerId')
   @Roles(
@@ -55,5 +63,13 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Retry initiated' })
   async retryFailedNotifications() {
     return this.notificationsService.retryFailedNotifications();
+  }
+
+  @Get('failed')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get all failed notifications' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 100 })
+  async getFailedNotifications(@Query('limit') limit?: number) {
+    return this.notificationsService.getFailedNotifications(limit);
   }
 }

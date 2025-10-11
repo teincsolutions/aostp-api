@@ -7,8 +7,8 @@ import {
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePackingListDto } from './dto/create-packing-list.dto';
 import { UpdatePackingListDto } from './dto/update-packing-list.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
-import { Prisma, PackageStatus } from '@prisma/client';
+import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
+import { Prisma, PackageStatus, ContainerStatus } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
 
@@ -25,8 +25,15 @@ export class PackingListsService {
     createPackingListDto: CreatePackingListDto,
     userId: string,
   ): Promise<any> {
-    const { containerId, loadingDate, name, notes, warehouseId } =
-      createPackingListDto;
+    const {
+      containerId,
+      destinationCity,
+      eta,
+      loadingDate,
+      name,
+      notes,
+      warehouseId,
+    } = createPackingListDto;
 
     // Verify container exists
     const container = await this.prisma.container.findUnique({
@@ -101,6 +108,8 @@ export class PackingListsService {
         data: {
           name: packingListName,
           containerId,
+          destinationCity,
+          eta: eta ? new Date(eta) : null,
           warehouseId,
           loadingDate: new Date(loadingDate),
           notes,
@@ -133,39 +142,59 @@ export class PackingListsService {
     return result;
   }
 
-  async findAll(
-    paginationDto: PaginationDto,
-    filters?: {
-      containerId?: string;
-      dateFrom?: string;
-      dateTo?: string;
-      search?: string;
-    },
-  ) {
-    const { page = 1, limit = 20 } = paginationDto;
+  async findAll(queryDto: GetPackingListsQueryDto) {
+    const { page = 1, limit = 20, sortBy, sortOrder } = queryDto;
     const skip = (page - 1) * limit;
 
     const where: Prisma.PackingListWhereInput = {};
 
-    if (filters?.containerId) {
-      where.containerId = filters.containerId;
+    if (queryDto.containerId) {
+      where.containerId = queryDto.containerId;
     }
 
-    if (filters?.dateFrom || filters?.dateTo) {
+    if (queryDto.containerStatus) {
+      where.container = {
+        status: queryDto.containerStatus,
+      };
+    }
+
+    if (queryDto.status) {
+      where.status = queryDto.status;
+    }
+
+    if (queryDto.dateFrom || queryDto.dateTo) {
       where.loadingDate = {};
-      if (filters.dateFrom) {
-        where.loadingDate.gte = new Date(filters.dateFrom);
+      if (queryDto.dateFrom) {
+        where.loadingDate.gte = new Date(queryDto.dateFrom);
       }
-      if (filters.dateTo) {
-        where.loadingDate.lte = new Date(filters.dateTo);
+      if (queryDto.dateTo) {
+        where.loadingDate.lte = new Date(queryDto.dateTo);
       }
     }
 
-    if (filters?.search) {
+    if (queryDto.search) {
       where.OR = [
-        { name: { contains: filters.search, mode: 'insensitive' } },
-        { notes: { contains: filters.search, mode: 'insensitive' } },
+        { name: { contains: queryDto.search, mode: 'insensitive' } },
+        { notes: { contains: queryDto.search, mode: 'insensitive' } },
       ];
+    }
+
+    // Determine orderBy
+    let orderBy: Prisma.PackingListOrderByWithRelationInput = {
+      createdAt: 'desc',
+    };
+    if (sortBy) {
+      const normalizedSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+      if (sortBy === 'loadingDate') {
+        orderBy = { loadingDate: normalizedSortOrder };
+      } else if (sortBy === 'name') {
+        orderBy = { name: normalizedSortOrder };
+      } else if (sortBy === 'createdAt') {
+        orderBy = { createdAt: normalizedSortOrder };
+      } else if (sortBy === 'updatedAt') {
+        orderBy = { updatedAt: normalizedSortOrder };
+      }
+      // Add more sort fields if needed
     }
 
     const [data, total] = await Promise.all([
@@ -194,13 +223,19 @@ export class PackingListsService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
       }),
       this.prisma.packingList.count({ where }),
     ]);
 
+    // Add package count to each packing list
+    const dataWithPackageCount = data.map((packingList) => ({
+      ...packingList,
+      packageCount: packingList.packages.length,
+    }));
+
     return {
-      data,
+      data: dataWithPackageCount,
       meta: {
         total,
         page,
@@ -270,6 +305,10 @@ export class PackingListsService {
 
     if (updatePackingListDto.loadingDate) {
       updateData.loadingDate = new Date(updatePackingListDto.loadingDate);
+    }
+
+    if (updatePackingListDto.eta) {
+      updateData.eta = new Date(updatePackingListDto.eta);
     }
 
     // Check if name is unique (if being updated)
@@ -649,7 +688,7 @@ export class PackingListsService {
       const finalizedPackingList = await tx.packingList.update({
         where: { id },
         data: {
-          // Could add a status field here if needed
+          status: 'FINALIZED',
           notes: packingList.notes
             ? `${packingList.notes}\nFINALIZED on ${new Date().toISOString()}`
             : `FINALIZED on ${new Date().toISOString()}`,

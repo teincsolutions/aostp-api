@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
+import { AuditAction, AuditEntityType } from '../audit-log.types';
 
 export class GetAuditLogsDto extends PaginationDto {
   @ApiPropertyOptional({
@@ -13,19 +14,21 @@ export class GetAuditLogsDto extends PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Filter by action type',
+    enum: AuditAction,
     example: 'CREATE',
   })
   @IsOptional()
-  @IsString()
-  action?: string;
+  @IsEnum(AuditAction)
+  action?: AuditAction;
 
   @ApiPropertyOptional({
     description: 'Filter by entity type',
+    enum: AuditEntityType,
     example: 'User',
   })
   @IsOptional()
-  @IsString()
-  entity?: string;
+  @IsEnum(AuditEntityType)
+  entity?: AuditEntityType;
 
   @ApiPropertyOptional({
     description: 'Filter by entity ID',
