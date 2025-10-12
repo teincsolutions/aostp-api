@@ -11,6 +11,9 @@ import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
 import { Prisma, PackageStatus, ContainerStatus } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
+import { InvoicesService } from '../invoices/invoices.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PDFService } from '../../providers/pdf/pdf.service';
 
 @Injectable()
 export class PackingListsService {
@@ -19,6 +22,9 @@ export class PackingListsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
+    private readonly invoicesService: InvoicesService,
+    private readonly notificationsService: NotificationsService,
+    private readonly pdfService: PDFService,
   ) {}
 
   async create(
@@ -595,12 +601,14 @@ export class PackingListsService {
           packages: [],
           totalWeight: 0,
           totalCBM: 0,
+          totalShippingCost: 0,
           packageCount: 0,
         };
       }
       acc[customerId].packages.push(pkg);
       acc[customerId].totalWeight += pkg.weight || 0;
       acc[customerId].totalCBM += pkg.cbm || 0;
+      acc[customerId].totalShippingCost += pkg.shippingCost || 0;
       acc[customerId].packageCount += 1;
       return acc;
     }, {});
@@ -614,6 +622,7 @@ export class PackingListsService {
         totalCustomers: packingList.totalCustomers,
         totalWeight: packingList.totalWeight,
         totalCBM: packingList.totalCBM,
+        totalShippingCost: packingList.totalShippingCost,
         container: packingList.container,
       },
       customerSummaries: Object.values(packagesByCustomer),
@@ -659,14 +668,6 @@ export class PackingListsService {
     });
   }
 
-  private generateDefaultName(loadingDate: Date): string {
-    const year = loadingDate.getFullYear();
-    const month = (loadingDate.getMonth() + 1).toString().padStart(2, '0');
-    const day = loadingDate.getDate().toString().padStart(2, '0');
-
-    return `PL-${year}-${month}-${day}`;
-  }
-
   // Export functionality - returns data formatted for PDF/Excel generation
   async getExportData(id: string) {
     const summary = await this.getPackingListSummary(id);
@@ -706,7 +707,13 @@ export class PackingListsService {
       throw new BadRequestException('Packing list is already finalized');
     }
     // Generate invoices using the existing service
-    const invoices = this.generateInvoicesForPackingList(id, userId);
+    const invoices = await this.generateInvoicesForPackingList(id, userId);
+
+    // Send notifications for all generated invoices
+    await this.sendInvoiceNotifications(invoices);
+
+    // Generate PDFs for all invoices
+    await this.generateInvoicePDFs(invoices);
 
     // Update packing list as finalized (no further edits allowed)
     const result = await this.prisma.$transaction(async (tx) => {
@@ -763,12 +770,83 @@ export class PackingListsService {
     };
   }
 
-  private generateInvoicesForPackingList(
+  private async generateInvoicesForPackingList(
     packingListId: string,
     userId: string,
   ) {
-    // For now, return empty array until imports are fixed
-    // TODO: Properly import and instantiate the InvoicesService
-    return [];
+    return this.invoicesService.generateFromPackingList(packingListId, userId);
+  }
+
+  private async sendInvoiceNotifications(invoices: any[]) {
+    for (const invoice of invoices) {
+      try {
+        await this.notificationsService.notifyInvoiceIssued(invoice);
+        this.logger.log(
+          `Notification sent for invoice ${invoice.invoiceNumber}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to send notification for invoice ${invoice.invoiceNumber}`,
+          error,
+        );
+        // Continue with other notifications even if one fails
+      }
+    }
+  }
+
+  private async generateInvoicePDFs(invoices: any[]) {
+    for (const invoice of invoices) {
+      try {
+        // Prepare invoice data for PDF generation
+        const pdfData = {
+          company: {
+            name: 'AOSTP Logistics',
+            address: '123 Logistics Street, Business City',
+            phone: '+1-555-0123',
+            email: 'billing@aostp.com',
+          },
+          invoice: {
+            number: invoice.invoiceNumber,
+            date: invoice.createdAt.toISOString().split('T')[0],
+            dueDate: invoice.dueDate.toISOString().split('T')[0],
+            status: invoice.status,
+          },
+          customer: {
+            code: invoice.customer.customerCode,
+            name: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+            address: invoice.customer.address || '',
+            phone: invoice.customer.phoneNumber || '',
+            email: invoice.customer.email || '',
+          },
+          container: invoice.packingList?.container
+            ? {
+                number: invoice.packingList.container.containerNumber,
+                loadingDate: invoice.packingList.loadingDate
+                  .toISOString()
+                  .split('T')[0],
+                origin: invoice.packingList.origin || 'Unknown',
+                destination: invoice.packingList.destinationCity || 'Unknown',
+              }
+            : undefined,
+          totals: {
+            total: invoice.totalAmount,
+            currency: invoice.currency,
+          },
+          currency: invoice.currency,
+          notes: `Generated for Packing List: ${
+            invoice.packingList?.name || 'N/A'
+          }`,
+        };
+
+        await this.pdfService.generateInvoicePDF(pdfData);
+        this.logger.log(`PDF generated for invoice ${invoice.invoiceNumber}`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate PDF for invoice ${invoice.invoiceNumber}`,
+          error,
+        );
+        // Continue with other PDFs even if one fails
+      }
+    }
   }
 }
