@@ -81,22 +81,6 @@ export class ShippingRatesController {
     return this.shippingRatesService.getActiveRates();
   }
 
-  @Get('calculate')
-  @Roles(
-    UserRole.OPERATIONS_CLERK,
-    UserRole.FINANCE_MANAGER,
-    UserRole.SUPER_ADMIN,
-  )
-  @ApiOperation({ summary: 'Calculate shipping cost' })
-  calculateCost(@Query() query: CalculateShippingCostDto) {
-    return this.shippingRatesService.calculateShippingCost(
-      query.shippingMode,
-      query.airShippingType,
-      query.weight,
-      query.cbm,
-    );
-  }
-
   @Get('current/:shippingMode')
   @Roles(
     UserRole.OPERATIONS_CLERK,
@@ -115,19 +99,11 @@ export class ShippingRatesController {
     );
   }
 
-  @Get('history/:shippingMode')
+  @Get('history')
   @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get historical rates for shipping mode' })
-  findHistoricalRates(
-    @Param('shippingMode', new ParseEnumPipe(ShippingMode))
-    shippingMode: ShippingMode,
-    @Query() queryParams?: ShippingRateQueryParamsDto,
-  ) {
-    return this.shippingRatesService.getHistoricalRates(
-      shippingMode,
-      queryParams?.airShippingType,
-      queryParams?.limit,
-    );
+  findHistoricalRates(@Query() queryParams: FindShippingRatesDto) {
+    return this.shippingRatesService.findAll(queryParams);
   }
 
   @Get(':id')

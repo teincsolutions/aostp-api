@@ -22,6 +22,15 @@ export class PackageFilterDto extends PaginationDto {
   status?: PackageStatus;
 
   @ApiPropertyOptional({
+    description: 'Filter by shipping mode',
+    enum: ['SEA', 'AIR'] as const,
+    example: 'SEA',
+  })
+  @IsOptional()
+  @IsEnum(['SEA', 'AIR'] as const)
+  shippingMode?: 'SEA' | 'AIR';
+
+  @ApiPropertyOptional({
     description: 'Filter by packing list ID',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })

@@ -35,4 +35,14 @@ export class ShippingRateQueryParamsDto {
   @IsNumber()
   @Min(1)
   limit?: number = 50;
+
+  @ApiProperty({
+    description: 'Filter by shipping mode',
+    enum: ShippingMode,
+    example: ShippingMode.SEA,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ShippingMode)
+  shippingMode?: ShippingMode;
 }

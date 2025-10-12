@@ -178,29 +178,28 @@ export class ShippingRatesService {
   async getCurrentRate(
     shippingMode: ShippingMode,
     airShippingType?: AirShippingType,
-  ): Promise<ShippingRate> {
-    const currentRate = await this.prisma.shippingRate.findFirst({
+  ): Promise<ShippingRate[]> {
+    const where: Prisma.ShippingRateWhereInput = {};
+    if (airShippingType) {
+      where.airShippingType = airShippingType;
+    }
+    where.shippingMode = shippingMode;
+
+    where.isActive = true;
+    where.effectiveFrom = {
+      lte: new Date(),
+    };
+
+    const currentRates = await this.prisma.shippingRate.findMany({
       where: {
-        shippingMode,
-        airShippingType: airShippingType || null,
-        isActive: true,
-        effectiveFrom: {
-          lte: new Date(),
-        },
+        ...where,
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
       },
       include: { city: true },
       orderBy: { effectiveFrom: 'desc' },
     });
 
-    if (!currentRate) {
-      const rateType = `${shippingMode}${airShippingType ? ` - ${airShippingType}` : ''}`;
-      throw new NotFoundException(
-        `No active shipping rate found for ${rateType}`,
-      );
-    }
-
-    return currentRate;
+    return currentRates;
   }
 
   async update(
@@ -307,7 +306,7 @@ export class ShippingRatesService {
   }
 
   async getHistoricalRates(
-    shippingMode: ShippingMode,
+    shippingMode?: ShippingMode,
     airShippingType?: AirShippingType,
     limit = 50,
   ) {
@@ -319,43 +318,6 @@ export class ShippingRatesService {
       orderBy: { effectiveFrom: 'desc' },
       take: limit,
     });
-  }
-
-  async calculateShippingCost(
-    shippingMode: ShippingMode,
-    airShippingType: AirShippingType | undefined,
-    weight: number,
-    cbm?: number,
-  ) {
-    const rate = await this.getCurrentRate(shippingMode, airShippingType);
-
-    let cost: number;
-    let unit: string;
-
-    if (shippingMode === ShippingMode.SEA) {
-      if (!cbm || cbm <= 0) {
-        throw new BadRequestException(
-          'CBM is required for sea shipping cost calculation',
-        );
-      }
-      cost = cbm * rate.ratePerUnit;
-      unit = 'CBM';
-    } else {
-      cost = weight * rate.ratePerUnit;
-      unit = 'KG';
-    }
-
-    return {
-      shippingMode,
-      airShippingType,
-      ratePerUnit: rate.ratePerUnit,
-      unit,
-      quantity: shippingMode === ShippingMode.SEA ? cbm : weight,
-      totalCost: cost,
-      currency: rate.currency,
-      rateId: rate.id,
-      effectiveFrom: rate.effectiveFrom,
-    };
   }
 
   async remove(id: string, userId: string): Promise<ShippingRate> {

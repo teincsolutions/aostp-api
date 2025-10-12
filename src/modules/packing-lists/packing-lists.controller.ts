@@ -23,8 +23,8 @@ import { PackingListsService } from './packing-lists.service';
 import { CreatePackingListDto } from './dto/create-packing-list.dto';
 import { UpdatePackingListDto } from './dto/update-packing-list.dto';
 import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
-import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
+import { RemovePackagesDto } from './dto/remove-packages.dto';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -241,10 +241,12 @@ export class PackingListsController {
   })
   async removePackages(
     @Param('id') id: string,
-    @Query('packageIds') packageIds: string,
+    @Query() removePackagesDto: RemovePackagesDto,
     @Request() req: any,
   ) {
-    const packageIdArray = packageIds.split(',').map((id) => id.trim());
+    const packageIdArray = removePackagesDto.packageIds
+      .split(',')
+      .map((id) => id.trim());
     return this.packingListsService.removePackages(
       id,
       packageIdArray,

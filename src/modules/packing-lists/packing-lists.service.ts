@@ -362,7 +362,7 @@ export class PackingListsService {
     const { packageIds } = addPackagesDto;
 
     // Verify packing list exists
-    await this.findOne(id);
+    const pkgLst = await this.findOne(id);
 
     // Verify all packages exist and are available
     const packages = await this.prisma.package.findMany({
@@ -376,6 +376,43 @@ export class PackingListsService {
 
     if (packages.length !== packageIds.length) {
       throw new BadRequestException('Some packages not found');
+    }
+
+    // Validate packages can be added to this packing list
+    // Check if packing list is finalized
+    if (pkgLst.status === 'FINALIZED') {
+      throw new BadRequestException(
+        'Cannot add packages to a finalized packing list',
+      );
+    }
+
+    // Check if packing list's container shipping mode matches package shipping modes
+    const container = pkgLst.container;
+
+    if (!container) {
+      throw new BadRequestException('Container not found');
+    }
+    const containerType = container.containerType; // CONTAINER or BAG
+    const shippingModes = new Set(packages.map((pkg) => pkg.shippingMode));
+
+    if (shippingModes.size > 1) {
+      throw new BadRequestException(
+        'All packages must have the same shipping mode to be added to this packing list',
+      );
+    }
+
+    const packageShippingMode = Array.from(shippingModes)[0];
+
+    if (containerType === 'CONTAINER' && packageShippingMode !== 'SEA') {
+      throw new BadRequestException(
+        'Only SEA shipping mode packages can be added to CONTAINER type containers',
+      );
+    }
+
+    if (containerType === 'BAG' && packageShippingMode !== 'AIR') {
+      throw new BadRequestException(
+        'Only AIR shipping mode packages can be added to BAG type containers',
+      );
     }
 
     // Check if any packages are already in another packing list
@@ -665,18 +702,9 @@ export class PackingListsService {
         'Packing list has already been finalized (invoices generated)',
       );
     }
-
-    // Check if all packages are consolidated (use case requirement)
-    const unconsolidatedPackages = packingList.packages.filter(
-      (pkg) => !pkg.isConsolidated,
-    );
-
-    if (unconsolidatedPackages.length > 0) {
-      throw new BadRequestException(
-        `Packing list contains ${unconsolidatedPackages.length} unconsolidated package(s). All packages must be consolidated before finalization.`,
-      );
+    if (packingList.status === 'FINALIZED') {
+      throw new BadRequestException('Packing list is already finalized');
     }
-
     // Generate invoices using the existing service
     const invoices = this.generateInvoicesForPackingList(id, userId);
 

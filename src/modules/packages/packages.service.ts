@@ -194,6 +194,7 @@ export class PackagesService {
     filters?: {
       customerId?: string;
       status?: PackageStatus;
+      shippingMode?: ShippingMode;
       packingListId?: string;
       paymentStatus?: string;
       search?: string;
@@ -210,6 +211,10 @@ export class PackagesService {
 
     if (filters?.status) {
       where.status = filters.status;
+    }
+
+    if (filters?.shippingMode) {
+      where.shippingMode = filters.shippingMode;
     }
 
     if (filters?.packingListId) {

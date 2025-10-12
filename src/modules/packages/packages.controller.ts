@@ -59,6 +59,7 @@ export class PackagesController {
     const {
       customerId,
       status,
+      shippingMode,
       packingListId,
       paymentStatus,
       search,
@@ -67,6 +68,7 @@ export class PackagesController {
     return this.packagesService.findAll(paginationDto, {
       customerId,
       status,
+      shippingMode,
       packingListId,
       paymentStatus,
       search,
