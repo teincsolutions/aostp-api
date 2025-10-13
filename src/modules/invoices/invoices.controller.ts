@@ -169,6 +169,22 @@ export class InvoicesController {
     return this.invoicesService.markAsPaid(id, req.user.sub);
   }
 
+  @Get(':id/download-pdf')
+  @Roles(
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
+    UserRole.SUPER_ADMIN,
+    UserRole.CUSTOMER,
+  )
+  @ApiOperation({ summary: 'Download invoice PDF' })
+  @ApiResponse({ status: 200, description: 'Signed download URL returned' })
+  @ApiResponse({ status: 404, description: 'Invoice PDF not found' })
+  async downloadInvoicePdf(@Param('id') id: string) {
+    const url = await this.invoicesService.downloadInvoicePdf(id);
+    return { url };
+  }
+
   @Delete(':id')
   @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete an invoice' })

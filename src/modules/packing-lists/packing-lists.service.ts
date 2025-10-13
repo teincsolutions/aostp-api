@@ -838,8 +838,17 @@ export class PackingListsService {
           }`,
         };
 
-        await this.pdfService.generateInvoicePDF(pdfData);
-        this.logger.log(`PDF generated for invoice ${invoice.invoiceNumber}`);
+        const pdfResult = await this.pdfService.generateInvoicePDF(pdfData);
+
+        // Store PDF key in invoice
+        await this.prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { invoicePdfKey: pdfResult.key },
+        });
+
+        this.logger.log(
+          `PDF generated for invoice ${invoice.invoiceNumber} - Key: ${pdfResult.key}`,
+        );
       } catch (error) {
         this.logger.error(
           `Failed to generate PDF for invoice ${invoice.invoiceNumber}`,

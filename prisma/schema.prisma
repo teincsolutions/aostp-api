@@ -72,10 +72,9 @@ enum PaymentStatus {
 }
 
 enum InvoiceStatus {
-  DRAFT
-  POSTED
   PAID
-  CANCELLED
+  UNPAID
+  PARTIALLY_PAID
 }
 
 enum NotificationChannel {
@@ -424,9 +423,10 @@ model Invoice {
   currency        String        @default("USD")
   exchangeRate    Float         @default(1)
   localAmount     Float         // Amount in local currency
-  status          InvoiceStatus @default(POSTED)
+  status          InvoiceStatus @default(UNPAID)
   dueDate         DateTime
   paidAmount      Float         @default(0)
+  invoicePdfKey   String?       // S3 key for invoice PDF
   notes           String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

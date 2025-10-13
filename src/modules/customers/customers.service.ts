@@ -8,7 +8,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { PaginatedResult } from '../../shared/interfaces';
-import { Customer, Prisma } from '@prisma/client';
+import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
@@ -376,7 +376,7 @@ export class CustomersService {
       this.prisma.invoice.count({
         where: {
           customerId: id,
-          status: { in: ['POSTED', 'DRAFT'] },
+          status: InvoiceStatus.UNPAID,
         },
       }),
       this.prisma.payment.count({

@@ -10,6 +10,7 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Invoice, InvoiceStatus, ShippingMode } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
+import { PDFService } from '../../providers/pdf/pdf.service';
 
 @Injectable()
 export class InvoicesService {
@@ -18,6 +19,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
+    private readonly pdfService: PDFService,
   ) {}
 
   async generateFromPackingList(
@@ -120,7 +122,7 @@ export class InvoicesService {
             totalAmount,
             currency: 'USD',
             localAmount: 0, // FX deferred to payment time
-            status: InvoiceStatus.POSTED,
+            status: InvoiceStatus.UNPAID,
             dueDate,
           },
           include: {
@@ -296,7 +298,7 @@ export class InvoicesService {
           totalAmount,
           currency,
           localAmount: 0, // FX conversion deferred to payment time per use case rule
-          status: InvoiceStatus.POSTED,
+          status: InvoiceStatus.UNPAID,
           dueDate: dueDate
             ? new Date(dueDate)
             : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -557,9 +559,7 @@ export class InvoicesService {
 
   async getPendingInvoices(customerId?: string) {
     const where: Prisma.InvoiceWhereInput = {
-      status: {
-        in: [InvoiceStatus.POSTED, InvoiceStatus.DRAFT],
-      },
+      status: InvoiceStatus.UNPAID,
       OR: [
         { paidAmount: 0 },
         {
@@ -683,5 +683,17 @@ export class InvoicesService {
 
     this.logger.log(`Invoice ${result.invoiceNumber} deleted`);
     return result;
+  }
+
+  async downloadInvoicePdf(id: string): Promise<string> {
+    const invoice = await this.findOne(id);
+
+    if (!invoice.invoicePdfKey) {
+      throw new NotFoundException(
+        `PDF not available for invoice ${invoice.invoiceNumber}`,
+      );
+    }
+
+    return this.pdfService.generateSignedDownloadUrl(invoice.invoicePdfKey);
   }
 }

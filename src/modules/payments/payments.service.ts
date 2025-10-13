@@ -9,6 +9,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
+import { PaymentStatus as GatewayPaymentStaus } from '../../providers/payment-gateway/payment-gateway.interface';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 
@@ -68,7 +69,9 @@ export class PaymentsService {
         where: {
           id: { in: invoiceIds },
           customerId,
-          status: { not: InvoiceStatus.CANCELLED },
+          status: {
+            in: [InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID],
+          },
         },
       });
 
@@ -635,7 +638,7 @@ export class PaymentsService {
       );
 
       // Add any gateway validation errors
-      if (gatewayStatus === 'FAILED') {
+      if (gatewayStatus === GatewayPaymentStaus.FAILED) {
         discrepancies.push('Gateway status indicates failed payment');
       }
     } catch (error) {
