@@ -112,7 +112,7 @@ export class PackagesService {
           quantity: packageData.quantity,
           shippingMode: packageData.shippingMode,
           airShippingType: packageData.airShippingType,
-          status: packageData.status || PackageStatus.RECEIVED,
+          status: PackageStatus.IN_WAREHOUSE,
           notes: packageData.notes,
           isConsolidated: false,
           createdById: userId,
