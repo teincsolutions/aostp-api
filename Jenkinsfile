@@ -133,9 +133,8 @@ pipeline {
                             --env AWS_PACKAGES_BUCKET_NAME="${AWS_PACKAGES_BUCKET_NAME}" \\
                             --env AWS_S3_ENDPOINT="${AWS_S3_ENDPOINT}" \\
                             -v "./scripts:/scripts:ro" \\
-                            --entrypoint /bin/sh \\
-                            minio/mc:latest \\
-                            -c "chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh"
+                            --entrypoint /bin/sh -c "chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh"  \\
+                            minio/mc:latest
                     '''
                 }
             }
