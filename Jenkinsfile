@@ -116,6 +116,7 @@ pipeline {
                     branch 'test'
                 }
             }
+            steps {
                 withCredentials(bindings: [string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT'),
                                             string(credentialsId: 's3-region-prod', variable: 'AWS_REGION'),
                                             string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
@@ -130,6 +131,7 @@ pipeline {
                         ./scripts/init-buckets.sh
 
                     '''
+                    }
                 }
             }
 
