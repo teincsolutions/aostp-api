@@ -15,7 +15,6 @@ pipeline {
         CDN_DOMAIN = 'cdn.akomapacargo.com'
         JWT_EXPIRATION = '15m'
         JWT_REFRESH_EXPIRATION = '7d'
-        AWS_S3_ENDPOINT = 'https://hel1.your-objectstorage.com'
     }
 
     stages {
@@ -119,12 +118,10 @@ pipeline {
             }
             steps {
                     withAWS(credentials: 'aws-credentials-id', region: 'us-east-1') {
-                    sh '''
-                            aws s3api put-bucket-policy \
-                                --bucket packages-aostp-akomapacargo \
-                                --policy file://s3-policy/bucket-policy.json \
-                                --endpoint-url $AWS_S3_ENDPOINT
-                            '''
+                        s3Upload(file: 's3-policy/bucket-policy.json', 
+                        bucket: 'packages-aostp-akomapacargo', 
+                        path: 'policies/',
+                        endpointUrl: 'https://hel1.your-objectstorage.com',)
                     }
             }
         }
