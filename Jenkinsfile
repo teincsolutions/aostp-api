@@ -8,7 +8,7 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
-        DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
+        DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
@@ -87,7 +87,7 @@ pipeline {
                     docker rm aostp-api-test || true
                     rm -f .env.test
                 '''
-                }
+                                            }
             }
         }
 
@@ -117,10 +117,11 @@ pipeline {
                 }
             }
             steps {
-                withAWS(credentials: 'aws-credentials-id', region: 'us-east-1') {
-                    s3Upload(file: 's3-policy/bucket-policy.json', bucket: 'packages-aostp-akomapacargo', path: 'policies/')
+                    withAWS(credentials: 'aws-credentials-id', region: 'us-east-1') {
+                        s3Upload(file: 's3-policy/bucket-policy.json', bucket: 'packages-aostp-akomapacargo', path: 'policies/')
                 }
             }
+        }
 
         stage('Deploy to Production Environment') {
             when {
@@ -164,7 +165,7 @@ pipeline {
                     done
                     rm -f .env.production .env.production
                 '''
-                }
+                                            }
             }
         }
     }
