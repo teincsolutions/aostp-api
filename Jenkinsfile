@@ -8,7 +8,7 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
-        DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
+        DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
@@ -87,7 +87,7 @@ pipeline {
                     docker rm aostp-api-test || true
                     rm -f .env.test
                 '''
-                }
+                                            }
             }
         }
 
@@ -132,9 +132,10 @@ pipeline {
                             --env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \\
                             --env AWS_PACKAGES_BUCKET_NAME="${AWS_PACKAGES_BUCKET_NAME}" \\
                             --env AWS_S3_ENDPOINT="${AWS_S3_ENDPOINT}" \\
-                            -v "./scripts:/scripts:ro" \\
-                            --entrypoint /bin/sh -c "chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh"  \\
-                            minio/mc:latest
+                            -v "$(pwd)/scripts:/scripts:ro" \
+                            --entrypoint /bin/sh \
+                            minio/mc:latest \
+                            -c "[ -f /scripts/setup-s3-policy.sh ] && chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh || { echo '❌ Script not found'; exit 1; }"
                     '''
                 }
             }
@@ -226,7 +227,7 @@ pipeline {
                     done
                     rm -f .env.production .env.production
                 '''
-                }
+                                            }
             }
         }
     }
