@@ -128,7 +128,7 @@ pipeline {
                         # Setuping s3 buckets policies
                         echo "🪣 Initializing s3 buckets policies for production environment..."
                         chmod +x ./scripts/setup-s3-policy.sh
-                        ./scripts/etup-s3-policy.sh
+                        ./scripts/setup-s3-policy.sh
 
                     '''
                     }
