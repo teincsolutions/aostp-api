@@ -125,19 +125,16 @@ pipeline {
                     string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT')
                 ]) {
                     sh '''
-                        # Install mc if not available
-                        if ! command -v mc &> /dev/null; then
-                            echo "Installing MinIO client..."
-                            wget -qO /tmp/mc https://dl.min.io/client/mc/release/linux-amd64/mc
-                            chmod +x /tmp/mc
-                            export PATH="/tmp:$PATH"
-                        fi
-
-                        echo "Configuring S3 bucket policy for CDN domain: ${CDN_DOMAIN}"
-
-                        # Run the setup script
-                        chmod +x scripts/setup-s3-policy.sh
-                        ./scripts/setup-s3-policy.sh
+                        # Use temporary MinIO client Docker image with mounted script
+                        docker run --rm \\
+                            --env CDN_DOMAIN="${CDN_DOMAIN}" \\
+                            --env AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \\
+                            --env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \\
+                            --env AWS_PACKAGES_BUCKET_NAME="${AWS_PACKAGES_BUCKET_NAME}" \\
+                            --env AWS_S3_ENDPOINT="${AWS_S3_ENDPOINT}" \\
+                            -v "$(pwd)/scripts:/scripts" \\
+                            minio/mc:latest \\
+                            /bin/sh -c "chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh"
                     '''
                 }
             }
