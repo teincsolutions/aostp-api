@@ -124,6 +124,7 @@ export class InvoicesService {
             localAmount: 0, // FX deferred to payment time
             status: InvoiceStatus.UNPAID,
             dueDate,
+            balance: totalAmount, // Initial balance equals total amount
           },
           include: {
             customer: true,
@@ -132,16 +133,7 @@ export class InvoicesService {
                 container: true,
               },
             },
-          },
-        });
-
-        // Update packages to link to this invoice
-        await tx.package.updateMany({
-          where: {
-            id: { in: packages.map((pkg) => pkg.id) },
-          },
-          data: {
-            invoiceId: invoice.id,
+            packages: true,
           },
         });
 
@@ -162,7 +154,7 @@ export class InvoicesService {
           },
         });
 
-        return invoice as Invoice;
+        return invoice;
       });
 
       invoices.push(result);
@@ -302,6 +294,7 @@ export class InvoicesService {
           dueDate: dueDate
             ? new Date(dueDate)
             : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          balance: totalAmount, // Initial balance equals total amount
           notes,
         },
         include: {

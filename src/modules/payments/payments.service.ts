@@ -145,15 +145,19 @@ export class PaymentsService {
           const paymentAmount = Math.min(remainingAmount, outstandingAmount);
 
           const newPaidAmount = invoice.paidAmount + paymentAmount;
+          const newBalance = invoice.totalAmount - newPaidAmount;
           const newStatus =
             newPaidAmount >= invoice.totalAmount
               ? InvoiceStatus.PAID
+              : newPaidAmount > invoice.paidAmount
+              ? InvoiceStatus.PARTIALLY_PAID
               : invoice.status;
 
           await tx.invoice.update({
             where: { id: invoice.id },
             data: {
               paidAmount: newPaidAmount,
+              balance: newBalance,
               status: newStatus,
             },
           });

@@ -426,6 +426,7 @@ model Invoice {
   status          InvoiceStatus @default(UNPAID)
   dueDate         DateTime
   paidAmount      Float         @default(0)
+  balance         Float         @default(0) // Outstanding balance: totalAmount - paidAmount
   invoicePdfKey   String?       // S3 key for invoice PDF
   notes           String?
   createdAt       DateTime      @default(now())
