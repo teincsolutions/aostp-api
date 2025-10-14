@@ -8,7 +8,7 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
-        DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
+        DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
@@ -116,15 +116,22 @@ pipeline {
                     branch 'test'
                 }
             }
-            steps {
-                    withAWS(credentials: 'aws-credentials-id', region: 'us-east-1') {
-                        s3Upload(file: 's3-policy/bucket-policy.json', 
-                        bucket: 'packages-aostp-akomapacargo', 
-                        path: 'policies/',
-                        endpointUrl: 'https://hel1.your-objectstorage.com',)
-                    }
+                withCredentials(bindings: [string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT'),
+                                            string(credentialsId: 's3-region-prod', variable: 'AWS_REGION'),
+                                            string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
+                                            string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
+                                            string(credentialsId: 's3-packages-bucket-prod', variable: 'AWS_PACKAGES_BUCKET_NAME'),
+                                              string(credentialsId: 's3-users-bucket-prod', variable: 'AWS_USERS_BUCKET_NAME'),
+                                                string(credentialsId: 's3-logs-bucket-prod', variable: 'AWS_LOGS_BUCKET_NAME')]) {
+                    sh '''
+                        # Setuping s3 buckets policies
+                        echo "🪣 Initializing s3 buckets policies for production environment..."
+                        chmod +x ./scripts/setup-s3-policy.sh
+                        ./scripts/init-buckets.sh
+
+                    '''
+                }
             }
-        }
 
         stage('Deploy to Production Environment') {
             when {
@@ -171,7 +178,7 @@ pipeline {
                                             }
             }
         }
-    }
+        }
 
     post {
         always {
@@ -214,4 +221,4 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 30, unit: 'MINUTES')
     }
-}
+    }
