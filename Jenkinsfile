@@ -8,7 +8,7 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
-        DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
+        DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
@@ -87,7 +87,7 @@ pipeline {
                     docker rm aostp-api-test || true
                     rm -f .env.test
                 '''
-                                            }
+                }
             }
         }
 
@@ -117,73 +117,10 @@ pipeline {
                 }
             }
             steps {
-                echo '🔒 Configuring S3 bucket policy for CDN access...'
-                withCredentials(bindings: [
-                    string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
-                    string(credentialsId: 's3-packages-bucket-prod', variable: 'AWS_PACKAGES_BUCKET_NAME'),
-                    string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT')
-                ]) {
-                    sh '''
-                        # Use temporary MinIO client Docker image with mounted script
-                        docker run --rm \\
-                            --env CDN_DOMAIN="${CDN_DOMAIN}" \\
-                            --env AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \\
-                            --env AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \\
-                            --env AWS_PACKAGES_BUCKET_NAME="${AWS_PACKAGES_BUCKET_NAME}" \\
-                            --env AWS_S3_ENDPOINT="${AWS_S3_ENDPOINT}" \\
-                            -v "${WORKSPACE}/scripts:/scripts:ro" \
-                            --entrypoint /bin/sh \
-                            minio/mc:latest \
-                            -c "[ -f /scripts/setup-s3-policy.sh ] && chmod +x /scripts/setup-s3-policy.sh && /scripts/setup-s3-policy.sh || { echo '❌ Script not found'; exit 1; }"
-                    '''
+                withAWS(credentials: 'aws-credentials-id', region: 'us-east-1') {
+                    s3Upload(file: 's3-policy/bucket-policy.json', bucket: 'packages-aostp-akomapacargo', path: 'policies/')
                 }
             }
-        }
-
-        stage('Deploy to Test Environment') {
-            when {
-                branch 'test'
-            }
-            steps {
-                echo '🚀 Deploying to test environment...'
-                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
-                                            string(credentialsId: 's3-bucket-url-test', variable: 'S3_BUCKET_URL'),
-                                            string(credentialsId: 's3-region-test', variable: 'AWS_REGION'),
-                                            string(credentialsId: 's3-access-key-id-test', variable: 'S3_ACCESS_KEY_ID'),
-                                            string(credentialsId: 's3-secret-access-key-test', variable: 'S3_SECRET_ACCESS_KEY'),
-                                            string(credentialsId: 'jwt-secret-test', variable: 'JWT_SECRET'),
-                                            string(credentialsId: 'jwt-refresh-secret-test', variable: 'JWT_REFRESH_SECRET'),
-                                            string(credentialsId: 'encryption-key-test', variable: 'ENCRYPTION_KEY')]) {
-                    sh '''
-                        if [ -f .env.example ]; then
-                            cp .env.example .env.test
-                        fi
-
-                    docker compose -f docker-compose.test.yml down || true
-                    docker compose -f docker-compose.test.yml up -d
-
-                    sleep 10
-                    # Add migration/seeding if scripts exist
-                    if [ -f scripts/migrate.sh ]; then
-                        docker exec aostp-api-test ./scripts/migrate.sh
-                    fi
-
-                     # Wait and health check
-                    for i in {1..10}; do
-                        if curl -f http://localhost:3001/api/v1/health; then
-                            echo "✅ Health check passed"
-                            break
-                        fi
-                        echo "Retry $i/10..."
-                        sleep 5
-                    done
-
-                    rm -f .env.test
-                '''
-                                            }
-            }
-        }
 
         stage('Deploy to Production Environment') {
             when {
@@ -227,7 +164,7 @@ pipeline {
                     done
                     rm -f .env.production .env.production
                 '''
-                                            }
+                }
             }
         }
     }
