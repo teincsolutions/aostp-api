@@ -12,6 +12,7 @@ pipeline {
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
+        CDN_DOMAIN = 'cdn.akomapacargo.com'
         JWT_EXPIRATION = '15m'
         JWT_REFRESH_EXPIRATION = '7d'
     }
@@ -103,6 +104,40 @@ pipeline {
                     sh '''
                         docker push "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
                         docker push "${DOCKER_IMAGE_NAME}:latest"
+                    '''
+                }
+            }
+        }
+
+        stage('Configure S3 Bucket Policy') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'test'
+                }
+            }
+            steps {
+                echo '🔒 Configuring S3 bucket policy for CDN access...'
+                withCredentials(bindings: [
+                    string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 's3-packages-bucket-prod', variable: 'AWS_PACKAGES_BUCKET_NAME'),
+                    string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT')
+                ]) {
+                    sh '''
+                        # Install mc if not available
+                        if ! command -v mc &> /dev/null; then
+                            echo "Installing MinIO client..."
+                            wget -qO /tmp/mc https://dl.min.io/client/mc/release/linux-amd64/mc
+                            chmod +x /tmp/mc
+                            export PATH="/tmp:$PATH"
+                        fi
+
+                        echo "Configuring S3 bucket policy for CDN domain: ${CDN_DOMAIN}"
+
+                        # Run the setup script
+                        chmod +x scripts/setup-s3-policy.sh
+                        ./scripts/setup-s3-policy.sh
                     '''
                 }
             }

@@ -30,6 +30,7 @@ export class S3Service {
   private readonly region: string;
   private readonly defaultBucket: string;
   private readonly endpoint?: string;
+  private readonly cdnDomain?: string;
 
   constructor(private readonly configService: ConfigService) {
     this.region = this.configService.get<string>('AWS_REGION', 'us-east-1');
@@ -37,6 +38,7 @@ export class S3Service {
       'AWS_PACKAGES_BUCKET_NAME',
     );
     this.endpoint = this.configService.get<string>('AWS_S3_ENDPOINT');
+    this.cdnDomain = this.configService.get<string>('CDN_DOMAIN');
 
     const s3Config: any = {
       region: this.region,
@@ -59,7 +61,7 @@ export class S3Service {
       `S3 Service initialized with default bucket: ${this.defaultBucket}${this.endpoint ? ` and custom endpoint: ${this.endpoint}` : ''}`,
     );
     this.logger.log(
-      `S3 Configuration: region=${this.region}, defaultBucket=${this.defaultBucket}, endpoint=${this.endpoint || 'us-east-1 (AWS default)'}`,
+      `S3 Configuration: region=${this.region}, defaultBucket=${this.defaultBucket}, endpoint=${this.endpoint || 'us-east-1 (AWS default)'}, cdnDomain=${this.cdnDomain || 'Not configured'}`,
     );
   }
 
@@ -174,17 +176,20 @@ export class S3Service {
 
       await this.s3Client.send(command);
 
-      const url = this.endpoint
+      // Use CDN URL for client-accessible URLs, but log the direct S3 URL for debugging
+      const cdnUrl = this.generateCdnUrl(bucketName, key);
+      const directS3Url = this.endpoint
         ? `${this.endpoint}/${bucketName}/${key}`
         : `https://${bucketName}.s3.${this.region}.amazonaws.com/${key}`;
 
       this.logger.log(
         `File uploaded successfully: ${key} to bucket ${bucketName}`,
       );
+      this.logger.log(`CDN URL: ${cdnUrl}, Direct S3 URL: ${directS3Url}`);
 
       return {
         key,
-        url,
+        url: cdnUrl, // Return CDN URL for client use
         bucket: bucketName,
         size: buffer.length,
       };
@@ -369,6 +374,19 @@ export class S3Service {
       this.logger.error('S3 health check failed', error);
       return false;
     }
+  }
+
+  /**
+   * Generate CDN URL for a file (used for photo URLs)
+   */
+  generateCdnUrl(bucketName: string, key: string): string {
+    if (this.cdnDomain) {
+      return `https://${this.cdnDomain}/${bucketName}/${key}`;
+    }
+    // Fallback to direct S3 URL if CDN domain is not configured
+    return this.endpoint
+      ? `${this.endpoint}/${bucketName}/${key}`
+      : `https://${bucketName}.s3.${this.region}.amazonaws.com/${key}`;
   }
 
   /**

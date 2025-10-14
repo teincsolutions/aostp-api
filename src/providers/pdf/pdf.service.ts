@@ -297,7 +297,7 @@ export class PDFService {
         this.generateContent(doc, config);
         doc.end();
       } catch (error: any) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
