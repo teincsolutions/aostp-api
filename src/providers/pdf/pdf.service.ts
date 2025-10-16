@@ -14,7 +14,7 @@ export interface PDFTemplateData {
 export interface PDFConfig {
   title: string;
   filename: string;
-  type: 'invoice' | 'receipt'; // stored path hint
+  type: 'invoice' | 'receipt'; // storage folder only
   template: 'invoice' | 'receipt' | 'package-intake';
   data: PDFTemplateData;
 }
@@ -278,8 +278,8 @@ function safe(v?: string | number | null) {
   return (v ?? '').toString().trim();
 }
 
-// ---- Single-line, no-wrap, width-clamped with ellipsis ----
-function writeLineClamped(
+// Single-line, width-clamped with ellipsis; never wraps vertically
+function line(
   doc: PDFDocument,
   text: string,
   x: number,
@@ -288,61 +288,63 @@ function writeLineClamped(
   align: 'left' | 'center' | 'right' = 'left',
 ) {
   let s = text ?? '';
-  while (doc.widthOfString(s) > width && s.length > 1) {
-    s = s.slice(0, -1);
+  while (doc.widthOfString(s) > width && s.length > 1) s = s.slice(0, -1);
+  if (s !== text && width >= doc.widthOfString('…')) {
+    while (doc.widthOfString(s + '…') > width && s.length > 1)
+      s = s.slice(0, -1);
+    s += '…';
   }
-  if (s !== text && s.length > 1) {
-    if (width >= doc.widthOfString('…')) {
-      while (doc.widthOfString(s + '…') > width && s.length > 1) {
-        s = s.slice(0, -1);
-      }
-      s = s + '…';
-    }
-  }
-  // IMPORTANT: lineBreak:false to avoid vertical flow changes
   doc.text(s, x, y, { width, align, lineBreak: false });
 }
 
 // =====================
-// LAYOUT CONSTANTS (tightened)
+// LAYOUT CONSTANTS (tightened and spaced to avoid collisions)
 // =====================
 const LAYOUT = {
-  // general
-  margin: 12, // was 16
-  topY: 6, // header top Y
-  line: 0.8,
+  margin: 12,
 
-  // header/company/date
-  companyFont: 16, // was 18
+  // header
+  companyFont: 15,
   addressFont: 8,
-  dateBoxW: 110,
-  dateBoxH: 18, // was 22
+  topY: 8,
+  dateBoxW: 108,
+  dateBoxH: 18,
   dateFont: 10,
 
-  // colored band
-  bandHeight: 16, // was 20
+  // band
+  bandH: 16,
   bandFont: 10,
 
-  // package slab
-  pkgSlabH: 18, // was 22
+  // package
+  pkgH: 18,
   pkgFont: 8,
 
+  // customer block
+  custLabelFont: 9,
+  custValueFont: 11,
+
   // table
-  headH: 14, // was 18
-  headFont: 8, // was 9
-  rowH: 11, // was 14
-  rowFont: 8, // was 9
+  headH: 14,
+  headFont: 8,
+  rowH: 11,
+  rowFont: 8,
 
-  // totals + strips
-  pillW: 130, // was 150
-  pillH: 20, // was 24
+  // bottom widgets
+  pillW: 130,
+  pillH: 20,
   pillFont: 10,
-  nbStripH: 10, // was 14
+  nbH: 10,
   nbFont: 7,
-  bottomInfoFont: 8,
+  bottomFont: 8,
 
-  // reserved vertical block at bottom (pill + strips area)
-  bottomReserved: 64, // reduced from ~86
+  // separations
+  gapXS: 2,
+  gapS: 4,
+  gapM: 6,
+  gapL: 8,
+
+  // reserve bottom area (pill + NB + info)
+  bottomReserved: 66,
 };
 
 // =====================
@@ -368,11 +370,7 @@ export class PDFService {
 
     const pdfBuffer = await this.createPDF(config);
 
-    const folderMap = {
-      invoice: 'invoices',
-      receipt: 'receipts',
-    } as const;
-
+    const folderMap = { invoice: 'invoices', receipt: 'receipts' } as const;
     const folder = (folderMap as any)[config.type] || 'documents';
     const key = `${folder}/${config.filename}.pdf`;
 
@@ -436,11 +434,11 @@ export class PDFService {
         size: 'A6',
         layout: 'landscape',
         margin: LAYOUT.margin,
-        bufferPages: false, // do not buffer
+        bufferPages: false,
       });
 
       const stream = new PassThrough();
-      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('data', (c) => chunks.push(c));
       stream.on('end', () => resolve(Buffer.concat(chunks)));
       stream.on('error', reject);
 
@@ -475,76 +473,68 @@ export class PDFService {
   }
 
   // =====================
-  // INVOICE (A6 themed, PACKAGE summary) — single-page fit
+  // INVOICE — A6, single-page, clear spacing
   // =====================
   private generateInvoiceContent(doc: PDFDocument, data: InvoiceData): void {
     const W = doc.page.width;
     const H = doc.page.height;
-    const L = doc.page.margins.left;
-    const R = W - doc.page.margins.right;
-    const contentW = R - L;
+    const Lm = doc.page.margins.left;
+    const Rm = W - doc.page.margins.right;
+    const contentW = Rm - Lm;
 
     const theme = THEMES[resolveThemeFromData(data)];
     const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
-    // Header
+    // --- Header row: company (left) / date box (right) ---
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont).fillColor('#000');
-    writeLineClamped(
+    line(
       doc,
       safe(data.company.name),
-      L,
+      Lm,
       LAYOUT.topY,
-      contentW,
-      'center',
+      contentW - LAYOUT.dateBoxW - LAYOUT.gapM,
+      'left',
     );
 
-    // Date box
-    const dateBoxX = R - LAYOUT.dateBoxW;
-    const dateBoxY = LAYOUT.topY;
+    const dateX = Rm - LAYOUT.dateBoxW;
+    const dateY = LAYOUT.topY;
     doc
-      .roundedRect(dateBoxX, dateBoxY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
+      .roundedRect(dateX, dateY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
       .fill('#E6E6E6');
-    doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
-    writeLineClamped(
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.dateFont);
+    line(
       doc,
       safe(data.invoice.date),
-      dateBoxX,
-      dateBoxY + 3,
+      dateX,
+      dateY + 3,
       LAYOUT.dateBoxW,
       'center',
     );
 
-    // Address small (one-line clamp, right aligned)
+    // address (right aligned, single line)
     if (safe(data.company.address)) {
       doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
-      writeLineClamped(
+      line(
         doc,
         safe(data.company.address),
-        L,
-        dateBoxY + LAYOUT.dateBoxH + 2,
+        Lm,
+        dateY + LAYOUT.dateBoxH + LAYOUT.gapXS,
         contentW,
         'right',
       );
     }
 
-    // Band
-    const bandY = dateBoxY + LAYOUT.dateBoxH + 8;
-    doc.rect(L, bandY, contentW, LAYOUT.bandHeight).fill(theme.band);
-    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.bandFont);
-    writeLineClamped(
-      doc,
-      theme.bandLabel,
-      L + 6,
-      bandY + 3,
-      contentW - 12,
-      'center',
-    );
+    // --- Band row ---
+    const bandY = dateY + LAYOUT.dateBoxH + LAYOUT.gapM;
+    doc.rect(Lm, bandY, contentW, LAYOUT.bandH).fill(theme.band);
+    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(LAYOUT.bandFont);
+    line(doc, theme.bandLabel, Lm + 6, bandY + 3, contentW - 12, 'center');
 
-    // Package strip
+    // --- Package strip ---
     const pkg = data.package;
-    const pkgY = bandY + LAYOUT.bandHeight + 3;
+    const pkgY = bandY + LAYOUT.bandH + LAYOUT.gapS;
     if (pkg) {
-      doc.rect(L, pkgY, contentW, LAYOUT.pkgSlabH).fill('#F6F6F6');
+      doc.rect(Lm, pkgY, contentW, LAYOUT.pkgH).fill('#F6F6F6');
       const chips: string[] = [];
       if (safe(pkg.trackingCode))
         chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
@@ -561,95 +551,88 @@ export class PDFService {
       if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
 
       doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.pkgFont);
-      writeLineClamped(
-        doc,
-        chips.join(' • '),
-        L + 5,
-        pkgY + 4,
-        contentW - 10,
-        'left',
-      );
+      line(doc, chips.join(' • '), Lm + 5, pkgY + 4, contentW - 10, 'left');
     }
 
-    // Customer row
-    const metaY = pkg
-      ? pkgY + LAYOUT.pkgSlabH + 4
-      : bandY + LAYOUT.bandHeight + 6;
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
-    writeLineClamped(doc, 'CUSTOMER:', L, metaY, 60, 'left');
-    writeLineClamped(doc, 'CONTACT:', L + contentW * 0.55, metaY, 60, 'left');
+    // --- Customer block (labels on line 1; values on line 2) ---
+    const custY =
+      (pkg ? pkgY + LAYOUT.pkgH : bandY + LAYOUT.bandH) + LAYOUT.gapM;
+    doc.font('Helvetica-Bold').fontSize(LAYOUT.custLabelFont).fillColor('#000');
+    line(doc, 'CUSTOMER:', Lm, custY, contentW * 0.5 - 8, 'left');
+    line(
+      doc,
+      'CONTACT:',
+      Lm + contentW * 0.5 + 8,
+      custY,
+      contentW * 0.5 - 8,
+      'left',
+    );
 
-    doc.font('Helvetica').fontSize(12);
-    writeLineClamped(
+    doc.font('Helvetica').fontSize(LAYOUT.custValueFont);
+    line(
       doc,
       (data.customer?.name || '').toUpperCase(),
-      L + 65,
-      metaY - 2,
-      contentW * 0.46 - 65,
+      Lm,
+      custY + LAYOUT.gapM,
+      contentW * 0.5 - 8,
       'left',
     );
     const contact =
       data.customer?.phone || data.customer?.email || data.customer?.code || '';
-    writeLineClamped(
+    line(
       doc,
       contact,
-      L + contentW * 0.55 + 58,
-      metaY - 2,
-      contentW * 0.45 - 58,
+      Lm + contentW * 0.5 + 8,
+      custY + LAYOUT.gapM,
+      contentW * 0.5 - 8,
       'left',
     );
 
-    // Divider
+    // divider
+    const divY = custY + LAYOUT.gapM + LAYOUT.custValueFont;
     doc
-      .moveTo(L, metaY + 14)
-      .lineTo(R, metaY + 14)
-      .strokeColor('#CCCCCC')
-      .lineWidth(LAYOUT.line)
+      .moveTo(Lm, divY)
+      .lineTo(Rm, divY)
+      .lineWidth(0.8)
+      .strokeColor('#CCC')
       .stroke();
 
-    // Table header
-    const headY = metaY + 18;
-    doc.rect(L, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
+    // --- Table header (short labels to avoid wrapping) ---
+    const headY = divY + LAYOUT.gapS;
+    doc.rect(Lm, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
 
     const cols = [
       {
-        x: L + 6,
-        w: contentW * 0.46,
+        x: Lm + 6,
+        w: contentW * 0.48,
         label: 'DESCRIPTION',
         align: 'left' as const,
       },
       {
-        x: L + contentW * 0.46 + 6,
-        w: contentW * 0.14,
+        x: Lm + contentW * 0.48 + 6,
+        w: contentW * 0.12,
         label: 'QTY',
         align: 'center' as const,
       },
       {
-        x: L + contentW * 0.6 + 6,
-        w: contentW * 0.18,
-        label: `UNIT (${currency})`,
+        x: Lm + contentW * 0.6 + 6,
+        w: contentW * 0.16,
+        label: `UNIT ${currency}`,
         align: 'right' as const,
       },
       {
-        x: L + contentW * 0.78 + 6,
-        w: contentW * 0.2 - 12,
-        label: `AMOUNT (${currency})`,
+        x: Lm + contentW * 0.76 + 6,
+        w: contentW * 0.24 - 12,
+        label: `AMOUNT ${currency}`,
         align: 'right' as const,
       },
     ];
-    cols.forEach((c) =>
-      writeLineClamped(doc, c.label, c.x, headY + 2, c.w, c.align),
-    );
+    cols.forEach((c) => line(doc, c.label, c.x, headY + 2, c.w, c.align));
 
-    // Rows — height-limited to fit one page
-    let y = headY + LAYOUT.headH + 2;
-    const bottomReserved = LAYOUT.bottomReserved;
-    const maxY = H - doc.page.margins.bottom - bottomReserved;
-    const availableRows = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
-
-    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
-
+    // --- Rows (fit to page) ---
+    let y = headY + LAYOUT.headH + LAYOUT.gapXS;
+    const maxY = H - doc.page.margins.bottom - LAYOUT.bottomReserved;
     const rows: InvoiceItem[] =
       (data.items?.length ?? 0) > 0
         ? data.items!
@@ -667,62 +650,28 @@ export class PDFService {
             },
           ];
 
-    const showCount = Math.min(rows.length, availableRows);
-    const overflow = rows.length - showCount;
+    const capacity = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
+    const show = Math.min(rows.length, capacity);
+    const more = rows.length - show;
 
-    for (let i = 0; i < showCount; i++) {
+    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
+    for (let i = 0; i < show; i++) {
       const it = rows[i];
-      writeLineClamped(
-        doc,
-        it.description || '',
-        cols[0].x,
-        y,
-        cols[0].w,
-        'left',
-      );
-      writeLineClamped(
-        doc,
-        String(it.quantity ?? 0),
-        cols[1].x,
-        y,
-        cols[1].w,
-        'center',
-      );
-      writeLineClamped(
-        doc,
-        fmt(it.unitPrice ?? 0),
-        cols[2].x,
-        y,
-        cols[2].w,
-        'right',
-      );
-      writeLineClamped(
-        doc,
-        fmt(it.total ?? 0),
-        cols[3].x,
-        y,
-        cols[3].w,
-        'right',
-      );
+      line(doc, it.description || '', cols[0].x, y, cols[0].w, 'left');
+      line(doc, String(it.quantity ?? 0), cols[1].x, y, cols[1].w, 'center');
+      line(doc, fmt(it.unitPrice ?? 0), cols[2].x, y, cols[2].w, 'right');
+      line(doc, fmt(it.total ?? 0), cols[3].x, y, cols[3].w, 'right');
       y += LAYOUT.rowH;
     }
-
-    if (overflow > 0 && y <= maxY) {
+    if (more > 0 && y <= maxY) {
       doc.font('Helvetica-Oblique').fontSize(LAYOUT.rowFont);
-      writeLineClamped(
-        doc,
-        `(+${overflow} more items)`,
-        cols[0].x,
-        y,
-        contentW - 12,
-        'left',
-      );
+      line(doc, `(+${more} more items)`, cols[0].x, y, contentW - 12, 'left');
       y += LAYOUT.rowH;
     }
 
-    // Totals pill (bottom-right)
-    const pillX = R - LAYOUT.pillW;
-    const pillY = H - 56; // lifted slightly to free space
+    // --- Totals pill (bottom-right) ---
+    const pillX = Rm - LAYOUT.pillW;
+    const pillY = H - 58;
     doc
       .roundedRect(pillX, pillY, LAYOUT.pillW, LAYOUT.pillH, 3)
       .fill(theme.totalsBg);
@@ -730,7 +679,7 @@ export class PDFService {
       .fillColor(theme.totalsFg)
       .font('Helvetica-Bold')
       .fontSize(LAYOUT.pillFont);
-    writeLineClamped(
+    line(
       doc,
       `${currency} ${fmt(data.totals.total)}`,
       pillX + 8,
@@ -739,52 +688,60 @@ export class PDFService {
       'center',
     );
 
-    // NB strip
+    // --- NB strip (own row) ---
     const nbY = H - 36;
-    doc.rect(L, nbY, contentW, LAYOUT.nbStripH).fill(theme.nbStrip);
-    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
-    writeLineClamped(
+    doc.rect(Lm, nbY, contentW, LAYOUT.nbH).fill(theme.nbStrip);
+    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
+    line(
       doc,
-      `NB: ETA values are estimates and can be affected by unforeseen circumstances.`,
-      L + 5,
+      'NB: ETA values are estimates and can be affected by unforeseen circumstances.',
+      Lm + 5,
       nbY + 2,
       contentW - 10,
       'left',
     );
 
-    // Arrival / MoMo strip (single line)
-    const bottomY = nbY + LAYOUT.nbStripH + 2;
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(LAYOUT.bottomInfoFont)
-      .fillColor('#000');
+    // --- Bottom info: two distinct rows so they never merge ---
+    const infoY1 = nbY + LAYOUT.nbH + LAYOUT.gapXS;
+    doc.font('Helvetica-Bold').fontSize(LAYOUT.bottomFont).fillColor('#000');
     const phone = safe(data.company.phone);
-    writeLineClamped(
+    line(
       doc,
-      phone ? `MOMO: ${phone}` : `MOMO:`,
-      L,
-      bottomY,
-      contentW * 0.5,
+      phone ? `MOMO: ${phone}` : 'MOMO:',
+      Lm,
+      infoY1,
+      contentW * 0.5 - 6,
       'left',
     );
-
     const label =
       resolveThemeFromData(data) === 'SEA' ||
       resolveThemeFromData(data) === 'AIR_EXPRESS'
         ? 'EST. ARRIVAL:'
         : 'ARRIVAL:';
-    writeLineClamped(
+    line(
       doc,
-      `${label} ${safe(data.invoice?.dueDate)}`,
-      L + contentW * 0.5,
-      bottomY,
-      contentW * 0.5,
+      `${label} ${safe(data.invoice.dueDate)}`,
+      Lm + contentW * 0.5 + 6,
+      infoY1,
+      contentW * 0.5 - 6,
       'right',
+    );
+
+    // Optional tiny pickup hint (fits on one line, below infoY1)
+    const infoY2 = infoY1 + LAYOUT.gapS + 6;
+    doc.font('Helvetica').fontSize(7);
+    line(
+      doc,
+      `For pick up, kindly contact the warehouse on: ${phone || '—'}`,
+      Lm,
+      infoY2,
+      contentW,
+      'center',
     );
   }
 
   // =====================
-  // PACKAGE INTAKE (A6, monochrome) — single-page fit
+  // PACKAGE INTAKE — A6, monochrome, single-page
   // =====================
   private generatePackageIntakeContent(
     doc: PDFDocument,
@@ -792,240 +749,219 @@ export class PDFService {
   ): void {
     const W = doc.page.width;
     const H = doc.page.height;
-    const L = doc.page.margins.left;
-    const R = W - doc.page.margins.right;
-    const contentW = R - L;
+    const Lm = doc.page.margins.left;
+    const Rm = W - doc.page.margins.right;
+    const contentW = Rm - Lm;
 
     doc.fillColor('#000');
 
     // Header
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    writeLineClamped(
-      doc,
-      safe(data.company.name),
-      L,
-      LAYOUT.topY,
-      contentW,
-      'center',
-    );
-    doc.fontSize(11).font('Helvetica');
-    writeLineClamped(
+    line(doc, safe(data.company.name), Lm, LAYOUT.topY, contentW, 'center');
+    doc.font('Helvetica').fontSize(10);
+    line(
       doc,
       safe(data.company.address),
-      L,
-      LAYOUT.topY + 16,
+      Lm,
+      LAYOUT.topY + 14,
       contentW,
       'center',
     );
-    writeLineClamped(
+    line(
       doc,
       `${safe(data.company.phone)} | ${safe(data.company.email)}`,
-      L,
-      LAYOUT.topY + 30,
+      Lm,
+      LAYOUT.topY + 26,
       contentW,
       'center',
     );
 
-    // Title rule + title
-    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    // Title
+    const ruleY = 54;
+    doc
+      .moveTo(Lm, ruleY)
+      .lineTo(Rm, ruleY)
+      .strokeColor('#000')
+      .lineWidth(0.8)
+      .stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    writeLineClamped(doc, 'PACKAGE INTAKE RECEIPT', L, 60, contentW, 'center');
-    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+    line(doc, 'PACKAGE INTAKE RECEIPT', Lm, ruleY + 4, contentW, 'center');
+    doc
+      .moveTo(Lm, ruleY + 18)
+      .lineTo(Rm, ruleY + 18)
+      .strokeColor('#000')
+      .lineWidth(0.6)
+      .stroke();
 
-    // Two columns meta
-    const metaY = 82;
-    const midX = L + contentW * 0.52;
-
-    doc.font('Helvetica-Bold').fontSize(9);
-    writeLineClamped(doc, 'Intake Code:', L, metaY, 72, 'left');
-    writeLineClamped(doc, 'Date:', L, metaY + 12, 72, 'left');
-    writeLineClamped(doc, 'Warehouse:', L, metaY + 24, 72, 'left');
-
-    doc.font('Helvetica').fontSize(9);
-    writeLineClamped(
-      doc,
-      safe(data.intake.trackingCode),
-      L + 60,
-      metaY,
-      140,
-      'left',
-    );
-    writeLineClamped(
-      doc,
-      safe(data.intake.date),
-      L + 60,
-      metaY + 12,
-      140,
-      'left',
-    );
-    writeLineClamped(
-      doc,
-      safe(data.intake.warehouse),
-      L + 60,
-      metaY + 24,
-      140,
-      'left',
-    );
+    // Meta two-columns
+    const metaY = ruleY + 24;
+    const midX = Lm + contentW * 0.52;
 
     doc.font('Helvetica-Bold').fontSize(9);
-    writeLineClamped(doc, 'Customer:', midX, metaY, 70, 'left');
+    line(doc, 'Intake Code:', Lm, metaY, 76, 'left');
+    line(doc, 'Date:', Lm, metaY + 12, 76, 'left');
+    line(doc, 'Warehouse:', Lm, metaY + 24, 76, 'left');
+
     doc.font('Helvetica').fontSize(9);
-    writeLineClamped(
+    line(doc, safe(data.intake.trackingCode), Lm + 70, metaY, 140, 'left');
+    line(doc, safe(data.intake.date), Lm + 70, metaY + 12, 140, 'left');
+    line(doc, safe(data.intake.warehouse), Lm + 70, metaY + 24, 140, 'left');
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    line(doc, 'Customer:', midX, metaY, 70, 'left');
+    doc.font('Helvetica').fontSize(9);
+    line(
       doc,
       safe(data.customer.name),
       midX + 58,
       metaY,
-      contentW - (midX + 58 - L),
+      contentW - (midX + 58 - Lm),
       'left',
     );
-    writeLineClamped(
+    line(
       doc,
       `Code: ${safe(data.customer.code)}`,
       midX,
       metaY + 12,
-      contentW - (midX - L),
+      contentW - (midX - Lm),
       'left',
     );
-    writeLineClamped(
+    line(
       doc,
       safe(data.customer.phone),
       midX,
       metaY + 24,
-      contentW - (midX - L),
+      contentW - (midX - Lm),
       'left',
     );
     if (safe(data.customer.email)) {
-      writeLineClamped(
+      line(
         doc,
         safe(data.customer.email),
         midX,
         metaY + 36,
-        contentW - (midX - L),
+        contentW - (midX - Lm),
         'left',
       );
     }
 
-    // Package details box
-    const boxW = contentW;
-    const boxH = 54;
-    const boxY = metaY + 54;
-    doc.roundedRect(L, boxY, boxW, boxH, 3).stroke();
+    // Package box
+    const boxY = metaY + 52;
+    const boxH = 52;
+    doc.roundedRect(Lm, boxY, contentW, boxH, 3).stroke();
 
     let py = boxY + 8;
     doc.font('Helvetica-Bold').fontSize(10);
-    writeLineClamped(doc, 'PACKAGE DETAILS', L + 8, py, boxW - 16, 'left');
+    line(doc, 'PACKAGE DETAILS', Lm + 8, py, contentW - 16, 'left');
     py += 14;
 
     doc.font('Helvetica').fontSize(8);
-    writeLineClamped(
+    line(
       doc,
       `Description: ${safe(data.package.description)} • Mode: ${data.package.shippingMode}${data.package.airType ? ` / ${data.package.airType.replace('_', ' ')}` : ''}`,
-      L + 8,
+      Lm + 8,
       py,
-      boxW - 16,
+      contentW - 16,
       'left',
     );
     py += 11;
-
-    writeLineClamped(
+    line(
       doc,
       `Qty: ${data.package.quantity} • Weight: ${data.package.weightKg || 0} KG${data.package.cbm ? ` • CBM: ${data.package.cbm}` : ''}${data.package.destinationCity ? ` • Dest: ${data.package.destinationCity}` : ''}`,
-      L + 8,
+      Lm + 8,
       py,
-      boxW - 16,
+      contentW - 16,
       'left',
     );
 
-    // Notes (single line)
-    const notesY = boxY + boxH + 8;
+    // Notes (single-line)
+    const notesY = boxY + boxH + LAYOUT.gapS;
     if (safe(data.notes)) {
       doc.font('Helvetica-Bold').fontSize(9);
-      writeLineClamped(doc, 'Notes:', L, notesY, 44, 'left');
+      line(doc, 'Notes:', Lm, notesY, 40, 'left');
       doc.font('Helvetica').fontSize(8);
-      writeLineClamped(
-        doc,
-        safe(data.notes),
-        L + 42,
-        notesY,
-        contentW - 42,
-        'left',
-      );
+      line(doc, safe(data.notes), Lm + 40, notesY, contentW - 40, 'left');
     }
 
-    // Footer rule + footer
+    // Footer
+    const footRuleY = H - 22;
     doc
-      .moveTo(L, H - 22)
-      .lineTo(R, H - 22)
-      .lineWidth(LAYOUT.line)
+      .moveTo(Lm, footRuleY)
+      .lineTo(Rm, footRuleY)
+      .strokeColor('#000')
+      .lineWidth(0.6)
       .stroke();
     doc.font('Helvetica').fontSize(8);
-    writeLineClamped(
+    line(
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-      L,
-      H - 16,
+      Lm,
+      footRuleY + 6,
       contentW,
       'center',
     );
   }
 
   // =====================
-  // RECEIPT (A6, monochrome, PACKAGE summary) — single-page fit
+  // RECEIPT — A6, monochrome, single-page
   // =====================
   private generateReceiptContent(doc: PDFDocument, data: ReceiptData): void {
     const W = doc.page.width;
     const H = doc.page.height;
-    const L = doc.page.margins.left;
-    const R = W - doc.page.margins.right;
-    const contentW = R - L;
+    const Lm = doc.page.margins.left;
+    const Rm = W - doc.page.margins.right;
+    const contentW = Rm - Lm;
 
     doc.fillColor('#000');
 
     // Header
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    writeLineClamped(
-      doc,
-      safe(data.company.name),
-      L,
-      LAYOUT.topY,
-      contentW,
-      'center',
-    );
-    doc.fontSize(11).font('Helvetica');
-    writeLineClamped(
+    line(doc, safe(data.company.name), Lm, LAYOUT.topY, contentW, 'center');
+    doc.font('Helvetica').fontSize(10);
+    line(
       doc,
       safe(data.company.address),
-      L,
-      LAYOUT.topY + 16,
+      Lm,
+      LAYOUT.topY + 14,
       contentW,
       'center',
     );
-    writeLineClamped(
+    line(
       doc,
       `${safe(data.company.phone)} | ${safe(data.company.email)}`,
-      L,
-      LAYOUT.topY + 30,
+      Lm,
+      LAYOUT.topY + 26,
       contentW,
       'center',
     );
 
-    // Title rule + title
-    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    // Title
+    const ruleY = 54;
+    doc
+      .moveTo(Lm, ruleY)
+      .lineTo(Rm, ruleY)
+      .strokeColor('#000')
+      .lineWidth(0.8)
+      .stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    writeLineClamped(doc, 'PAYMENT RECEIPT', L, 60, contentW, 'center');
-    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+    line(doc, 'PAYMENT RECEIPT', Lm, ruleY + 4, contentW, 'center');
+    doc
+      .moveTo(Lm, ruleY + 18)
+      .lineTo(Rm, ruleY + 18)
+      .strokeColor('#000')
+      .lineWidth(0.6)
+      .stroke();
 
-    // PACKAGE summary slab
+    // Package summary
     const pkg = data.package;
-    let y = 82;
+    let y = ruleY + 22;
     if (pkg) {
       const slabH = 18;
       doc
-        .rect(L, y, contentW, slabH)
+        .rect(Lm, y, contentW, slabH)
         .strokeColor('#000')
-        .lineWidth(LAYOUT.line)
+        .lineWidth(0.6)
         .stroke();
-
       const chips: string[] = [];
       if (safe(pkg.trackingCode))
         chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
@@ -1042,82 +978,59 @@ export class PDFService {
       if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
 
       doc.font('Helvetica-Bold').fontSize(8);
-      writeLineClamped(
-        doc,
-        chips.join(' • '),
-        L + 5,
-        y + 3,
-        contentW - 10,
-        'left',
-      );
-      y += slabH + 6;
-    } else {
-      y = 84;
+      line(doc, chips.join(' • '), Lm + 5, y + 3, contentW - 10, 'left');
+      y += slabH + LAYOUT.gapS;
     }
 
-    // Meta left / right
+    // Meta two-columns (labels then values)
     const metaY = y;
-    const midX = L + contentW * 0.52;
+    const midX = Lm + contentW * 0.52;
 
     doc.font('Helvetica-Bold').fontSize(9);
-    writeLineClamped(doc, 'Receipt #:', L, metaY, 68, 'left');
-    writeLineClamped(doc, 'Date:', L, metaY + 12, 68, 'left');
-    writeLineClamped(doc, 'Method:', L, metaY + 24, 68, 'left');
+    line(doc, 'Receipt #:', Lm, metaY, 70, 'left');
+    line(doc, 'Date:', Lm, metaY + 12, 70, 'left');
+    line(doc, 'Method:', Lm, metaY + 24, 70, 'left');
 
     doc.font('Helvetica').fontSize(9);
-    writeLineClamped(
-      doc,
-      safe(data.receipt.number),
-      L + 66,
-      metaY,
-      140,
-      'left',
-    );
-    writeLineClamped(
-      doc,
-      safe(data.receipt.date),
-      L + 66,
-      metaY + 12,
-      140,
-      'left',
-    );
-    writeLineClamped(
+    line(doc, safe(data.receipt.number), Lm + 68, metaY, 140, 'left');
+    line(doc, safe(data.receipt.date), Lm + 68, metaY + 12, 140, 'left');
+    line(
       doc,
       safe(data.receipt.paymentMethod),
-      L + 66,
+      Lm + 68,
       metaY + 24,
       140,
       'left',
     );
 
     doc.font('Helvetica-Bold').fontSize(9);
-    writeLineClamped(doc, 'Received From:', midX, metaY, 100, 'left');
+    line(doc, 'Received From:', midX, metaY, 100, 'left');
     doc.font('Helvetica').fontSize(9);
-    writeLineClamped(
+    line(
       doc,
       safe(data.customer.name),
       midX,
       metaY + 12,
-      contentW - (midX - L),
+      contentW - (midX - Lm),
       'left',
     );
-    writeLineClamped(
+    line(
       doc,
       `Customer Code: ${safe(data.customer.code)}`,
       midX,
       metaY + 24,
-      contentW - (midX - L),
+      contentW - (midX - Lm),
       'left',
     );
 
     // Amount box
     const boxW = 210;
     const boxH = 26;
-    const boxX = L + (contentW - boxW) / 2;
+    const boxX = Lm + (contentW - boxW) / 2;
     const boxY = metaY + 42;
     doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
     doc.font('Helvetica-Bold').fontSize(11);
-    writeLineClamped(
+    line(
       doc,
       `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.amount)}`,
       boxX,
@@ -1127,64 +1040,47 @@ export class PDFService {
     );
 
     // Applied invoices — height limited
-    y = boxY + boxH + 8;
+    y = boxY + boxH + LAYOUT.gapS;
     const rowH = 11;
-    const bottomReserved = 26; // footer
-    const maxY = H - doc.page.margins.bottom - bottomReserved;
-    doc.font('Helvetica').fontSize(8);
-
+    const maxY = H - doc.page.margins.bottom - 26; // footer reserve
     if (data.invoices?.length) {
       doc.font('Helvetica-Bold').fontSize(9);
-      writeLineClamped(doc, 'Applied To:', L, y, 120, 'left');
+      line(doc, 'Applied To:', Lm, y, 100, 'left');
       y += 12;
 
-      const spaceRows = Math.max(0, Math.floor((maxY - y) / rowH));
-      const showCount = Math.min(spaceRows, data.invoices.length);
-      const overflow = data.invoices.length - showCount;
+      const capacity = Math.max(0, Math.floor((maxY - y) / rowH));
+      const show = Math.min(capacity, data.invoices.length);
+      const more = data.invoices.length - show;
 
       doc.font('Helvetica').fontSize(8);
-      for (let i = 0; i < showCount; i++) {
+      for (let i = 0; i < show; i++) {
         const inv = data.invoices[i];
-        const line = `Invoice ${safe(inv.number)}  •  Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
-        writeLineClamped(doc, line, L, y, contentW, 'left');
+        const t = safe(data.payment.currency).toUpperCase();
+        const lineText = `Invoice ${safe(inv.number)}  •  Total: ${t} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
+        line(doc, lineText, Lm, y, contentW, 'left');
         y += rowH;
       }
-
-      if (overflow > 0 && y <= maxY) {
+      if (more > 0 && y <= maxY) {
         doc.font('Helvetica-Oblique').fontSize(8);
-        writeLineClamped(
-          doc,
-          `(+${overflow} more invoices)`,
-          L,
-          y,
-          contentW,
-          'left',
-        );
+        line(doc, `(+${more} more invoices)`, Lm, y, contentW, 'left');
         y += rowH;
       }
-    }
-
-    // Notes (single-line clamp if space)
-    if (safe(data.notes) && y + 12 <= maxY) {
-      doc.font('Helvetica-Bold').fontSize(9);
-      writeLineClamped(doc, 'Notes:', L, y, 50, 'left');
-      doc.font('Helvetica').fontSize(8);
-      writeLineClamped(doc, safe(data.notes), L + 44, y, contentW - 44, 'left');
-      y += 12;
     }
 
     // Footer
+    const footRuleY = H - 20;
     doc
-      .moveTo(L, H - 20)
-      .lineTo(R, H - 20)
-      .lineWidth(LAYOUT.line)
+      .moveTo(Lm, footRuleY)
+      .lineTo(Rm, footRuleY)
+      .strokeColor('#000')
+      .lineWidth(0.6)
       .stroke();
     doc.font('Helvetica').fontSize(8);
-    writeLineClamped(
+    line(
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-      L,
-      H - 14,
+      Lm,
+      footRuleY + 6,
       contentW,
       'center',
     );
