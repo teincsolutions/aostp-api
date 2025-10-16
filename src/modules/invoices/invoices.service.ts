@@ -681,10 +681,84 @@ export class InvoicesService {
   async downloadInvoicePdf(id: string): Promise<string> {
     const invoice = await this.findOne(id);
 
+    // If PDF key doesn't exist, generate PDF on-the-fly
     if (!invoice.invoicePdfKey) {
-      throw new NotFoundException(
-        `PDF not available for invoice ${invoice.invoiceNumber}`,
-      );
+      try {
+        this.logger.log(
+          `Generating PDF on-demand for invoice ${invoice.invoiceNumber}`,
+        );
+
+        // Type assertion since findOne includes the relations
+        const invoiceWithRelations = invoice as any;
+
+        // Prepare invoice data for PDF generation similar to packing-lists service
+        const pdfData = {
+          company: {
+            name: 'AOSTP Logistics',
+            address: '123 Logistics Street, Business City',
+            phone: '+1-555-0123',
+            email: 'billing@aostp.com',
+          },
+          invoice: {
+            number: invoiceWithRelations.invoiceNumber,
+            date: invoiceWithRelations.createdAt.toISOString().split('T')[0],
+            dueDate: invoiceWithRelations.dueDate.toISOString().split('T')[0],
+            status: invoiceWithRelations.status,
+          },
+          customer: {
+            code: invoiceWithRelations.customer.customerCode,
+            name: `${invoiceWithRelations.customer.firstName} ${
+              invoiceWithRelations.customer.lastName
+            }`,
+            address: invoiceWithRelations.customer.address || '',
+            phone: invoiceWithRelations.customer.phoneNumber || '',
+            email: invoiceWithRelations.customer.email || '',
+          },
+          container: invoiceWithRelations.packingList?.container
+            ? {
+                number:
+                  invoiceWithRelations.packingList.container.containerNumber,
+                loadingDate: invoiceWithRelations.packingList.loadingDate
+                  .toISOString()
+                  .split('T')[0],
+                origin: invoiceWithRelations.packingList.origin || 'Unknown',
+                destination:
+                  invoiceWithRelations.packingList.destinationCity || 'Unknown',
+              }
+            : undefined,
+          totals: {
+            total: invoiceWithRelations.totalAmount,
+            currency: invoiceWithRelations.currency,
+          },
+          currency: invoiceWithRelations.currency,
+          notes: `Generated for Packing List: ${
+            invoiceWithRelations.packingList?.name || 'N/A'
+          }`,
+        };
+
+        // Generate PDF
+        const pdfResult = await this.pdfService.generateInvoicePDF(pdfData);
+
+        // Update invoice with PDF key in transaction
+        await this.prisma.invoice.update({
+          where: { id: invoiceWithRelations.id },
+          data: { invoicePdfKey: pdfResult.key },
+        });
+
+        this.logger.log(
+          `PDF generated on-demand for invoice ${invoiceWithRelations.invoiceNumber} - Key: ${pdfResult.key}`,
+        );
+
+        return this.pdfService.generateSignedDownloadUrl(pdfResult.key);
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate PDF on-demand for invoice ${invoice.invoiceNumber}`,
+          error,
+        );
+        throw new NotFoundException(
+          `Couldn't generate PDF for invoice ${invoice.invoiceNumber}`,
+        );
+      }
     }
 
     return this.pdfService.generateSignedDownloadUrl(invoice.invoicePdfKey);

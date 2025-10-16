@@ -12,6 +12,7 @@ import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
 import { PaymentStatus as GatewayPaymentStaus } from '../../providers/payment-gateway/payment-gateway.interface';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
+import { PDFService } from '../../providers/pdf/pdf.service';
 
 @Injectable()
 export class PaymentsService {
@@ -21,6 +22,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
     private readonly paymentGatewayService: PaymentGatewayService,
+    private readonly pdfService: PDFService,
   ) {}
 
   async create(
@@ -150,8 +152,8 @@ export class PaymentsService {
             newPaidAmount >= invoice.totalAmount
               ? InvoiceStatus.PAID
               : newPaidAmount > invoice.paidAmount
-              ? InvoiceStatus.PARTIALLY_PAID
-              : invoice.status;
+                ? InvoiceStatus.PARTIALLY_PAID
+                : invoice.status;
 
           await tx.invoice.update({
             where: { id: invoice.id },
@@ -332,12 +334,12 @@ export class PaymentsService {
           },
         },
         invoices: {
-          include: {
-            packingList: {
-              include: {
-                container: true,
-              },
-            },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            totalAmount: true,
+            paidAmount: true,
+            balance: true,
           },
         },
       },
@@ -365,12 +367,12 @@ export class PaymentsService {
           },
         },
         invoices: {
-          include: {
-            packingList: {
-              include: {
-                container: true,
-              },
-            },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            totalAmount: true,
+            paidAmount: true,
+            balance: true,
           },
         },
       },
@@ -743,5 +745,86 @@ export class PaymentsService {
 
       throw error;
     }
+  }
+
+  /**
+   * Generate payment receipt PDF synchronously
+   */
+  async generatePaymentReceipt(
+    paymentId: string,
+  ): Promise<{ url: string; key: string }> {
+    // Get payment with includes directly to avoid type issues
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        customer: true,
+        exchangeRate: true,
+        processedBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        invoices: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            totalAmount: true,
+            paidAmount: true,
+            balance: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID ${paymentId} not found`);
+    }
+
+    // Get company information - hardcode for now since no configService injection
+    const companyInfo = {
+      name: 'AOSTP Logistics',
+      address: 'Accra, Ghana',
+      phone: '+233 XX XXX XXXX',
+      email: 'info@aostp.com',
+    };
+
+    // Prepare receipt data with payment information
+    const receiptData = {
+      company: companyInfo,
+      receipt: {
+        number: payment.paymentCode,
+        date: payment.processedAt.toLocaleDateString(),
+        paymentMethod: payment.paymentMethod,
+      },
+      customer: {
+        code: payment.customer.customerCode,
+        name: `${payment.customer.firstName} ${payment.customer.lastName}`,
+        phone: payment.customer.phoneNumber,
+        email: payment.customer.email || undefined,
+      },
+      payment: {
+        amount: payment.amount,
+        currency: payment.currency,
+        reference: payment.reference || undefined,
+      },
+      invoices: payment.invoices.map((inv) => ({
+        number: inv.invoiceNumber,
+        total: inv.totalAmount,
+        paid: inv.paidAmount,
+        balance: inv.balance,
+      })),
+      notes: payment.notes ? `Payment Notes: ${payment.notes}` : undefined,
+    };
+
+    const result = await this.pdfService.generateReceiptPDF(receiptData);
+
+    this.logger.log(
+      `Payment receipt generated for ${payment.paymentCode}: ${result.key}`,
+    );
+
+    return result;
   }
 }

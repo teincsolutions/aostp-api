@@ -4,7 +4,9 @@ import { S3Service } from '../storage/s3.service';
 import PDFDocument from 'pdfkit';
 import { PassThrough } from 'stream';
 
-// Base interfaces for PDF generation
+// =====================
+// Base interfaces
+// =====================
 export interface PDFTemplateData {
   [key: string]: any;
 }
@@ -12,12 +14,14 @@ export interface PDFTemplateData {
 export interface PDFConfig {
   title: string;
   filename: string;
-  type: 'invoice' | 'receipt' | 'packing-list' | 'package-intake-receipt';
-  template: string;
+  type: 'invoice' | 'receipt'; // stored path hint
+  template: 'invoice' | 'receipt' | 'package-intake';
   data: PDFTemplateData;
 }
 
-// Document-specific interfaces
+// =====================
+// Invoice data (+package block)
+// =====================
 export interface InvoiceData extends PDFTemplateData {
   company: {
     name: string;
@@ -27,10 +31,11 @@ export interface InvoiceData extends PDFTemplateData {
   };
   invoice: {
     number: string;
-    date: string;
-    dueDate: string;
-    status: string;
+    date: string; // top-right
+    dueDate: string; // arrival / est. arrival
+    status: string; // preserved
   };
+
   customer: {
     code: string;
     name: string;
@@ -38,13 +43,28 @@ export interface InvoiceData extends PDFTemplateData {
     phone?: string;
     email?: string;
   };
+
   container?: {
     number: string;
     loadingDate: string;
     origin: string;
     destination: string;
   };
+
+  package?: {
+    trackingCode: string;
+    description?: string;
+    shippingMode: 'SEA' | 'AIR';
+    airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
+    quantity: number; // includes sub-packages
+    weightKg?: number;
+    cbm?: number;
+    destinationCity?: string;
+    warehouse?: string;
+  };
+
   items?: InvoiceItem[];
+
   totals: {
     subtotal?: number;
     tax?: number;
@@ -52,8 +72,13 @@ export interface InvoiceData extends PDFTemplateData {
     paid?: number;
     balance?: number;
   };
+
   currency: string;
   notes?: string;
+
+  // optional pass-through for theming:
+  // shippingMode?: 'SEA' | 'AIR';
+  // airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
 }
 
 export interface InvoiceItem {
@@ -63,6 +88,43 @@ export interface InvoiceItem {
   total: number;
 }
 
+// =====================
+// Package Intake (monochrome, no payment)
+// =====================
+export interface PackageIntakeData extends PDFTemplateData {
+  company: {
+    name: string;
+    address: string;
+    phone: string;
+    email: string;
+  };
+  intake: {
+    trackingCode: string;
+    date: string;
+    warehouse?: string;
+  };
+  customer: {
+    code: string;
+    name: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+  };
+  package: {
+    description: string;
+    shippingMode: 'SEA' | 'AIR';
+    airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
+    quantity: number;
+    weightKg?: number;
+    cbm?: number;
+    destinationCity?: string;
+  };
+  notes?: string;
+}
+
+// =====================
+// Payment receipt (monochrome) + package summary
+// =====================
 export interface ReceiptData extends PDFTemplateData {
   company: {
     name: string;
@@ -94,81 +156,198 @@ export interface ReceiptData extends PDFTemplateData {
     balance: number;
   }>;
   notes?: string;
-}
 
-export interface PackingListData extends PDFTemplateData {
-  company: {
-    name: string;
-    address?: string;
-  };
-  packingList: {
-    name: string;
-    loadingDate: string;
-    containerNumber?: string;
-    origin?: string;
-    destination?: string;
-  };
-  summary: {
-    totalPackages: number;
-    totalWeight: number;
-    totalCBM: number;
-  };
-  customers: Array<{
-    code: string;
-    name: string;
-    packages: Array<{
-      trackingCode: string;
-      description: string;
-      weight: number;
-      cbm?: number;
-      quantity: number;
-    }>;
-    subtotal: {
-      weight: number;
-      cbm?: number;
-      packages: number;
-    };
-  }>;
-}
-
-export interface PackageIntakeReceiptData extends PDFTemplateData {
-  company: {
-    name: string;
-    address: string;
-    phone: string;
-    email: string;
-  };
-  receipt: {
-    number: string;
-    date: string;
-    warehouse: string;
-  };
-  customer: {
-    code: string;
-    name: string;
-    phone?: string;
-    email?: string;
-  };
-  package: {
+  package?: {
     trackingCode: string;
-    description: string;
-    shippingMode: string;
+    description?: string;
+    shippingMode: 'SEA' | 'AIR';
+    airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
     quantity: number;
-    weight?: number;
-    notes?: string;
-  };
-  items: Array<{
-    intakeTrackingCode: string;
-    description: string;
-    quantity: number;
-    weight?: number;
-  }>;
-  warehouse: {
-    name: string;
-    location: string;
+    weightKg?: number;
+    cbm?: number;
+    destinationCity?: string;
+    warehouse?: string;
   };
 }
 
+// =====================
+// THEME + HELPERS (strict to your enums)
+// =====================
+type ThemeKey =
+  | 'SEA'
+  | 'AIR_NORMAL'
+  | 'AIR_EXPRESS'
+  | 'AIR_BATTERY'
+  | 'AIR_PHONES';
+
+const THEMES: Record<
+  ThemeKey,
+  {
+    band: string; // header band color
+    bandLabel: string; // title inside band
+    tableHeadBg: string; // head row bg
+    nbStrip: string; // red NB strip
+    totalsBg: string; // totals pill bg
+    totalsFg: string; // totals text
+    currencyFallback: 'USD' | 'GHS';
+  }
+> = {
+  SEA: {
+    band: '#1F75FE',
+    bandLabel: 'SEA SHIPPING INVOICE',
+    tableHeadBg: '#F1F1F1',
+    nbStrip: '#D32F2F',
+    totalsBg: '#9B1B1B',
+    totalsFg: '#FFFFFF',
+    currencyFallback: 'USD',
+  },
+  AIR_NORMAL: {
+    band: '#10A74E',
+    bandLabel: 'AIR FREIGHT INVOICE',
+    tableHeadBg: '#E9E9E9',
+    nbStrip: '#D32F2F',
+    totalsBg: '#C73C3C',
+    totalsFg: '#FFFFFF',
+    currencyFallback: 'USD',
+  },
+  AIR_EXPRESS: {
+    band: '#F6B700',
+    bandLabel: '24-HOUR AIR FREIGHT INVOICE',
+    tableHeadBg: '#EDEDED',
+    nbStrip: '#D32F2F',
+    totalsBg: '#9B1B1B',
+    totalsFg: '#FFFFFF',
+    currencyFallback: 'USD',
+  },
+  AIR_BATTERY: {
+    band: '#C2185B',
+    bandLabel: 'BATTERY GOODS INVOICE',
+    tableHeadBg: '#EDEDED',
+    nbStrip: '#D32F2F',
+    totalsBg: '#9B1B1B',
+    totalsFg: '#FFFFFF',
+    currencyFallback: 'USD',
+  },
+  AIR_PHONES: {
+    band: '#6F2DBD',
+    bandLabel: 'AIR FREIGHT INVOICE (PHONES, TABLETS & LAPTOPS)',
+    tableHeadBg: '#EDEDED',
+    nbStrip: '#D32F2F',
+    totalsBg: '#111111',
+    totalsFg: '#FFFFFF',
+    currencyFallback: 'GHS',
+  },
+};
+
+function resolveThemeFromData(data: InvoiceData): ThemeKey {
+  const explicitMode = (
+    (data as any).shippingMode ||
+    data.package?.shippingMode ||
+    ''
+  ).toUpperCase();
+  const explicitAir = (
+    (data as any).airType ||
+    data.package?.airType ||
+    ''
+  ).toUpperCase();
+
+  if (explicitMode === 'SEA') return 'SEA';
+  if (explicitMode === 'AIR') {
+    switch (explicitAir) {
+      case 'EXPRESS_AIR':
+        return 'AIR_EXPRESS';
+      case 'BATTERY_GOODS':
+        return 'AIR_BATTERY';
+      case 'PHONES':
+        return 'AIR_PHONES';
+      default:
+        return 'AIR_NORMAL';
+    }
+  }
+  return 'AIR_NORMAL';
+}
+
+function fmt(amount: number) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount ?? 0);
+}
+
+function safe(v?: string | number | null) {
+  return (v ?? '').toString().trim();
+}
+
+// ---- Single-line, no-wrap, width-clamped with ellipsis ----
+function writeLineClamped(
+  doc: PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  align: 'left' | 'center' | 'right' = 'left',
+) {
+  let s = text ?? '';
+  while (doc.widthOfString(s) > width && s.length > 1) {
+    s = s.slice(0, -1);
+  }
+  if (s !== text && s.length > 1) {
+    if (width >= doc.widthOfString('…')) {
+      while (doc.widthOfString(s + '…') > width && s.length > 1) {
+        s = s.slice(0, -1);
+      }
+      s = s + '…';
+    }
+  }
+  // IMPORTANT: lineBreak:false to avoid vertical flow changes
+  doc.text(s, x, y, { width, align, lineBreak: false });
+}
+
+// =====================
+// LAYOUT CONSTANTS (tightened)
+// =====================
+const LAYOUT = {
+  // general
+  margin: 12, // was 16
+  topY: 6, // header top Y
+  line: 0.8,
+
+  // header/company/date
+  companyFont: 16, // was 18
+  addressFont: 8,
+  dateBoxW: 110,
+  dateBoxH: 18, // was 22
+  dateFont: 10,
+
+  // colored band
+  bandHeight: 16, // was 20
+  bandFont: 10,
+
+  // package slab
+  pkgSlabH: 18, // was 22
+  pkgFont: 8,
+
+  // table
+  headH: 14, // was 18
+  headFont: 8, // was 9
+  rowH: 11, // was 14
+  rowFont: 8, // was 9
+
+  // totals + strips
+  pillW: 130, // was 150
+  pillH: 20, // was 24
+  pillFont: 10,
+  nbStripH: 10, // was 14
+  nbFont: 7,
+  bottomInfoFont: 8,
+
+  // reserved vertical block at bottom (pill + strips area)
+  bottomReserved: 64, // reduced from ~86
+};
+
+// =====================
+// Service
+// =====================
 @Injectable()
 export class PDFService {
   private readonly logger = new Logger(PDFService.name);
@@ -183,23 +362,18 @@ export class PDFService {
     );
   }
 
-  /**
-   * Universal PDF generation method
-   */
+  // --------- Public API ---------
   async generatePDF(config: PDFConfig): Promise<{ url: string; key: string }> {
     this.logger.log(`Generating ${config.type} PDF for ${config.title}`);
 
     const pdfBuffer = await this.createPDF(config);
 
-    // Create folder structure based on type
     const folderMap = {
       invoice: 'invoices',
       receipt: 'receipts',
-      'packing-list': 'packing-lists',
-      'package-intake-receipt': 'receipts/package-intake',
-    };
+    } as const;
 
-    const folder = folderMap[config.type] || 'documents';
+    const folder = (folderMap as any)[config.type] || 'documents';
     const key = `${folder}/${config.filename}.pdf`;
 
     const s3Result = await this.s3Service.uploadFileWithBucket(
@@ -213,9 +387,6 @@ export class PDFService {
     return { url: s3Result.url, key };
   }
 
-  /**
-   * Generate invoice PDF - convenience method
-   */
   async generateInvoicePDF(
     invoiceData: InvoiceData,
   ): Promise<{ url: string; key: string }> {
@@ -229,9 +400,6 @@ export class PDFService {
     return this.generatePDF(config);
   }
 
-  /**
-   * Generate receipt PDF - convenience method
-   */
   async generateReceiptPDF(
     receiptData: ReceiptData,
   ): Promise<{ url: string; key: string }> {
@@ -245,44 +413,30 @@ export class PDFService {
     return this.generatePDF(config);
   }
 
-  /**
-   * Generate packing list PDF - convenience method
-   */
-  async generatePackingListPDF(
-    packingListData: PackingListData,
+  async generatePackageIntakePDF(
+    intakeData: PackageIntakeData,
   ): Promise<{ url: string; key: string }> {
     const config: PDFConfig = {
-      title: `Packing List ${packingListData.packingList.name}`,
-      filename: `packing-list-${packingListData.packingList.name}`,
-      type: 'packing-list',
-      template: 'packing-list',
-      data: packingListData,
+      title: `Package Intake ${intakeData.intake.trackingCode}`,
+      filename: `package-intake-${intakeData.intake.trackingCode}`,
+      type: 'receipt', // store under receipts
+      template: 'package-intake',
+      data: intakeData,
     };
     return this.generatePDF(config);
   }
 
-  /**
-   * Generate package intake receipt PDF - convenience method
-   */
-  async generatePackageIntakeReceiptPDF(
-    receiptData: PackageIntakeReceiptData,
-  ): Promise<{ url: string; key: string }> {
-    const config: PDFConfig = {
-      title: `Package Intake Receipt ${receiptData.receipt.number}`,
-      filename: `package-intake-receipt-${receiptData.receipt.number}`,
-      type: 'package-intake-receipt',
-      template: 'package-intake-receipt',
-      data: receiptData,
-    };
-    return this.generatePDF(config);
-  }
-
+  // =====================
+  // Core create PDF
+  // =====================
   private async createPDF(config: PDFConfig): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
+        size: 'A6',
+        layout: 'landscape',
+        margin: LAYOUT.margin,
+        bufferPages: false, // do not buffer
       });
 
       const stream = new PassThrough();
@@ -293,7 +447,6 @@ export class PDFService {
       doc.pipe(stream);
 
       try {
-        // Generate content based on template type
         this.generateContent(doc, config);
         doc.end();
       } catch (error: any) {
@@ -310,13 +463,10 @@ export class PDFService {
       case 'receipt':
         this.generateReceiptContent(doc, config.data as ReceiptData);
         break;
-      case 'packing-list':
-        this.generatePackingListContent(doc, config.data as PackingListData);
-        break;
-      case 'package-intake-receipt':
-        this.generatePackageIntakeReceiptContent(
+      case 'package-intake':
+        this.generatePackageIntakeContent(
           doc,
-          config.data as PackageIntakeReceiptData,
+          config.data as PackageIntakeData,
         );
         break;
       default:
@@ -324,599 +474,730 @@ export class PDFService {
     }
   }
 
-  private generatePackageIntakeReceiptContent(
-    doc: PDFDocument,
-    data: PackageIntakeReceiptData,
-  ): void {
-    const pageWidth = 595.28 - 100; // A4 width minus margins
+  // =====================
+  // INVOICE (A6 themed, PACKAGE summary) — single-page fit
+  // =====================
+  private generateInvoiceContent(doc: PDFDocument, data: InvoiceData): void {
+    const W = doc.page.width;
+    const H = doc.page.height;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
 
-    // Company header
-    doc
-      .fontSize(24)
-      .font('Helvetica-Bold')
-      .text(data.company.name, { align: 'center' });
-
-    doc
-      .fontSize(10)
-      .font('Helvetica')
-      .text(data.company.address, { align: 'center' })
-      .text(`${data.company.phone} | ${data.company.email}`, {
-        align: 'center',
-      })
-      .moveDown(2);
-
-    // Receipt header
-    doc
-      .fontSize(16)
-      .font('Helvetica-Bold')
-      .text('PACKAGE INTAKE RECEIPT', { align: 'center' })
-      .moveDown();
-
-    // Receipt details and customer info side by side
-    const yPosition = doc.y;
-
-    // Left side - Receipt details
-    doc
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('Receipt Number:', 50, yPosition)
-      .font('Helvetica')
-      .text(data.receipt.number, 150, yPosition)
-      .font('Helvetica-Bold')
-      .text('Date:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.receipt.date, 150, doc.y)
-      .font('Helvetica-Bold')
-      .text('Warehouse:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.receipt.warehouse, 150, doc.y);
-
-    // Right side - Customer info
-    const rightCol = pageWidth / 2 + 50;
-    let rightY = yPosition;
-
-    doc.fontSize(10).font('Helvetica-Bold').text('Customer:', rightCol, rightY);
-
-    rightY = doc.y;
-    doc
-      .font('Helvetica')
-      .text(data.customer.name, rightCol, rightY)
-      .text(`Code: ${data.customer.code}`, rightCol, doc.y);
-
-    if (data.customer.phone) {
-      doc.text(`Phone: ${data.customer.phone}`, rightCol, doc.y);
-    }
-
-    if (data.customer.email) {
-      doc.text(`Email: ${data.customer.email}`, rightCol, doc.y);
-    }
-
-    doc.moveDown(3);
-
-    // Package details
-    doc
-      .fontSize(12)
-      .font('Helvetica-Bold')
-      .text('Package Information:')
-      .moveDown(0.5);
-
-    doc
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('Tracking Code:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.package.trackingCode, 150, doc.y)
-      .font('Helvetica-Bold')
-      .text('Description:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.package.description, 150, doc.y)
-      .font('Helvetica-Bold')
-      .text('Shipping Mode:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.package.shippingMode, 150, doc.y)
-      .font('Helvetica-Bold')
-      .text('Total Items:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.package.quantity.toString(), 150, doc.y);
-
-    if (data.package.weight) {
-      doc
-        .font('Helvetica-Bold')
-        .text('Total Weight:', 50, doc.y)
-        .font('Helvetica')
-        .text(`${data.package.weight} KG`, 150, doc.y);
-    }
-
-    if (data.package.notes) {
-      doc
-        .font('Helvetica-Bold')
-        .text('Notes:', 50, doc.y)
-        .font('Helvetica')
-        .text(data.package.notes, 150, doc.y);
-    }
-
-    doc.moveDown(2);
-
-    // Items table
-    if (data.items && data.items.length > 0) {
-      const tableStartY = doc.y;
-      const colWidths = [120, 200, 60, 60];
-      const headers = ['Tracking Code', 'Description', 'Qty', 'Weight'];
-
-      // Table headers
-      doc.fontSize(10).font('Helvetica-Bold');
-      let x = 50;
-      headers.forEach((header, i) => {
-        doc.text(header, x, tableStartY, {
-          width: colWidths[i],
-          align: 'left',
-        });
-        x += colWidths[i];
-      });
-
-      let currentY = tableStartY + 15;
-
-      // Table rows
-      doc.fontSize(9).font('Helvetica');
-      data.items.forEach((item) => {
-        x = 50;
-        const values = [
-          item.intakeTrackingCode,
-          item.description,
-          item.quantity.toString(),
-          item.weight ? `${item.weight} KG` : 'N/A',
-        ];
-
-        values.forEach((value, i) => {
-          doc.text(value, x, currentY, { width: colWidths[i], align: 'left' });
-          x += colWidths[i];
-        });
-        currentY += 12;
-      });
-
-      doc.y = currentY + 10;
-    }
-
-    doc.moveDown(2);
-
-    // Acknowledgment text
-    doc
-      .fontSize(10)
-      .font('Helvetica')
-      .text(
-        'This receipt acknowledges that the package(s) listed above have been received at our warehouse for processing.',
-        { align: 'left' },
-      )
-      .moveDown();
-
-    // Warehouse info
-    doc
-      .font('Helvetica-Bold')
-      .text('Warehouse Information:')
-      .font('Helvetica')
-      .text(`${data.warehouse.name}`)
-      .text(`${data.warehouse.location}`)
-      .moveDown(2);
-
-    // Footer
-    const footerY = 800;
-    doc
-      .fontSize(8)
-      .font('Helvetica')
-      .text(
-        `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-        50,
-        footerY,
-        { align: 'center', width: pageWidth },
-      );
-  }
-
-  private generateInvoiceContent(
-    doc: typeof PDFDocument.prototype,
-    data: InvoiceData,
-  ): void {
-    const pageWidth = 595.28 - 100; // A4 width minus margins
-
-    // Company header
-    doc
-      .fontSize(24)
-      .font('Helvetica-Bold')
-      .text(data.company.name, { align: 'center' });
-
-    if (data.company.address) {
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .text(data.company.address, { align: 'center' });
-    }
-
-    doc
-      .fontSize(10)
-      .text(`${data.company.phone} | ${data.company.email}`, {
-        align: 'center',
-      })
-      .moveDown(2);
-
-    // Invoice header
-    doc
-      .fontSize(16)
-      .font('Helvetica-Bold')
-      .text('INVOICE', { align: 'center' })
-      .moveDown();
-
-    // Invoice details and customer info side by side
-    const yPosition = doc.y;
-
-    // Left side - Invoice details
-    doc
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('Invoice Number:', 50, yPosition)
-      .font('Helvetica')
-      .text(data.invoice.number, 150, yPosition)
-      .font('Helvetica-Bold')
-      .text('Date:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.invoice.date, 150, doc.y)
-      .font('Helvetica-Bold')
-      .text('Due Date:', 50, doc.y)
-      .font('Helvetica')
-      .text(data.invoice.dueDate, 150, doc.y);
-
-    // Right side - Bill to
-    const rightCol = pageWidth / 2 + 50;
-    let rightY = yPosition;
-
-    doc.fontSize(10).font('Helvetica-Bold').text('Bill To:', rightCol, rightY);
-
-    rightY = doc.y;
-    doc
-      .font('Helvetica')
-      .text(data.customer.name, rightCol, rightY)
-      .text(`Customer Code: ${data.customer.code}`, rightCol, doc.y);
-
-    if (data.customer.address) {
-      doc.text(data.customer.address, rightCol, doc.y);
-    }
-
-    doc.moveDown(3);
-
-    // Container info if present
-    if (data.container) {
-      doc
-        .font('Helvetica-Bold')
-        .text('Shipment Details:', 50, doc.y)
-        .font('Helvetica')
-        .text(`Container: ${data.container.number}`, 50, doc.y)
-        .text(
-          `Route: ${data.container.origin} → ${data.container.destination}`,
-          50,
-          doc.y,
-        )
-        .text(`Loading Date: ${data.container.loadingDate}`, 50, doc.y)
-        .moveDown(2);
-    }
-
-    // Items table if present
-    if (data.items && data.items.length > 0) {
-      this.drawTable(doc, data.items, data.currency);
-    }
-
-    doc.moveDown(2);
-
-    // Totals section
-    const totalsY = doc.y;
-    const totalsX = pageWidth - 150;
-
-    doc
-      .font('Helvetica-Bold')
-      .text('TOTAL:', totalsX, totalsY)
-      .text(
-        `${data.currency} ${data.totals.total.toFixed(2)}`,
-        totalsX + 50,
-        totalsY,
-        { align: 'right' },
-      );
-
-    if (data.totals.paid) {
-      doc
-        .text('PAID:', totalsX, doc.y)
-        .text(
-          `${data.currency} ${data.totals.paid.toFixed(2)}`,
-          totalsX + 50,
-          doc.y,
-          { align: 'right' },
-        );
-
-      if (data.totals.balance && data.totals.balance > 0) {
-        doc
-          .text('BALANCE:', totalsX, doc.y)
-          .fontSize(12)
-          .text(
-            `${data.currency} ${data.totals.balance.toFixed(2)}`,
-            totalsX + 50,
-            doc.y,
-            { align: 'right' },
-          );
-      }
-    }
-
-    // Notes
-    if (data.notes) {
-      doc
-        .moveDown(2)
-        .fontSize(10)
-        .font('Helvetica-Bold')
-        .text('Notes:')
-        .font('Helvetica')
-        .text(data.notes);
-    }
-
-    // Footer
-    const footerY = 800;
-    doc
-      .fontSize(8)
-      .font('Helvetica')
-      .text(
-        `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-        50,
-        footerY,
-        { align: 'center', width: pageWidth },
-      );
-  }
-
-  private generateReceiptContent(doc: PDFDocument, data: ReceiptData): void {
-    // Similar structure to invoice but focused on payment confirmation
-    doc
-      .fontSize(24)
-      .font('Helvetica-Bold')
-      .text(data.company.name, { align: 'center' })
-      .moveDown()
-      .fontSize(16)
-      .text('PAYMENT RECEIPT', { align: 'center' })
-      .moveDown();
-
-    // Receipt details
-    doc
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text(`Receipt Number: ${data.receipt.number}`)
-      .text(`Date: ${data.receipt.date}`)
-      .text(`Payment Method: ${data.receipt.paymentMethod}`)
-      .moveDown();
-
-    // Customer info
-    doc
-      .font('Helvetica-Bold')
-      .text('Received From:')
-      .font('Helvetica')
-      .text(data.customer.name)
-      .text(`Customer Code: ${data.customer.code}`)
-      .moveDown(2);
-
-    // Payment amount
-    doc
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .text(`Amount Paid: ${data.currency} ${data.payment.amount.toFixed(2)}`, {
-        align: 'center',
-      })
-      .moveDown(2);
-
-    // Applied to invoices
-    if (data.invoices && data.invoices.length > 0) {
-      doc
-        .fontSize(10)
-        .font('Helvetica-Bold')
-        .text('Applied to Invoices:')
-        .moveDown(0.5);
-
-      data.invoices.forEach((invoice) => {
-        doc
-          .font('Helvetica')
-          .text(
-            `Invoice ${invoice.number} - Balance: ${data.currency} ${invoice.balance.toFixed(2)}`,
-          );
-      });
-    }
-
-    // Footer
-    doc
-      .moveDown(3)
-      .fontSize(8)
-      .text('Thank you for your payment!', { align: 'center' })
-      .text(`Generated on ${new Date().toLocaleDateString()}`, {
-        align: 'center',
-      });
-  }
-
-  private generatePackingListContent(
-    doc: PDFDocument,
-    data: PackingListData,
-  ): void {
-    const pageWidth = 595.28 - 100;
+    const theme = THEMES[resolveThemeFromData(data)];
+    const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
     // Header
+    doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont).fillColor('#000');
+    writeLineClamped(
+      doc,
+      safe(data.company.name),
+      L,
+      LAYOUT.topY,
+      contentW,
+      'center',
+    );
+
+    // Date box
+    const dateBoxX = R - LAYOUT.dateBoxW;
+    const dateBoxY = LAYOUT.topY;
     doc
-      .fontSize(24)
-      .font('Helvetica-Bold')
-      .text('AOSTP LOGISTICS', { align: 'center' })
-      .moveDown()
-      .fontSize(16)
-      .text('PACKING LIST', { align: 'center' })
-      .moveDown();
+      .roundedRect(dateBoxX, dateBoxY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
+      .fill('#E6E6E6');
+    doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
+    writeLineClamped(
+      doc,
+      safe(data.invoice.date),
+      dateBoxX,
+      dateBoxY + 3,
+      LAYOUT.dateBoxW,
+      'center',
+    );
 
-    // Packing list details
-    doc
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text(`Packing List: ${data.packingList.name}`)
-      .text(`Loading Date: ${data.packingList.loadingDate}`);
-
-    if (data.packingList.containerNumber) {
-      doc.text(`Container: ${data.packingList.containerNumber}`);
-    }
-
-    if (data.packingList.origin && data.packingList.destination) {
-      doc.text(
-        `Route: ${data.packingList.origin} → ${data.packingList.destination}`,
+    // Address small (one-line clamp, right aligned)
+    if (safe(data.company.address)) {
+      doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
+      writeLineClamped(
+        doc,
+        safe(data.company.address),
+        L,
+        dateBoxY + LAYOUT.dateBoxH + 2,
+        contentW,
+        'right',
       );
     }
 
-    doc.moveDown(2);
+    // Band
+    const bandY = dateBoxY + LAYOUT.dateBoxH + 8;
+    doc.rect(L, bandY, contentW, LAYOUT.bandHeight).fill(theme.band);
+    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.bandFont);
+    writeLineClamped(
+      doc,
+      theme.bandLabel,
+      L + 6,
+      bandY + 3,
+      contentW - 12,
+      'center',
+    );
 
-    // Summary
+    // Package strip
+    const pkg = data.package;
+    const pkgY = bandY + LAYOUT.bandHeight + 3;
+    if (pkg) {
+      doc.rect(L, pkgY, contentW, LAYOUT.pkgSlabH).fill('#F6F6F6');
+      const chips: string[] = [];
+      if (safe(pkg.trackingCode))
+        chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
+      if (pkg.shippingMode === 'AIR') {
+        const t = pkg.airType || 'NORMAL_AIR';
+        chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);
+      } else if (pkg.shippingMode === 'SEA') {
+        chips.push('MODE: SEA');
+      }
+      chips.push(`QTY: ${pkg.quantity}`);
+      if (pkg.weightKg != null) chips.push(`WT: ${pkg.weightKg} KG`);
+      if (pkg.cbm != null) chips.push(`CBM: ${pkg.cbm}`);
+      if (safe(pkg.destinationCity)) chips.push(`DEST: ${pkg.destinationCity}`);
+      if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
+
+      doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.pkgFont);
+      writeLineClamped(
+        doc,
+        chips.join(' • '),
+        L + 5,
+        pkgY + 4,
+        contentW - 10,
+        'left',
+      );
+    }
+
+    // Customer row
+    const metaY = pkg
+      ? pkgY + LAYOUT.pkgSlabH + 4
+      : bandY + LAYOUT.bandHeight + 6;
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'CUSTOMER:', L, metaY, 60, 'left');
+    writeLineClamped(doc, 'CONTACT:', L + contentW * 0.55, metaY, 60, 'left');
+
+    doc.font('Helvetica').fontSize(12);
+    writeLineClamped(
+      doc,
+      (data.customer?.name || '').toUpperCase(),
+      L + 65,
+      metaY - 2,
+      contentW * 0.46 - 65,
+      'left',
+    );
+    const contact =
+      data.customer?.phone || data.customer?.email || data.customer?.code || '';
+    writeLineClamped(
+      doc,
+      contact,
+      L + contentW * 0.55 + 58,
+      metaY - 2,
+      contentW * 0.45 - 58,
+      'left',
+    );
+
+    // Divider
+    doc
+      .moveTo(L, metaY + 14)
+      .lineTo(R, metaY + 14)
+      .strokeColor('#CCCCCC')
+      .lineWidth(LAYOUT.line)
+      .stroke();
+
+    // Table header
+    const headY = metaY + 18;
+    doc.rect(L, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
+
+    const cols = [
+      {
+        x: L + 6,
+        w: contentW * 0.46,
+        label: 'DESCRIPTION',
+        align: 'left' as const,
+      },
+      {
+        x: L + contentW * 0.46 + 6,
+        w: contentW * 0.14,
+        label: 'QTY',
+        align: 'center' as const,
+      },
+      {
+        x: L + contentW * 0.6 + 6,
+        w: contentW * 0.18,
+        label: `UNIT (${currency})`,
+        align: 'right' as const,
+      },
+      {
+        x: L + contentW * 0.78 + 6,
+        w: contentW * 0.2 - 12,
+        label: `AMOUNT (${currency})`,
+        align: 'right' as const,
+      },
+    ];
+    cols.forEach((c) =>
+      writeLineClamped(doc, c.label, c.x, headY + 2, c.w, c.align),
+    );
+
+    // Rows — height-limited to fit one page
+    let y = headY + LAYOUT.headH + 2;
+    const bottomReserved = LAYOUT.bottomReserved;
+    const maxY = H - doc.page.margins.bottom - bottomReserved;
+    const availableRows = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
+
+    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
+
+    const rows: InvoiceItem[] =
+      (data.items?.length ?? 0) > 0
+        ? data.items!
+        : [
+            {
+              description:
+                data.package?.description ||
+                (data.package
+                  ? `Shipping for ${data.package.trackingCode}`
+                  : 'Logistics service'),
+              quantity: data.package?.quantity ?? 1,
+              unitPrice:
+                (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
+              total: data.totals?.total ?? 0,
+            },
+          ];
+
+    const showCount = Math.min(rows.length, availableRows);
+    const overflow = rows.length - showCount;
+
+    for (let i = 0; i < showCount; i++) {
+      const it = rows[i];
+      writeLineClamped(
+        doc,
+        it.description || '',
+        cols[0].x,
+        y,
+        cols[0].w,
+        'left',
+      );
+      writeLineClamped(
+        doc,
+        String(it.quantity ?? 0),
+        cols[1].x,
+        y,
+        cols[1].w,
+        'center',
+      );
+      writeLineClamped(
+        doc,
+        fmt(it.unitPrice ?? 0),
+        cols[2].x,
+        y,
+        cols[2].w,
+        'right',
+      );
+      writeLineClamped(
+        doc,
+        fmt(it.total ?? 0),
+        cols[3].x,
+        y,
+        cols[3].w,
+        'right',
+      );
+      y += LAYOUT.rowH;
+    }
+
+    if (overflow > 0 && y <= maxY) {
+      doc.font('Helvetica-Oblique').fontSize(LAYOUT.rowFont);
+      writeLineClamped(
+        doc,
+        `(+${overflow} more items)`,
+        cols[0].x,
+        y,
+        contentW - 12,
+        'left',
+      );
+      y += LAYOUT.rowH;
+    }
+
+    // Totals pill (bottom-right)
+    const pillX = R - LAYOUT.pillW;
+    const pillY = H - 56; // lifted slightly to free space
+    doc
+      .roundedRect(pillX, pillY, LAYOUT.pillW, LAYOUT.pillH, 3)
+      .fill(theme.totalsBg);
+    doc
+      .fillColor(theme.totalsFg)
+      .font('Helvetica-Bold')
+      .fontSize(LAYOUT.pillFont);
+    writeLineClamped(
+      doc,
+      `${currency} ${fmt(data.totals.total)}`,
+      pillX + 8,
+      pillY + 4,
+      LAYOUT.pillW - 16,
+      'center',
+    );
+
+    // NB strip
+    const nbY = H - 36;
+    doc.rect(L, nbY, contentW, LAYOUT.nbStripH).fill(theme.nbStrip);
+    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
+    writeLineClamped(
+      doc,
+      `NB: ETA values are estimates and can be affected by unforeseen circumstances.`,
+      L + 5,
+      nbY + 2,
+      contentW - 10,
+      'left',
+    );
+
+    // Arrival / MoMo strip (single line)
+    const bottomY = nbY + LAYOUT.nbStripH + 2;
     doc
       .font('Helvetica-Bold')
-      .text(`Total Packages: ${data.summary.totalPackages}`)
-      .text(`Total Weight: ${data.summary.totalWeight} KG`)
-      .text(`Total CBM: ${data.summary.totalCBM?.toFixed(2) || '0.00'}`)
-      .moveDown(2);
+      .fontSize(LAYOUT.bottomInfoFont)
+      .fillColor('#000');
+    const phone = safe(data.company.phone);
+    writeLineClamped(
+      doc,
+      phone ? `MOMO: ${phone}` : `MOMO:`,
+      L,
+      bottomY,
+      contentW * 0.5,
+      'left',
+    );
 
-    // Customer packages
-    data.customers.forEach((customer, index) => {
-      if (index > 0 && doc.y > 650) {
-        doc.addPage();
+    const label =
+      resolveThemeFromData(data) === 'SEA' ||
+      resolveThemeFromData(data) === 'AIR_EXPRESS'
+        ? 'EST. ARRIVAL:'
+        : 'ARRIVAL:';
+    writeLineClamped(
+      doc,
+      `${label} ${safe(data.invoice?.dueDate)}`,
+      L + contentW * 0.5,
+      bottomY,
+      contentW * 0.5,
+      'right',
+    );
+  }
+
+  // =====================
+  // PACKAGE INTAKE (A6, monochrome) — single-page fit
+  // =====================
+  private generatePackageIntakeContent(
+    doc: PDFDocument,
+    data: PackageIntakeData,
+  ): void {
+    const W = doc.page.width;
+    const H = doc.page.height;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
+
+    doc.fillColor('#000');
+
+    // Header
+    doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
+    writeLineClamped(
+      doc,
+      safe(data.company.name),
+      L,
+      LAYOUT.topY,
+      contentW,
+      'center',
+    );
+    doc.fontSize(11).font('Helvetica');
+    writeLineClamped(
+      doc,
+      safe(data.company.address),
+      L,
+      LAYOUT.topY + 16,
+      contentW,
+      'center',
+    );
+    writeLineClamped(
+      doc,
+      `${safe(data.company.phone)} | ${safe(data.company.email)}`,
+      L,
+      LAYOUT.topY + 30,
+      contentW,
+      'center',
+    );
+
+    // Title rule + title
+    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    doc.font('Helvetica-Bold').fontSize(12);
+    writeLineClamped(doc, 'PACKAGE INTAKE RECEIPT', L, 60, contentW, 'center');
+    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+
+    // Two columns meta
+    const metaY = 82;
+    const midX = L + contentW * 0.52;
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'Intake Code:', L, metaY, 72, 'left');
+    writeLineClamped(doc, 'Date:', L, metaY + 12, 72, 'left');
+    writeLineClamped(doc, 'Warehouse:', L, metaY + 24, 72, 'left');
+
+    doc.font('Helvetica').fontSize(9);
+    writeLineClamped(
+      doc,
+      safe(data.intake.trackingCode),
+      L + 60,
+      metaY,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.intake.date),
+      L + 60,
+      metaY + 12,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.intake.warehouse),
+      L + 60,
+      metaY + 24,
+      140,
+      'left',
+    );
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'Customer:', midX, metaY, 70, 'left');
+    doc.font('Helvetica').fontSize(9);
+    writeLineClamped(
+      doc,
+      safe(data.customer.name),
+      midX + 58,
+      metaY,
+      contentW - (midX + 58 - L),
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      `Code: ${safe(data.customer.code)}`,
+      midX,
+      metaY + 12,
+      contentW - (midX - L),
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.customer.phone),
+      midX,
+      metaY + 24,
+      contentW - (midX - L),
+      'left',
+    );
+    if (safe(data.customer.email)) {
+      writeLineClamped(
+        doc,
+        safe(data.customer.email),
+        midX,
+        metaY + 36,
+        contentW - (midX - L),
+        'left',
+      );
+    }
+
+    // Package details box
+    const boxW = contentW;
+    const boxH = 54;
+    const boxY = metaY + 54;
+    doc.roundedRect(L, boxY, boxW, boxH, 3).stroke();
+
+    let py = boxY + 8;
+    doc.font('Helvetica-Bold').fontSize(10);
+    writeLineClamped(doc, 'PACKAGE DETAILS', L + 8, py, boxW - 16, 'left');
+    py += 14;
+
+    doc.font('Helvetica').fontSize(8);
+    writeLineClamped(
+      doc,
+      `Description: ${safe(data.package.description)} • Mode: ${data.package.shippingMode}${data.package.airType ? ` / ${data.package.airType.replace('_', ' ')}` : ''}`,
+      L + 8,
+      py,
+      boxW - 16,
+      'left',
+    );
+    py += 11;
+
+    writeLineClamped(
+      doc,
+      `Qty: ${data.package.quantity} • Weight: ${data.package.weightKg || 0} KG${data.package.cbm ? ` • CBM: ${data.package.cbm}` : ''}${data.package.destinationCity ? ` • Dest: ${data.package.destinationCity}` : ''}`,
+      L + 8,
+      py,
+      boxW - 16,
+      'left',
+    );
+
+    // Notes (single line)
+    const notesY = boxY + boxH + 8;
+    if (safe(data.notes)) {
+      doc.font('Helvetica-Bold').fontSize(9);
+      writeLineClamped(doc, 'Notes:', L, notesY, 44, 'left');
+      doc.font('Helvetica').fontSize(8);
+      writeLineClamped(
+        doc,
+        safe(data.notes),
+        L + 42,
+        notesY,
+        contentW - 42,
+        'left',
+      );
+    }
+
+    // Footer rule + footer
+    doc
+      .moveTo(L, H - 22)
+      .lineTo(R, H - 22)
+      .lineWidth(LAYOUT.line)
+      .stroke();
+    doc.font('Helvetica').fontSize(8);
+    writeLineClamped(
+      doc,
+      `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
+      L,
+      H - 16,
+      contentW,
+      'center',
+    );
+  }
+
+  // =====================
+  // RECEIPT (A6, monochrome, PACKAGE summary) — single-page fit
+  // =====================
+  private generateReceiptContent(doc: PDFDocument, data: ReceiptData): void {
+    const W = doc.page.width;
+    const H = doc.page.height;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
+
+    doc.fillColor('#000');
+
+    // Header
+    doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
+    writeLineClamped(
+      doc,
+      safe(data.company.name),
+      L,
+      LAYOUT.topY,
+      contentW,
+      'center',
+    );
+    doc.fontSize(11).font('Helvetica');
+    writeLineClamped(
+      doc,
+      safe(data.company.address),
+      L,
+      LAYOUT.topY + 16,
+      contentW,
+      'center',
+    );
+    writeLineClamped(
+      doc,
+      `${safe(data.company.phone)} | ${safe(data.company.email)}`,
+      L,
+      LAYOUT.topY + 30,
+      contentW,
+      'center',
+    );
+
+    // Title rule + title
+    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    doc.font('Helvetica-Bold').fontSize(12);
+    writeLineClamped(doc, 'PAYMENT RECEIPT', L, 60, contentW, 'center');
+    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+
+    // PACKAGE summary slab
+    const pkg = data.package;
+    let y = 82;
+    if (pkg) {
+      const slabH = 18;
+      doc
+        .rect(L, y, contentW, slabH)
+        .strokeColor('#000')
+        .lineWidth(LAYOUT.line)
+        .stroke();
+
+      const chips: string[] = [];
+      if (safe(pkg.trackingCode))
+        chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
+      if (pkg.shippingMode === 'AIR') {
+        const t = pkg.airType || 'NORMAL_AIR';
+        chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);
+      } else if (pkg.shippingMode === 'SEA') {
+        chips.push('MODE: SEA');
+      }
+      chips.push(`QTY: ${pkg.quantity}`);
+      if (pkg.weightKg != null) chips.push(`WT: ${pkg.weightKg} KG`);
+      if (pkg.cbm != null) chips.push(`CBM: ${pkg.cbm}`);
+      if (safe(pkg.destinationCity)) chips.push(`DEST: ${pkg.destinationCity}`);
+      if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
+
+      doc.font('Helvetica-Bold').fontSize(8);
+      writeLineClamped(
+        doc,
+        chips.join(' • '),
+        L + 5,
+        y + 3,
+        contentW - 10,
+        'left',
+      );
+      y += slabH + 6;
+    } else {
+      y = 84;
+    }
+
+    // Meta left / right
+    const metaY = y;
+    const midX = L + contentW * 0.52;
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'Receipt #:', L, metaY, 68, 'left');
+    writeLineClamped(doc, 'Date:', L, metaY + 12, 68, 'left');
+    writeLineClamped(doc, 'Method:', L, metaY + 24, 68, 'left');
+
+    doc.font('Helvetica').fontSize(9);
+    writeLineClamped(
+      doc,
+      safe(data.receipt.number),
+      L + 66,
+      metaY,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.receipt.date),
+      L + 66,
+      metaY + 12,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.receipt.paymentMethod),
+      L + 66,
+      metaY + 24,
+      140,
+      'left',
+    );
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'Received From:', midX, metaY, 100, 'left');
+    doc.font('Helvetica').fontSize(9);
+    writeLineClamped(
+      doc,
+      safe(data.customer.name),
+      midX,
+      metaY + 12,
+      contentW - (midX - L),
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      `Customer Code: ${safe(data.customer.code)}`,
+      midX,
+      metaY + 24,
+      contentW - (midX - L),
+      'left',
+    );
+
+    // Amount box
+    const boxW = 210;
+    const boxH = 26;
+    const boxX = L + (contentW - boxW) / 2;
+    const boxY = metaY + 42;
+    doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
+    doc.font('Helvetica-Bold').fontSize(11);
+    writeLineClamped(
+      doc,
+      `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.amount)}`,
+      boxX,
+      boxY + 6,
+      boxW,
+      'center',
+    );
+
+    // Applied invoices — height limited
+    y = boxY + boxH + 8;
+    const rowH = 11;
+    const bottomReserved = 26; // footer
+    const maxY = H - doc.page.margins.bottom - bottomReserved;
+    doc.font('Helvetica').fontSize(8);
+
+    if (data.invoices?.length) {
+      doc.font('Helvetica-Bold').fontSize(9);
+      writeLineClamped(doc, 'Applied To:', L, y, 120, 'left');
+      y += 12;
+
+      const spaceRows = Math.max(0, Math.floor((maxY - y) / rowH));
+      const showCount = Math.min(spaceRows, data.invoices.length);
+      const overflow = data.invoices.length - showCount;
+
+      doc.font('Helvetica').fontSize(8);
+      for (let i = 0; i < showCount; i++) {
+        const inv = data.invoices[i];
+        const line = `Invoice ${safe(inv.number)}  •  Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
+        writeLineClamped(doc, line, L, y, contentW, 'left');
+        y += rowH;
       }
 
-      doc
-        .fontSize(12)
-        .font('Helvetica-Bold')
-        .text(`${customer.name} (${customer.code})`)
-        .moveDown(0.5);
+      if (overflow > 0 && y <= maxY) {
+        doc.font('Helvetica-Oblique').fontSize(8);
+        writeLineClamped(
+          doc,
+          `(+${overflow} more invoices)`,
+          L,
+          y,
+          contentW,
+          'left',
+        );
+        y += rowH;
+      }
+    }
 
-      // Packages table
-      const tableStartY = doc.y;
-      const colWidths = [100, 150, 60, 60, 60];
-      const headers = ['Tracking Code', 'Description', 'Weight', 'CBM', 'Qty'];
-
-      // Table headers
-      doc.fontSize(9).font('Helvetica-Bold');
-      let x = 50;
-      headers.forEach((header, i) => {
-        doc.text(header, x, tableStartY, {
-          width: colWidths[i],
-          align: 'left',
-        });
-        x += colWidths[i];
-      });
-
-      let currentY = tableStartY + 15;
-
-      // Table rows
-      doc.font('Helvetica');
-      customer.packages.forEach((pkg) => {
-        x = 50;
-        const values = [
-          pkg.trackingCode,
-          pkg.description,
-          pkg.weight.toString(),
-          pkg.cbm?.toString() || 'N/A',
-          pkg.quantity.toString(),
-        ];
-
-        values.forEach((value, i) => {
-          doc.text(value, x, currentY, { width: colWidths[i], align: 'left' });
-          x += colWidths[i];
-        });
-        currentY += 12;
-      });
-
-      // Subtotal
-      doc.font('Helvetica-Bold');
-      currentY += 5;
-      x = 50;
-      doc.text('Subtotal:', x, currentY, {
-        width: colWidths[0] + colWidths[1],
-      });
-      x += colWidths[0] + colWidths[1];
-      doc.text(`${customer.subtotal.weight} KG`, x, currentY, {
-        width: colWidths[2],
-      });
-      x += colWidths[2];
-      doc.text(customer.subtotal.cbm?.toFixed(2) || '0.00', x, currentY, {
-        width: colWidths[3],
-      });
-      x += colWidths[3];
-      doc.text(customer.subtotal.packages.toString(), x, currentY, {
-        width: colWidths[4],
-      });
-
-      doc.moveDown(2);
-    });
+    // Notes (single-line clamp if space)
+    if (safe(data.notes) && y + 12 <= maxY) {
+      doc.font('Helvetica-Bold').fontSize(9);
+      writeLineClamped(doc, 'Notes:', L, y, 50, 'left');
+      doc.font('Helvetica').fontSize(8);
+      writeLineClamped(doc, safe(data.notes), L + 44, y, contentW - 44, 'left');
+      y += 12;
+    }
 
     // Footer
     doc
-      .fontSize(8)
-      .text(
-        `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-        50,
-        800,
-        { align: 'center', width: pageWidth },
-      );
+      .moveTo(L, H - 20)
+      .lineTo(R, H - 20)
+      .lineWidth(LAYOUT.line)
+      .stroke();
+    doc.font('Helvetica').fontSize(8);
+    writeLineClamped(
+      doc,
+      `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
+      L,
+      H - 14,
+      contentW,
+      'center',
+    );
   }
 
-  /**
-   * Check if file exists in S3
-   */
+  // =====================
+  // Utilities
+  // =====================
   async checkFileExists(key: string): Promise<boolean> {
     return this.s3Service.fileExists(key);
   }
 
-  /**
-   * Generate signed download URL for file
-   */
   async generateSignedDownloadUrl(key: string): Promise<string> {
     return this.s3Service.generatePresignedDownloadUrl(key);
-  }
-
-  private drawTable(
-    doc: PDFDocument,
-    items: InvoiceItem[],
-    currency: string,
-  ): void {
-    const colWidths = [200, 60, 80, 80];
-    const headers = ['Description', 'Quantity', 'Unit Price', 'Total'];
-    const tableStartY = doc.y;
-
-    // Table headers
-    doc.fontSize(10).font('Helvetica-Bold');
-    let x = 50;
-    headers.forEach((header, i) => {
-      doc.text(header, x, tableStartY, { width: colWidths[i], align: 'left' });
-      x += colWidths[i];
-    });
-
-    let currentY = tableStartY + 15;
-
-    // Table rows
-    doc.fontSize(9).font('Helvetica');
-    items.forEach((item) => {
-      x = 50;
-      const values = [
-        item.description,
-        item.quantity.toString(),
-        `${currency} ${item.unitPrice.toFixed(2)}`,
-        `${currency} ${item.total.toFixed(2)}`,
-      ];
-
-      values.forEach((value, i) => {
-        doc.text(value, x, currentY, { width: colWidths[i], align: 'left' });
-        x += colWidths[i];
-      });
-      currentY += 12;
-    });
-
-    // Draw table border (simplified)
-    doc
-      .rect(
-        50,
-        tableStartY - 5,
-        colWidths.reduce((a, b) => a + b, 0),
-        currentY - tableStartY + 10,
-      )
-      .stroke();
-
-    doc.y = currentY + 10;
   }
 }

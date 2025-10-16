@@ -109,10 +109,11 @@ export class S3Service {
   async generatePresignedDownloadUrl(
     key: string,
     expiresIn: number = 3600,
+    bucketName: string = this.defaultBucket,
   ): Promise<string> {
     try {
       const command = new GetObjectCommand({
-        Bucket: this.defaultBucket,
+        Bucket: bucketName,
         Key: key,
       });
 
