@@ -14,7 +14,7 @@ export interface PDFTemplateData {
 export interface PDFConfig {
   title: string;
   filename: string;
-  type: 'invoice' | 'receipt'; // storage folder only
+  type: 'invoice' | 'receipt'; // stored path hint
   template: 'invoice' | 'receipt' | 'package-intake';
   data: PDFTemplateData;
 }
@@ -75,10 +75,6 @@ export interface InvoiceData extends PDFTemplateData {
 
   currency: string;
   notes?: string;
-
-  // optional pass-through for theming:
-  // shippingMode?: 'SEA' | 'AIR';
-  // airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
 }
 
 export interface InvoiceItem {
@@ -278,8 +274,8 @@ function safe(v?: string | number | null) {
   return (v ?? '').toString().trim();
 }
 
-// Single-line, width-clamped with ellipsis; never wraps vertically
-function line(
+// ---- Single-line, no-wrap, width-clamped with ellipsis ----
+function writeLineClamped(
   doc: PDFDocument,
   text: string,
   x: number,
@@ -288,63 +284,61 @@ function line(
   align: 'left' | 'center' | 'right' = 'left',
 ) {
   let s = text ?? '';
-  while (doc.widthOfString(s) > width && s.length > 1) s = s.slice(0, -1);
-  if (s !== text && width >= doc.widthOfString('…')) {
-    while (doc.widthOfString(s + '…') > width && s.length > 1)
-      s = s.slice(0, -1);
-    s += '…';
+  while (doc.widthOfString(s) > width && s.length > 1) {
+    s = s.slice(0, -1);
   }
+  if (s !== text && s.length > 1) {
+    if (width >= doc.widthOfString('…')) {
+      while (doc.widthOfString(s + '…') > width && s.length > 1) {
+        s = s.slice(0, -1);
+      }
+      s = s + '…';
+    }
+  }
+  // IMPORTANT: lineBreak:false to avoid vertical flow changes
   doc.text(s, x, y, { width, align, lineBreak: false });
 }
 
 // =====================
-// LAYOUT CONSTANTS (tightened and spaced to avoid collisions)
+// LAYOUT CONSTANTS (tightened)
 // =====================
 const LAYOUT = {
-  margin: 12,
+  // general
+  margin: 12, // was 16
+  topY: 6, // header top Y
+  line: 0.8,
 
-  // header
-  companyFont: 15,
+  // header/company/date
+  companyFont: 15, //
   addressFont: 8,
-  topY: 8,
-  dateBoxW: 108,
-  dateBoxH: 18,
-  dateFont: 10,
+  dateBoxW: 80,
+  dateBoxH: 14,
+  dateFont: 12,
 
-  // band
-  bandH: 16,
+  // colored band
+  bandHeight: 16, // was 20
   bandFont: 10,
 
-  // package
-  pkgH: 18,
+  // package slab
+  pkgSlabH: 30, // was 22
   pkgFont: 8,
 
-  // customer block
-  custLabelFont: 9,
-  custValueFont: 11,
-
   // table
-  headH: 14,
-  headFont: 8,
-  rowH: 11,
-  rowFont: 8,
+  headH: 24, // was 18
+  headFont: 8, // was 9
+  rowH: 11, // was 14
+  rowFont: 8, // was 9
 
-  // bottom widgets
-  pillW: 130,
-  pillH: 20,
+  // totals + strips
+  pillW: 130, // was 150
+  pillH: 20, // was 24
   pillFont: 10,
-  nbH: 10,
+  nbStripH: 10, // was 14
   nbFont: 7,
-  bottomFont: 8,
+  bottomInfoFont: 8,
 
-  // separations
-  gapXS: 2,
-  gapS: 4,
-  gapM: 6,
-  gapL: 8,
-
-  // reserve bottom area (pill + NB + info)
-  bottomReserved: 66,
+  // reserved vertical block at bottom (pill + strips area)
+  bottomReserved: 64, // reduced from ~86
 };
 
 // =====================
@@ -370,7 +364,11 @@ export class PDFService {
 
     const pdfBuffer = await this.createPDF(config);
 
-    const folderMap = { invoice: 'invoices', receipt: 'receipts' } as const;
+    const folderMap = {
+      invoice: 'invoices',
+      receipt: 'receipts',
+    } as const;
+
     const folder = (folderMap as any)[config.type] || 'documents';
     const key = `${folder}/${config.filename}.pdf`;
 
@@ -434,11 +432,11 @@ export class PDFService {
         size: 'A6',
         layout: 'landscape',
         margin: LAYOUT.margin,
-        bufferPages: false,
+        bufferPages: false, // do not buffer
       });
 
       const stream = new PassThrough();
-      stream.on('data', (c) => chunks.push(c));
+      stream.on('data', (chunk) => chunks.push(chunk));
       stream.on('end', () => resolve(Buffer.concat(chunks)));
       stream.on('error', reject);
 
@@ -468,73 +466,134 @@ export class PDFService {
         );
         break;
       default:
-        throw new Error(`Unknown template: ${config.template}`);
+        throw new Error(`Unknown template: ${String(config.template)}`);
     }
   }
 
   // =====================
-  // INVOICE — A6, single-page, clear spacing
+  // REUSABLE COMPONENT METHODS
   // =====================
-  private generateInvoiceContent(doc: PDFDocument, data: InvoiceData): void {
-    const W = doc.page.width;
-    const H = doc.page.height;
-    const Lm = doc.page.margins.left;
-    const Rm = W - doc.page.margins.right;
-    const contentW = Rm - Lm;
 
-    const theme = THEMES[resolveThemeFromData(data)];
-    const currency = (data.currency || theme.currencyFallback).toUpperCase();
+  private drawHeader(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    R: number,
+  ): number {
+    const dateBoxX = R - LAYOUT.dateBoxW;
+    const dateBoxY = LAYOUT.topY;
 
-    // --- Header row: company (left) / date box (right) ---
+    // QR code placeholder (left)
+    doc.rect(L, LAYOUT.topY, 44, 44).stroke();
+
+    // Company name + logo (center)
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont).fillColor('#000');
-    line(
+    writeLineClamped(
       doc,
       safe(data.company.name),
-      Lm,
+      L + 40,
       LAYOUT.topY,
-      contentW - LAYOUT.dateBoxW - LAYOUT.gapM,
-      'left',
+      contentW - 60 - LAYOUT.dateBoxW - 6,
+      'center',
     );
 
-    const dateX = Rm - LAYOUT.dateBoxW;
-    const dateY = LAYOUT.topY;
+    // Date + address (right)
     doc
-      .roundedRect(dateX, dateY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
+      .roundedRect(dateBoxX, dateBoxY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
       .fill('#E6E6E6');
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.dateFont);
-    line(
+    doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
+    writeLineClamped(
       doc,
       safe(data.invoice.date),
-      dateX,
-      dateY + 3,
+      dateBoxX,
+      dateBoxY + 3,
       LAYOUT.dateBoxW,
       'center',
     );
 
-    // address (right aligned, single line)
+    // Address small (below date box)
     if (safe(data.company.address)) {
       doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
-      line(
+      writeLineClamped(
         doc,
         safe(data.company.address),
-        Lm,
-        dateY + LAYOUT.dateBoxH + LAYOUT.gapXS,
-        contentW,
+        dateBoxX - 20,
+        dateBoxY + LAYOUT.dateBoxH + 4,
+        100,
         'right',
       );
     }
 
-    // --- Band row ---
-    const bandY = dateY + LAYOUT.dateBoxH + LAYOUT.gapM;
-    doc.rect(Lm, bandY, contentW, LAYOUT.bandH).fill(theme.band);
-    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(LAYOUT.bandFont);
-    line(doc, theme.bandLabel, Lm + 6, bandY + 3, contentW - 12, 'center');
+    return dateBoxY + LAYOUT.dateBoxH + 32; // Return next Y position
+  }
 
-    // --- Package strip ---
+  private drawBand(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    bandY: number,
+  ): number {
+    const theme = THEMES[resolveThemeFromData(data)];
+    doc.rect(L, bandY, contentW, LAYOUT.bandHeight).fill(theme.band);
+    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.bandFont);
+    writeLineClamped(
+      doc,
+      theme.bandLabel,
+      L + 6,
+      bandY + 3,
+      contentW - 12,
+      'center',
+    );
+    return bandY + LAYOUT.bandHeight + 5; // Return next Y position
+  }
+
+  private drawCustomerDetails(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    customerY: number,
+  ): number {
+    // Customer details in two columns beneath the band
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    writeLineClamped(doc, 'CUSTOMER:', L, customerY, 100, 'left');
+
+    const contact = data.customer?.phone || data.customer?.email || '';
+    writeLineClamped(
+      doc,
+      `CONTACT: ${contact}`,
+      L + contentW * 0.7,
+      customerY + 6,
+      120,
+      'left',
+    );
+
+    doc.font('Helvetica').fontSize(12);
+    writeLineClamped(
+      doc,
+      `${data.customer?.name} (${data.customer?.code})`.toUpperCase(),
+      L,
+      customerY + 12,
+      contentW * 0.5,
+      'left',
+    );
+
+    return customerY + 28; // Return next Y position
+  }
+
+  private drawTitle(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    titleY: number,
+  ): number {
+    // Package strip
     const pkg = data.package;
-    const pkgY = bandY + LAYOUT.bandH + LAYOUT.gapS;
     if (pkg) {
-      doc.rect(Lm, pkgY, contentW, LAYOUT.pkgH).fill('#F6F6F6');
+      doc.rect(L, titleY, contentW, LAYOUT.pkgSlabH).fill('#F6F6F6');
       const chips: string[] = [];
       if (safe(pkg.trackingCode))
         chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
@@ -544,105 +603,96 @@ export class PDFService {
       } else if (pkg.shippingMode === 'SEA') {
         chips.push('MODE: SEA');
       }
-      chips.push(`QTY: ${pkg.quantity}`);
-      if (pkg.weightKg != null) chips.push(`WT: ${pkg.weightKg} KG`);
-      if (pkg.cbm != null) chips.push(`CBM: ${pkg.cbm}`);
       if (safe(pkg.destinationCity)) chips.push(`DEST: ${pkg.destinationCity}`);
       if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
 
       doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.pkgFont);
-      line(doc, chips.join(' • '), Lm + 5, pkgY + 4, contentW - 10, 'left');
+      writeLineClamped(
+        doc,
+        chips.join(' • '),
+        L + 5,
+        titleY + 4,
+        contentW - 10,
+        'left',
+      );
+      return titleY + LAYOUT.pkgSlabH + 4; // Return next Y position
     }
+    return titleY; // Return same Y if no package
+  }
 
-    // --- Customer block (labels on line 1; values on line 2) ---
-    const custY =
-      (pkg ? pkgY + LAYOUT.pkgH : bandY + LAYOUT.bandH) + LAYOUT.gapM;
-    doc.font('Helvetica-Bold').fontSize(LAYOUT.custLabelFont).fillColor('#000');
-    line(doc, 'CUSTOMER:', Lm, custY, contentW * 0.5 - 8, 'left');
-    line(
-      doc,
-      'CONTACT:',
-      Lm + contentW * 0.5 + 8,
-      custY,
-      contentW * 0.5 - 8,
-      'left',
-    );
+  private drawTableWithTotals(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    R: number,
+    H: number,
+    tableY: number,
+  ): void {
+    const theme = THEMES[resolveThemeFromData(data)];
+    const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
-    doc.font('Helvetica').fontSize(LAYOUT.custValueFont);
-    line(
-      doc,
-      (data.customer?.name || '').toUpperCase(),
-      Lm,
-      custY + LAYOUT.gapM,
-      contentW * 0.5 - 8,
-      'left',
-    );
-    const contact =
-      data.customer?.phone || data.customer?.email || data.customer?.code || '';
-    line(
-      doc,
-      contact,
-      Lm + contentW * 0.5 + 8,
-      custY + LAYOUT.gapM,
-      contentW * 0.5 - 8,
-      'left',
-    );
-
-    // divider
-    const divY = custY + LAYOUT.gapM + LAYOUT.custValueFont;
+    // Divider
     doc
-      .moveTo(Lm, divY)
-      .lineTo(Rm, divY)
-      .lineWidth(0.8)
-      .strokeColor('#CCC')
+      .moveTo(L, tableY)
+      .lineTo(R, tableY)
+      .strokeColor('#CCCCCC')
+      .lineWidth(LAYOUT.line)
       .stroke();
 
-    // --- Table header (short labels to avoid wrapping) ---
-    const headY = divY + LAYOUT.gapS;
-    doc.rect(Lm, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
+    // Table header
+    const headY = tableY + 4;
+    doc.rect(L, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
 
+    // 4 columns: description+trackingCode, weight/cbm (SEA only), qty, amount
     const cols = [
       {
-        x: Lm + 6,
-        w: contentW * 0.48,
+        x: L + 6,
+        w: contentW * 0.5,
         label: 'DESCRIPTION',
         align: 'left' as const,
       },
       {
-        x: Lm + contentW * 0.48 + 6,
-        w: contentW * 0.12,
+        x: L + contentW * 0.55 + 6,
+        w: contentW * 0.15,
+        label: data.package?.shippingMode === 'SEA' ? 'CBM' : 'WEIGHT (KG)',
+        align: 'left' as const,
+      },
+      {
+        x: L + contentW * 0.65 + 6,
+        w: contentW * 0.15,
         label: 'QTY',
         align: 'center' as const,
       },
       {
-        x: Lm + contentW * 0.6 + 6,
-        w: contentW * 0.16,
-        label: `UNIT ${currency}`,
-        align: 'right' as const,
-      },
-      {
-        x: Lm + contentW * 0.76 + 6,
-        w: contentW * 0.24 - 12,
-        label: `AMOUNT ${currency}`,
+        x: L + contentW * 0.75 + 6,
+        w: contentW * 0.22,
+        label: `AMOUNT (${currency})`,
         align: 'right' as const,
       },
     ];
-    cols.forEach((c) => line(doc, c.label, c.x, headY + 2, c.w, c.align));
+    cols.forEach((c) =>
+      writeLineClamped(doc, c.label, c.x, headY + 5, c.w, c.align),
+    );
 
-    // --- Rows (fit to page) ---
-    let y = headY + LAYOUT.headH + LAYOUT.gapXS;
-    const maxY = H - doc.page.margins.bottom - LAYOUT.bottomReserved;
+    // Rows — height-limited to fit one page
+    let y = headY + LAYOUT.headH + 5;
+    const bottomReserved = LAYOUT.bottomReserved + 30; // Extra space for totals pill
+    const maxY = H - doc.page.margins.bottom - bottomReserved;
+    const availableRows = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
+
+    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
+
     const rows: InvoiceItem[] =
       (data.items?.length ?? 0) > 0
-        ? data.items!
+        ? data.items!.map((item) => ({
+            ...item,
+            description: `${item.description}\n${data.package?.trackingCode ? ` ${data.package.trackingCode}` : ''}`,
+          }))
         : [
             {
-              description:
-                data.package?.description ||
-                (data.package
-                  ? `Shipping for ${data.package.trackingCode}`
-                  : 'Logistics service'),
+              description: `${data.package?.description || ''}\n${data.package?.trackingCode ? ` ${data.package.trackingCode}` : ''}`,
               quantity: data.package?.quantity ?? 1,
               unitPrice:
                 (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
@@ -650,28 +700,76 @@ export class PDFService {
             },
           ];
 
-    const capacity = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
-    const show = Math.min(rows.length, capacity);
-    const more = rows.length - show;
+    const showCount = Math.min(rows.length, availableRows);
+    const overflow = rows.length - showCount;
 
-    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
-    for (let i = 0; i < show; i++) {
+    for (let i = 0; i < showCount; i++) {
       const it = rows[i];
-      line(doc, it.description || '', cols[0].x, y, cols[0].w, 'left');
-      line(doc, String(it.quantity ?? 0), cols[1].x, y, cols[1].w, 'center');
-      line(doc, fmt(it.unitPrice ?? 0), cols[2].x, y, cols[2].w, 'right');
-      line(doc, fmt(it.total ?? 0), cols[3].x, y, cols[3].w, 'right');
-      y += LAYOUT.rowH;
-    }
-    if (more > 0 && y <= maxY) {
-      doc.font('Helvetica-Oblique').fontSize(LAYOUT.rowFont);
-      line(doc, `(+${more} more items)`, cols[0].x, y, contentW - 12, 'left');
+      writeLineClamped(
+        doc,
+        it.description || '',
+        cols[0].x,
+        y,
+        cols[0].w,
+        'left',
+      );
+
+      // Weight/cbm for SEA, empty for AIR
+      let weightCbmText = '';
+      if (data.package?.shippingMode === 'SEA') {
+        weightCbmText = `${data.package.cbm}`;
+      } else {
+        weightCbmText = `${data.package?.weightKg}`;
+      }
+      writeLineClamped(doc, weightCbmText, cols[1].x, y, cols[1].w, 'left');
+
+      writeLineClamped(
+        doc,
+        String(it.quantity ?? 0),
+        cols[2].x,
+        y,
+        cols[2].w,
+        'center',
+      );
+      writeLineClamped(
+        doc,
+        fmt(it.total ?? 0),
+        cols[3].x,
+        y,
+        cols[3].w,
+        'right',
+      );
       y += LAYOUT.rowH;
     }
 
-    // --- Totals pill (bottom-right) ---
-    const pillX = Rm - LAYOUT.pillW;
-    const pillY = H - 58;
+    if (overflow > 0 && y <= maxY) {
+      doc.font('Helvetica-Oblique').fontSize(LAYOUT.rowFont);
+      writeLineClamped(
+        doc,
+        `(+${overflow} more items)`,
+        cols[0].x,
+        y,
+        contentW - 12,
+        'left',
+      );
+      y += LAYOUT.rowH;
+    }
+  }
+
+  private drawStrip(
+    doc: PDFDocument,
+    data: InvoiceData,
+    contentW: number,
+    L: number,
+    R: number,
+    H: number,
+  ): void {
+    // Totals pill (bottom-right)
+    const theme = THEMES[resolveThemeFromData(data)];
+    const currency = (data.currency || theme.currencyFallback).toUpperCase();
+
+    const pillX = R - LAYOUT.pillW;
+    const pillY = H - 66;
     doc
       .roundedRect(pillX, pillY, LAYOUT.pillW, LAYOUT.pillH, 3)
       .fill(theme.totalsBg);
@@ -679,69 +777,79 @@ export class PDFService {
       .fillColor(theme.totalsFg)
       .font('Helvetica-Bold')
       .fontSize(LAYOUT.pillFont);
-    line(
+    writeLineClamped(
       doc,
-      `${currency} ${fmt(data.totals.total)}`,
+      `TOTAL: ${currency} ${fmt(data.totals.total)}`,
       pillX + 8,
       pillY + 4,
       LAYOUT.pillW - 16,
       'center',
     );
 
-    // --- NB strip (own row) ---
+    // NB strip
     const nbY = H - 36;
-    doc.rect(Lm, nbY, contentW, LAYOUT.nbH).fill(theme.nbStrip);
-    doc.fillColor('#fff').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
-    line(
+    doc.rect(L, nbY, contentW, LAYOUT.nbStripH).fill(theme.nbStrip);
+    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
+    writeLineClamped(
       doc,
-      'NB: ETA values are estimates and can be affected by unforeseen circumstances.',
-      Lm + 5,
+      `NB: ETA values are estimates and can be affected by unforeseen circumstances.`,
+      L + 5,
       nbY + 2,
       contentW - 10,
       'left',
     );
 
-    // --- Bottom info: two distinct rows so they never merge ---
-    const infoY1 = nbY + LAYOUT.nbH + LAYOUT.gapXS;
-    doc.font('Helvetica-Bold').fontSize(LAYOUT.bottomFont).fillColor('#000');
+    // Arrival / MoMo strip (single line)
+    const bottomY = nbY + LAYOUT.nbStripH + 2;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(LAYOUT.bottomInfoFont)
+      .fillColor('#000');
     const phone = safe(data.company.phone);
-    line(
+    writeLineClamped(
       doc,
-      phone ? `MOMO: ${phone}` : 'MOMO:',
-      Lm,
-      infoY1,
-      contentW * 0.5 - 6,
+      phone ? `MOMO: ${phone}` : `MOMO:`,
+      L,
+      bottomY,
+      contentW * 0.5,
       'left',
     );
+
     const label =
       resolveThemeFromData(data) === 'SEA' ||
       resolveThemeFromData(data) === 'AIR_EXPRESS'
         ? 'EST. ARRIVAL:'
         : 'ARRIVAL:';
-    line(
+    writeLineClamped(
       doc,
-      `${label} ${safe(data.invoice.dueDate)}`,
-      Lm + contentW * 0.5 + 6,
-      infoY1,
-      contentW * 0.5 - 6,
+      `${label} ${safe(data.invoice?.dueDate)}`,
+      L + contentW * 0.5,
+      bottomY,
+      contentW * 0.5,
       'right',
-    );
-
-    // Optional tiny pickup hint (fits on one line, below infoY1)
-    const infoY2 = infoY1 + LAYOUT.gapS + 6;
-    doc.font('Helvetica').fontSize(7);
-    line(
-      doc,
-      `For pick up, kindly contact the warehouse on: ${phone || '—'}`,
-      Lm,
-      infoY2,
-      contentW,
-      'center',
     );
   }
 
   // =====================
-  // PACKAGE INTAKE — A6, monochrome, single-page
+  // INVOICE (A6 themed, PACKAGE summary) — single-page fit
+  // =====================
+  private generateInvoiceContent(doc: PDFDocument, data: InvoiceData): void {
+    const W = doc.page.width;
+    const H = doc.page.height;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
+
+    // Call reusable component methods
+    let currentY = this.drawHeader(doc, data, contentW, L, R);
+    currentY = this.drawBand(doc, data, contentW, L, currentY);
+    currentY = this.drawCustomerDetails(doc, data, contentW, L, currentY);
+    this.drawTableWithTotals(doc, data, contentW, L, R, H, currentY);
+    this.drawStrip(doc, data, contentW, L, R, H);
+  }
+
+  // =====================
+  // PACKAGE INTAKE (A6, monochrome) — single-page fit
   // =====================
   private generatePackageIntakeContent(
     doc: PDFDocument,
@@ -749,219 +857,240 @@ export class PDFService {
   ): void {
     const W = doc.page.width;
     const H = doc.page.height;
-    const Lm = doc.page.margins.left;
-    const Rm = W - doc.page.margins.right;
-    const contentW = Rm - Lm;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
 
     doc.fillColor('#000');
 
     // Header
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    line(doc, safe(data.company.name), Lm, LAYOUT.topY, contentW, 'center');
-    doc.font('Helvetica').fontSize(10);
-    line(
+    writeLineClamped(
+      doc,
+      safe(data.company.name),
+      L,
+      LAYOUT.topY,
+      contentW,
+      'center',
+    );
+    doc.fontSize(11).font('Helvetica');
+    writeLineClamped(
       doc,
       safe(data.company.address),
-      Lm,
-      LAYOUT.topY + 14,
+      L,
+      LAYOUT.topY + 16,
       contentW,
       'center',
     );
-    line(
+    writeLineClamped(
       doc,
       `${safe(data.company.phone)} | ${safe(data.company.email)}`,
-      Lm,
-      LAYOUT.topY + 26,
+      L,
+      LAYOUT.topY + 30,
       contentW,
       'center',
     );
 
-    // Title
-    const ruleY = 54;
-    doc
-      .moveTo(Lm, ruleY)
-      .lineTo(Rm, ruleY)
-      .strokeColor('#000')
-      .lineWidth(0.8)
-      .stroke();
+    // Title rule + title
+    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    line(doc, 'PACKAGE INTAKE RECEIPT', Lm, ruleY + 4, contentW, 'center');
-    doc
-      .moveTo(Lm, ruleY + 18)
-      .lineTo(Rm, ruleY + 18)
-      .strokeColor('#000')
-      .lineWidth(0.6)
-      .stroke();
+    writeLineClamped(doc, 'PACKAGE INTAKE RECEIPT', L, 60, contentW, 'center');
+    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
 
-    // Meta two-columns
-    const metaY = ruleY + 24;
-    const midX = Lm + contentW * 0.52;
+    // Two columns meta
+    const metaY = 82;
+    const midX = L + contentW * 0.52;
 
     doc.font('Helvetica-Bold').fontSize(9);
-    line(doc, 'Intake Code:', Lm, metaY, 76, 'left');
-    line(doc, 'Date:', Lm, metaY + 12, 76, 'left');
-    line(doc, 'Warehouse:', Lm, metaY + 24, 76, 'left');
+    writeLineClamped(doc, 'Intake Code:', L, metaY, 72, 'left');
+    writeLineClamped(doc, 'Date:', L, metaY + 12, 72, 'left');
+    writeLineClamped(doc, 'Warehouse:', L, metaY + 24, 72, 'left');
 
     doc.font('Helvetica').fontSize(9);
-    line(doc, safe(data.intake.trackingCode), Lm + 70, metaY, 140, 'left');
-    line(doc, safe(data.intake.date), Lm + 70, metaY + 12, 140, 'left');
-    line(doc, safe(data.intake.warehouse), Lm + 70, metaY + 24, 140, 'left');
+    writeLineClamped(
+      doc,
+      safe(data.intake.trackingCode),
+      L + 60,
+      metaY,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.intake.date),
+      L + 60,
+      metaY + 12,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.intake.warehouse),
+      L + 60,
+      metaY + 24,
+      140,
+      'left',
+    );
 
     doc.font('Helvetica-Bold').fontSize(9);
-    line(doc, 'Customer:', midX, metaY, 70, 'left');
+    writeLineClamped(doc, 'Customer:', midX, metaY, 70, 'left');
     doc.font('Helvetica').fontSize(9);
-    line(
+    writeLineClamped(
       doc,
       safe(data.customer.name),
       midX + 58,
       metaY,
-      contentW - (midX + 58 - Lm),
+      contentW - (midX + 58 - L),
       'left',
     );
-    line(
+    writeLineClamped(
       doc,
       `Code: ${safe(data.customer.code)}`,
       midX,
       metaY + 12,
-      contentW - (midX - Lm),
+      contentW - (midX - L),
       'left',
     );
-    line(
+    writeLineClamped(
       doc,
       safe(data.customer.phone),
       midX,
       metaY + 24,
-      contentW - (midX - Lm),
+      contentW - (midX - L),
       'left',
     );
     if (safe(data.customer.email)) {
-      line(
+      writeLineClamped(
         doc,
         safe(data.customer.email),
         midX,
         metaY + 36,
-        contentW - (midX - Lm),
+        contentW - (midX - L),
         'left',
       );
     }
 
-    // Package box
-    const boxY = metaY + 52;
-    const boxH = 52;
-    doc.roundedRect(Lm, boxY, contentW, boxH, 3).stroke();
+    // Package details box
+    const boxW = contentW;
+    const boxH = 54;
+    const boxY = metaY + 54;
+    doc.roundedRect(L, boxY, boxW, boxH, 3).stroke();
 
     let py = boxY + 8;
     doc.font('Helvetica-Bold').fontSize(10);
-    line(doc, 'PACKAGE DETAILS', Lm + 8, py, contentW - 16, 'left');
+    writeLineClamped(doc, 'PACKAGE DETAILS', L + 8, py, boxW - 16, 'left');
     py += 14;
 
     doc.font('Helvetica').fontSize(8);
-    line(
+    writeLineClamped(
       doc,
       `Description: ${safe(data.package.description)} • Mode: ${data.package.shippingMode}${data.package.airType ? ` / ${data.package.airType.replace('_', ' ')}` : ''}`,
-      Lm + 8,
+      L + 8,
       py,
-      contentW - 16,
+      boxW - 16,
       'left',
     );
     py += 11;
-    line(
+
+    writeLineClamped(
       doc,
       `Qty: ${data.package.quantity} • Weight: ${data.package.weightKg || 0} KG${data.package.cbm ? ` • CBM: ${data.package.cbm}` : ''}${data.package.destinationCity ? ` • Dest: ${data.package.destinationCity}` : ''}`,
-      Lm + 8,
+      L + 8,
       py,
-      contentW - 16,
+      boxW - 16,
       'left',
     );
 
-    // Notes (single-line)
-    const notesY = boxY + boxH + LAYOUT.gapS;
+    // Notes (single line)
+    const notesY = boxY + boxH + 8;
     if (safe(data.notes)) {
       doc.font('Helvetica-Bold').fontSize(9);
-      line(doc, 'Notes:', Lm, notesY, 40, 'left');
+      writeLineClamped(doc, 'Notes:', L, notesY, 44, 'left');
       doc.font('Helvetica').fontSize(8);
-      line(doc, safe(data.notes), Lm + 40, notesY, contentW - 40, 'left');
+      writeLineClamped(
+        doc,
+        safe(data.notes),
+        L + 42,
+        notesY,
+        contentW - 42,
+        'left',
+      );
     }
 
-    // Footer
-    const footRuleY = H - 22;
+    // Footer rule + footer
     doc
-      .moveTo(Lm, footRuleY)
-      .lineTo(Rm, footRuleY)
-      .strokeColor('#000')
-      .lineWidth(0.6)
+      .moveTo(L, H - 22)
+      .lineTo(R, H - 22)
+      .lineWidth(LAYOUT.line)
       .stroke();
     doc.font('Helvetica').fontSize(8);
-    line(
+    writeLineClamped(
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-      Lm,
-      footRuleY + 6,
+      L,
+      H - 16,
       contentW,
       'center',
     );
   }
 
   // =====================
-  // RECEIPT — A6, monochrome, single-page
+  // RECEIPT (A6, monochrome, PACKAGE summary) — single-page fit
   // =====================
   private generateReceiptContent(doc: PDFDocument, data: ReceiptData): void {
     const W = doc.page.width;
     const H = doc.page.height;
-    const Lm = doc.page.margins.left;
-    const Rm = W - doc.page.margins.right;
-    const contentW = Rm - Lm;
+    const L = doc.page.margins.left;
+    const R = W - doc.page.margins.right;
+    const contentW = R - L;
 
     doc.fillColor('#000');
 
     // Header
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    line(doc, safe(data.company.name), Lm, LAYOUT.topY, contentW, 'center');
-    doc.font('Helvetica').fontSize(10);
-    line(
+    writeLineClamped(
+      doc,
+      safe(data.company.name),
+      L,
+      LAYOUT.topY,
+      contentW,
+      'center',
+    );
+    doc.fontSize(11).font('Helvetica');
+    writeLineClamped(
       doc,
       safe(data.company.address),
-      Lm,
-      LAYOUT.topY + 14,
+      L,
+      LAYOUT.topY + 16,
       contentW,
       'center',
     );
-    line(
+    writeLineClamped(
       doc,
       `${safe(data.company.phone)} | ${safe(data.company.email)}`,
-      Lm,
-      LAYOUT.topY + 26,
+      L,
+      LAYOUT.topY + 30,
       contentW,
       'center',
     );
 
-    // Title
-    const ruleY = 54;
-    doc
-      .moveTo(Lm, ruleY)
-      .lineTo(Rm, ruleY)
-      .strokeColor('#000')
-      .lineWidth(0.8)
-      .stroke();
+    // Title rule + title
+    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    line(doc, 'PAYMENT RECEIPT', Lm, ruleY + 4, contentW, 'center');
-    doc
-      .moveTo(Lm, ruleY + 18)
-      .lineTo(Rm, ruleY + 18)
-      .strokeColor('#000')
-      .lineWidth(0.6)
-      .stroke();
+    writeLineClamped(doc, 'PAYMENT RECEIPT', L, 60, contentW, 'center');
+    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
 
-    // Package summary
+    // PACKAGE summary slab
     const pkg = data.package;
-    let y = ruleY + 22;
+    let y = 82;
     if (pkg) {
       const slabH = 18;
       doc
-        .rect(Lm, y, contentW, slabH)
+        .rect(L, y, contentW, slabH)
         .strokeColor('#000')
-        .lineWidth(0.6)
+        .lineWidth(LAYOUT.line)
         .stroke();
+
       const chips: string[] = [];
       if (safe(pkg.trackingCode))
         chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
@@ -978,59 +1107,82 @@ export class PDFService {
       if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
 
       doc.font('Helvetica-Bold').fontSize(8);
-      line(doc, chips.join(' • '), Lm + 5, y + 3, contentW - 10, 'left');
-      y += slabH + LAYOUT.gapS;
+      writeLineClamped(
+        doc,
+        chips.join(' • '),
+        L + 5,
+        y + 3,
+        contentW - 10,
+        'left',
+      );
+      y += slabH + 6;
+    } else {
+      y = 84;
     }
 
-    // Meta two-columns (labels then values)
+    // Meta left / right
     const metaY = y;
-    const midX = Lm + contentW * 0.52;
+    const midX = L + contentW * 0.52;
 
     doc.font('Helvetica-Bold').fontSize(9);
-    line(doc, 'Receipt #:', Lm, metaY, 70, 'left');
-    line(doc, 'Date:', Lm, metaY + 12, 70, 'left');
-    line(doc, 'Method:', Lm, metaY + 24, 70, 'left');
+    writeLineClamped(doc, 'Receipt #:', L, metaY, 68, 'left');
+    writeLineClamped(doc, 'Date:', L, metaY + 12, 68, 'left');
+    writeLineClamped(doc, 'Method:', L, metaY + 24, 68, 'left');
 
     doc.font('Helvetica').fontSize(9);
-    line(doc, safe(data.receipt.number), Lm + 68, metaY, 140, 'left');
-    line(doc, safe(data.receipt.date), Lm + 68, metaY + 12, 140, 'left');
-    line(
+    writeLineClamped(
+      doc,
+      safe(data.receipt.number),
+      L + 66,
+      metaY,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.receipt.date),
+      L + 66,
+      metaY + 12,
+      140,
+      'left',
+    );
+    writeLineClamped(
       doc,
       safe(data.receipt.paymentMethod),
-      Lm + 68,
+      L + 66,
       metaY + 24,
       140,
       'left',
     );
 
     doc.font('Helvetica-Bold').fontSize(9);
-    line(doc, 'Received From:', midX, metaY, 100, 'left');
+    writeLineClamped(doc, 'Received From:', midX, metaY, 100, 'left');
     doc.font('Helvetica').fontSize(9);
-    line(
+    writeLineClamped(
       doc,
       safe(data.customer.name),
       midX,
       metaY + 12,
-      contentW - (midX - Lm),
+      contentW - (midX - L),
       'left',
     );
-    line(
+    writeLineClamped(
       doc,
       `Customer Code: ${safe(data.customer.code)}`,
       midX,
       metaY + 24,
-      contentW - (midX - Lm),
+      contentW - (midX - L),
       'left',
     );
 
     // Amount box
     const boxW = 210;
     const boxH = 26;
-    const boxX = Lm + (contentW - boxW) / 2;
+    const boxX = L + (contentW - boxW) / 2;
     const boxY = metaY + 42;
     doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
     doc.font('Helvetica-Bold').fontSize(11);
-    line(
+    writeLineClamped(
       doc,
       `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.amount)}`,
       boxX,
@@ -1040,47 +1192,64 @@ export class PDFService {
     );
 
     // Applied invoices — height limited
-    y = boxY + boxH + LAYOUT.gapS;
+    y = boxY + boxH + 8;
     const rowH = 11;
-    const maxY = H - doc.page.margins.bottom - 26; // footer reserve
+    const bottomReserved = 26; // footer
+    const maxY = H - doc.page.margins.bottom - bottomReserved;
+    doc.font('Helvetica').fontSize(8);
+
     if (data.invoices?.length) {
       doc.font('Helvetica-Bold').fontSize(9);
-      line(doc, 'Applied To:', Lm, y, 100, 'left');
+      writeLineClamped(doc, 'Applied To:', L, y, 120, 'left');
       y += 12;
 
-      const capacity = Math.max(0, Math.floor((maxY - y) / rowH));
-      const show = Math.min(capacity, data.invoices.length);
-      const more = data.invoices.length - show;
+      const spaceRows = Math.max(0, Math.floor((maxY - y) / rowH));
+      const showCount = Math.min(spaceRows, data.invoices.length);
+      const overflow = data.invoices.length - showCount;
 
       doc.font('Helvetica').fontSize(8);
-      for (let i = 0; i < show; i++) {
+      for (let i = 0; i < showCount; i++) {
         const inv = data.invoices[i];
-        const t = safe(data.payment.currency).toUpperCase();
-        const lineText = `Invoice ${safe(inv.number)}  •  Total: ${t} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
-        line(doc, lineText, Lm, y, contentW, 'left');
+        const line = `Invoice ${safe(inv.number)}  •  Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
+        writeLineClamped(doc, line, L, y, contentW, 'left');
         y += rowH;
       }
-      if (more > 0 && y <= maxY) {
+
+      if (overflow > 0 && y <= maxY) {
         doc.font('Helvetica-Oblique').fontSize(8);
-        line(doc, `(+${more} more invoices)`, Lm, y, contentW, 'left');
+        writeLineClamped(
+          doc,
+          `(+${overflow} more invoices)`,
+          L,
+          y,
+          contentW,
+          'left',
+        );
         y += rowH;
       }
     }
 
+    // Notes (single-line clamp if space)
+    if (safe(data.notes) && y + 12 <= maxY) {
+      doc.font('Helvetica-Bold').fontSize(9);
+      writeLineClamped(doc, 'Notes:', L, y, 50, 'left');
+      doc.font('Helvetica').fontSize(8);
+      writeLineClamped(doc, safe(data.notes), L + 44, y, contentW - 44, 'left');
+      y += 12;
+    }
+
     // Footer
-    const footRuleY = H - 20;
     doc
-      .moveTo(Lm, footRuleY)
-      .lineTo(Rm, footRuleY)
-      .strokeColor('#000')
-      .lineWidth(0.6)
+      .moveTo(L, H - 20)
+      .lineTo(R, H - 20)
+      .lineWidth(LAYOUT.line)
       .stroke();
     doc.font('Helvetica').fontSize(8);
-    line(
+    writeLineClamped(
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
-      Lm,
-      footRuleY + 6,
+      L,
+      H - 14,
       contentW,
       'center',
     );
