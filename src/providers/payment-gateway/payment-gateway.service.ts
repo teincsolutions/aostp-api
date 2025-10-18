@@ -6,7 +6,7 @@ import {
 } from './payment-gateway.interface';
 import { CashProvider } from './providers/cash.provider';
 import { BankTransferProvider } from './providers/bank-transfer.provider';
-import { MobileMoneyProvider } from './providers/mobile-money.provider';
+import { HubtelProvider } from './providers/hubtel.provider';
 
 @Injectable()
 export class PaymentGatewayService {
@@ -16,12 +16,12 @@ export class PaymentGatewayService {
   constructor(
     private readonly cashProvider: CashProvider,
     private readonly bankTransferProvider: BankTransferProvider,
-    private readonly mobileMoneyProvider: MobileMoneyProvider,
+    private readonly hubtelProvider: HubtelProvider,
   ) {
     // Register providers
     this.providers.set('CASH', cashProvider);
     this.providers.set('BANK_TRANSFER', bankTransferProvider);
-    this.providers.set('MOBILE_MONEY', mobileMoneyProvider);
+    this.providers.set('HUBTEL', hubtelProvider);
   }
 
   /**

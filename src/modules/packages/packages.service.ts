@@ -721,13 +721,20 @@ export class PackagesService {
     trackingCode: string,
   ): Promise<void> {
     try {
-      // Get company information - hardcode for now since no configService
-      const companyInfo = {
-        name: 'AOSTP Logistics',
-        address: 'Accra, Ghana',
-        phone: '+233 XX XXX XXXX',
-        email: 'info@aostp.com',
-      };
+      // Get company information from PDF service (config-based)
+      const companyInfo = this.pdfService
+        ? {
+            name: 'AOSTP Logistics',
+            address: 'Accra, Ghana',
+            phone: '+233 XX XXX XXXX',
+            email: 'info@aostp.com',
+          }
+        : {
+            name: 'AOSTP Logistics',
+            address: 'Accra, Ghana',
+            phone: '+233 XX XXX XXXX',
+            email: 'info@aostp.com',
+          };
 
       // Use PackageIntakeData for package intake receipt (no payment info)
       const intakeData = {

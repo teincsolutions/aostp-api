@@ -135,6 +135,23 @@ export class EnvironmentVariables {
   @IsOptional()
   STRIPE_WEBHOOK_SECRET?: string;
 
+  // Company Information (with defaults)
+  @IsString()
+  @IsOptional()
+  COMPANY_NAME?: string;
+
+  @IsString()
+  @IsOptional()
+  COMPANY_ADDRESS?: string;
+
+  @IsString()
+  @IsOptional()
+  COMPANY_PHONE?: string;
+
+  @IsString()
+  @IsOptional()
+  COMPANY_EMAIL?: string;
+
   // Logging
   @IsString()
   @IsOptional()

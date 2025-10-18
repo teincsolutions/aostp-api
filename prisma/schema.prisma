@@ -266,8 +266,7 @@ model Package {
   // Relations
   packingListId     String?
   packingList       PackingList?  @relation(fields: [packingListId], references: [id])
-  invoiceId         String?
-  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+  invoice           Invoice?
 
   // Two-table structure
   items             PackageItem[]
@@ -419,6 +418,8 @@ model Invoice {
   customer        Customer      @relation(fields: [customerId], references: [id])
   packingListId   String
   packingList     PackingList   @relation(fields: [packingListId], references: [id])
+  packageId       String?       // One invoice per package
+  package         Package?      @relation(fields: [packageId], references: [id])
   totalAmount     Float
   currency        String        @default("USD")
   exchangeRate    Float         @default(1)
@@ -433,13 +434,14 @@ model Invoice {
   updatedAt       DateTime      @updatedAt
 
   // Relations
-  packages        Package[]
   payments        Payment[]
   deliveries      PackageDelivery[]
 
   @@index([invoiceNumber])
   @@index([customerId])
+  @@index([packageId])
   @@index([status])
+  @@unique([packageId], map: "Invoice_packageId_unique")
 }
 
 model Payment {

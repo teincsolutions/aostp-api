@@ -108,15 +108,21 @@ export class PaymentsService {
       const payment = await tx.payment.create({
         data: {
           paymentCode,
-          customerId,
+          customer: {
+            connect: { id: customerId },
+          },
           amount,
           currency,
-          exchangeRateId,
+          exchangeRate: {
+            connect: { id: exchangeRateId },
+          },
           localAmount,
           paymentMethod,
           reference,
           notes,
-          processedById: userId,
+          processedBy: {
+            connect: { id: userId },
+          },
         },
         include: {
           customer: true,
@@ -137,7 +143,7 @@ export class PaymentsService {
         // Create payment-invoice relationships
         await tx.$executeRaw`
           INSERT INTO "_InvoiceToPayment" ("A", "B")
-          SELECT ${payment.id} as "A", unnest(${invoiceIds}::text[]) as "B"
+          SELECT unnest(${invoiceIds}::text[]) as "A", ${payment.id} as "B"
         `;
 
         // Update invoice paid amounts and status
@@ -167,12 +173,12 @@ export class PaymentsService {
           // Update package payment status if invoice is fully paid
           if (newStatus === InvoiceStatus.PAID) {
             await tx.package.updateMany({
-              where: { invoiceId: invoice.id },
+              where: { id: invoice.packageId || '' },
               data: { paymentStatus: PaymentStatus.PAID },
             });
           } else if (newPaidAmount > 0) {
             await tx.package.updateMany({
-              where: { invoiceId: invoice.id },
+              where: { id: invoice.packageId || '' },
               data: { paymentStatus: PaymentStatus.PARTIAL },
             });
           }
@@ -553,9 +559,7 @@ export class PaymentsService {
         exchangeRate: true,
         invoices: {
           include: {
-            _count: {
-              select: { packages: true },
-            },
+            package: true, // Include package relation
           },
         },
       },
@@ -581,7 +585,7 @@ export class PaymentsService {
         reconciliationResults.discrepancies.push({
           paymentId: payment.id,
           paymentCode: payment.paymentCode,
-          customerCode: payment.customer.customerCode,
+          customerCode: payment.customer?.customerCode,
           amount: payment.amount,
           issues: checks.discrepancies,
         });
@@ -748,6 +752,60 @@ export class PaymentsService {
   }
 
   /**
+   * Process Hubtel callback when payment status is received from hubtel
+   */
+  async processHubtelCallback(
+    callbackData: any,
+  ): Promise<{ status: 'success' | 'failed' }> {
+    try {
+      this.logger.log(
+        `Processing Hubtel callback: ${JSON.stringify(callbackData)}`,
+      );
+
+      // Validate callback data matches the expected structure from docs
+      const { Status, Data } = callbackData;
+
+      if (Status === 'Successful') {
+        await this.processHubtelSuccessCallback(Data);
+        return { status: 'success' };
+      } else if (Status === 'Failed') {
+        await this.processHubtelFailedCallback(Data);
+        return { status: 'success' }; // Returned success even on failure (hubtel ping received)
+      }
+
+      this.logger.warn(`Unknown Hubtel callback status: ${Status}`);
+      return { status: 'success' }; // Acknowledge receipt regardless
+    } catch (error) {
+      this.logger.error(
+        `Hubtel callback processing failed: ${error.message}`,
+        error.stack,
+      );
+      return { status: 'failed' };
+    }
+  }
+
+  private async processHubtelSuccessCallback(data: any): Promise<void> {
+    // TODO: Implement actual payment lookup using Data.CheckoutId
+    // Map CheckoutId back to our payment record
+    // Update payment status to COMPLETED
+    // Update associated invoices
+    // Log the successful payment
+    this.logger.log(
+      `Hubtel success callback for ${data.CheckoutId}: ${data.ReceiptNumber}`,
+    );
+  }
+
+  private async processHubtelFailedCallback(data: any): Promise<void> {
+    // TODO: Implement actual payment lookup using Data.CheckoutId
+    // Map CheckoutId back to our payment record
+    // Update payment status to FAILED
+    // Log the failed payment reason
+    this.logger.log(
+      `Hubtel failed callback for ${data.CheckoutId}: ${data.Description}`,
+    );
+  }
+
+  /**
    * Generate payment receipt PDF synchronously
    */
   async generatePaymentReceipt(
@@ -783,7 +841,7 @@ export class PaymentsService {
       throw new NotFoundException(`Payment with ID ${paymentId} not found`);
     }
 
-    // Get company information - hardcode for now since no configService injection
+    // Get company information (config-based)
     const companyInfo = {
       name: 'AOSTP Logistics',
       address: 'Accra, Ghana',

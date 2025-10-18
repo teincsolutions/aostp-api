@@ -348,6 +348,12 @@ const LAYOUT = {
 export class PDFService {
   private readonly logger = new Logger(PDFService.name);
   private readonly bucket: string;
+  private readonly companyInfo: {
+    name: string;
+    address: string;
+    phone: string;
+    email: string;
+  };
 
   constructor(
     private readonly configService: ConfigService,
@@ -356,6 +362,17 @@ export class PDFService {
     this.bucket = this.configService.getOrThrow<string>(
       'AWS_PACKAGES_BUCKET_NAME',
     );
+
+    // Set company info with environment variables or defaults
+    this.companyInfo = {
+      name: this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics',
+      address:
+        this.configService.get<string>('COMPANY_ADDRESS') || 'Accra, Ghana',
+      phone:
+        this.configService.get<string>('COMPANY_PHONE') || '+233 XX XXX XXXX',
+      email:
+        this.configService.get<string>('COMPANY_EMAIL') || 'info@aostp.com',
+    };
   }
 
   // --------- Public API ---------

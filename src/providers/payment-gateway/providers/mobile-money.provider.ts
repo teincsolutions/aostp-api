@@ -13,14 +13,14 @@ import {
 export class MobileMoneyProvider implements PaymentGatewayProvider {
   private readonly logger = new Logger(MobileMoneyProvider.name);
 
-  async processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
+  processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
     this.logger.log(
       `Processing mobile money payment: ${data.amount} ${data.currency} - ${data.reference}`,
     );
 
     // For mobile money, initiate payment request
     // In a real implementation, this would integrate with providers like MTN, Airtel, etc.
-    return {
+    return Promise.resolve({
       success: true,
       gatewayTransactionId: `MM-${Date.now()}`,
       status: PaymentStatus.PENDING,
@@ -34,16 +34,16 @@ export class MobileMoneyProvider implements PaymentGatewayProvider {
         verificationCode: '123456', // Generated verification code
         expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
       },
-    };
+    });
   }
 
-  async refundPayment(data: RefundPaymentData): Promise<RefundResult> {
+  refundPayment(data: RefundPaymentData): Promise<RefundResult> {
     this.logger.log(
       `Processing mobile money refund: ${data.gatewayTransactionId}`,
     );
 
     // Mobile money refunds can be processed automatically
-    return {
+    return Promise.resolve({
       success: true,
       refundId: `REFUND-MM-${Date.now()}`,
       status: RefundStatus.COMPLETED,
@@ -53,14 +53,12 @@ export class MobileMoneyProvider implements PaymentGatewayProvider {
         refundProcessed: true,
         processedAt: new Date().toISOString(),
       },
-    };
+    });
   }
 
-  async getPaymentStatus(
-    _gatewayTransactionId: string,
-  ): Promise<PaymentStatus> {
+  getPaymentStatus(_gatewayTransactionId: string): Promise<PaymentStatus> {
     // In a real implementation, this would query the mobile money provider
     // For now, return pending as mobile money transactions are typically processed quickly
-    return PaymentStatus.PENDING;
+    return Promise.resolve(PaymentStatus.PENDING);
   }
 }

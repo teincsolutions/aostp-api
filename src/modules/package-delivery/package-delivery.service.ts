@@ -67,9 +67,20 @@ export class PackageDeliveryService {
     }
 
     // Validate that the package item belongs to this invoice
-    if (packageItem.package?.invoiceId !== invoiceId) {
+    if (packageItem.packageId) {
+      const packageInvoiceCheck = await this.prisma.package.findUnique({
+        where: { id: packageItem.packageId },
+        include: { invoice: true },
+      });
+
+      if (packageInvoiceCheck?.invoice?.id !== invoiceId) {
+        throw new BadRequestException(
+          'Package item does not belong to the specified invoice',
+        );
+      }
+    } else {
       throw new BadRequestException(
-        'Package item does not belong to the specified invoice',
+        'Package item is not associated with any package',
       );
     }
 

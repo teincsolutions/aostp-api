@@ -13,14 +13,14 @@ import {
 export class CashProvider implements PaymentGatewayProvider {
   private readonly logger = new Logger(CashProvider.name);
 
-  async processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
+  processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
     this.logger.log(
       `Processing cash payment: ${data.amount} ${data.currency} - ${data.reference}`,
     );
 
     // For cash payments, we consider them processed immediately
     // In a real implementation, this would create a cash receipt record
-    return {
+    return Promise.resolve({
       success: true,
       gatewayTransactionId: `CASH-${data.reference}`,
       status: PaymentStatus.COMPLETED,
@@ -31,14 +31,14 @@ export class CashProvider implements PaymentGatewayProvider {
         amount: data.amount,
         processedAt: new Date().toISOString(),
       },
-    };
+    });
   }
 
-  async refundPayment(data: RefundPaymentData): Promise<RefundResult> {
+  refundPayment(data: RefundPaymentData): Promise<RefundResult> {
     this.logger.log(`Processing cash refund: ${data.gatewayTransactionId}`);
 
     // For cash payments, refunds are processed immediately
-    return {
+    return Promise.resolve({
       success: true,
       refundId: `REFUND-${Date.now()}`,
       status: RefundStatus.COMPLETED,
@@ -47,13 +47,11 @@ export class CashProvider implements PaymentGatewayProvider {
         originalTransaction: data.gatewayTransactionId,
         refundedAt: new Date().toISOString(),
       },
-    };
+    });
   }
 
-  async getPaymentStatus(
-    _gatewayTransactionId: string,
-  ): Promise<PaymentStatus> {
+  getPaymentStatus(_gatewayTransactionId: string): Promise<PaymentStatus> {
     // Cash payments are immediately completed
-    return PaymentStatus.COMPLETED;
+    return Promise.resolve(PaymentStatus.COMPLETED);
   }
 }

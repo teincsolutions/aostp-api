@@ -39,7 +39,19 @@ export class PaymentsController {
   @ApiResponse({ status: 400, description: 'Bad request - validation errors' })
   @ApiResponse({ status: 404, description: 'Customer or invoice not found' })
   create(@Body() createPaymentDto: CreatePaymentDto, @Request() req: any) {
-    return this.paymentsService.create(createPaymentDto, req.user.sub);
+    return this.paymentsService.create(createPaymentDto, req.user.id);
+  }
+
+  @Post('hubtel/callback')
+  @UseGuards() // Remove auth and role guards for this endpoint
+  @ApiOperation({ summary: 'Hubtel payment callback' })
+  @ApiResponse({ status: 200, description: 'Callback processed' })
+  @ApiResponse({ status: 400, description: 'Invalid callback data' })
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async hubtelCallback(
+    @Body() callbackData: any,
+  ): Promise<{ status: 'success' | 'failed' }> {
+    return this.paymentsService.processHubtelCallback(callbackData);
   }
 
   @Get()
@@ -139,7 +151,7 @@ export class PaymentsController {
     @Body() updatePaymentDto: UpdatePaymentDto,
     @Request() req: any,
   ) {
-    return this.paymentsService.update(id, updatePaymentDto, req.user.sub);
+    return this.paymentsService.update(id, updatePaymentDto, req.user.id);
   }
 
   @Post(':id/refund')
@@ -161,7 +173,7 @@ export class PaymentsController {
       id,
       refundAmount,
       reason,
-      req.user.sub,
+      req.user.id,
     );
   }
 }

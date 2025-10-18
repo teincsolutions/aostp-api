@@ -26,13 +26,14 @@ export class InvoicesService {
     packingListId: string,
     userId: string,
   ): Promise<Invoice[]> {
-    // Get packing list with packages grouped by customer
+    // Get packing list with packages
     const packingList = await this.prisma.packingList.findUnique({
       where: { id: packingListId },
       include: {
         packages: {
           include: {
             customer: true,
+            items: true, // Include package items now
           },
         },
         container: true,
@@ -51,56 +52,35 @@ export class InvoicesService {
       );
     }
 
-    // Note: Currency conversion removed - per Use Case rule, FX only at payment time
-
-    // Group packages by customer
-    const packagesByCustomer = packingList.packages.reduce((acc, pkg) => {
-      const customerId = pkg.customerId;
-      if (!acc[customerId]) {
-        acc[customerId] = {
-          customer: pkg.customer,
-          packages: [],
-        };
-      }
-      acc[customerId].packages.push(pkg);
-      return acc;
-    }, {});
-
     const invoices: Invoice[] = [];
 
-    // Generate invoice for each customer
-    for (const [customerId, data] of Object.entries(packagesByCustomer)) {
-      const { customer, packages } = data as {
-        customer: any;
-        packages: any[];
-      };
-
-      // Check if invoice already exists for this customer and packing list
+    // Generate one invoice per package (not per customer)
+    for (const pkg of packingList.packages) {
+      // Check if invoice already exists for this package
       const existingInvoice = await this.prisma.invoice.findFirst({
         where: {
-          customerId,
-          packingListId,
+          packageId: pkg.id,
         },
       });
 
       if (existingInvoice) {
         this.logger.warn(
-          `Invoice already exists for customer ${customer.customerCode} and packing list ${packingList.name}`,
+          `Invoice already exists for package ${pkg.trackingCode}`,
         );
         continue;
       }
 
-      // Calculate totals
+      // Calculate total amount based on package items
       let totalAmount = 0;
-      for (const pkg of packages) {
+      for (const item of pkg.items) {
         const rate = await this.getShippingRate(
           pkg.shippingMode,
           pkg.airShippingType,
         );
         if (pkg.shippingMode === ShippingMode.SEA) {
-          totalAmount += (pkg.cbm || 0) * rate;
+          totalAmount += (item.cbm || 0) * rate;
         } else {
-          totalAmount += (pkg.weight || 0) * rate;
+          totalAmount += (item.weight || 0) * rate;
         }
       }
 
@@ -113,18 +93,20 @@ export class InvoicesService {
       dueDate.setDate(dueDate.getDate() + 30);
 
       const result = await this.prisma.$transaction(async (tx) => {
-        // Create invoice - NO currency conversion at invoice time per Use Case rule
+        // Create invoice - one invoice per package
         const invoice = await tx.invoice.create({
           data: {
             invoiceNumber,
-            customerId,
+            customerId: pkg.customerId,
             packingListId,
+            packageId: pkg.id,
             totalAmount,
             currency: 'USD',
             localAmount: 0, // FX deferred to payment time
             status: InvoiceStatus.UNPAID,
             dueDate,
             balance: totalAmount, // Initial balance equals total amount
+            notes: `Invoice for package ${pkg.trackingCode}`,
           },
           include: {
             customer: true,
@@ -133,7 +115,21 @@ export class InvoicesService {
                 container: true,
               },
             },
-            packages: true,
+            package: {
+              include: {
+                items: true, // Include package items for invoice PDF
+              },
+            },
+          },
+        });
+
+        // Update package to link to this invoice
+        await tx.package.update({
+          where: { id: pkg.id },
+          data: {
+            invoice: {
+              connect: { id: invoice.id },
+            },
           },
         });
 
@@ -147,8 +143,9 @@ export class InvoicesService {
             after: invoice as any,
             metadata: {
               packingListId,
-              customerCode: customer.customerCode,
-              packageCount: packages.length,
+              packageId: pkg.id,
+              packageTrackingCode: pkg.trackingCode,
+              customerCode: pkg.customer.customerCode,
               generatedFromPackingList: true,
             },
           },
@@ -160,7 +157,7 @@ export class InvoicesService {
       invoices.push(result);
 
       this.logger.log(
-        `Invoice ${invoiceNumber} generated for customer ${customer.customerCode} - Amount: ${totalAmount} USD`,
+        `Invoice ${invoiceNumber} generated for package ${pkg.trackingCode} - Amount: ${totalAmount} USD`,
       );
     }
 
@@ -304,19 +301,16 @@ export class InvoicesService {
               container: true,
             },
           },
-          packages: true,
+          package: {
+            include: {
+              items: true,
+            },
+          },
         },
       });
 
-      // Update packages to link to this invoice
-      await tx.package.updateMany({
-        where: {
-          id: { in: packingList.packages.map((pkg) => pkg.id) },
-        },
-        data: {
-          invoiceId: invoice.id,
-        },
-      });
+      // Update package to link to this invoice (old create method, need to update)
+      // Note: This method might not be needed anymore since we changed to 1 invoice per package
 
       // Log the action
       await tx.auditLog.create({
@@ -387,7 +381,7 @@ export class InvoicesService {
               container: true,
             },
           },
-          packages: {
+          package: {
             select: {
               id: true,
               trackingCode: true,
@@ -431,7 +425,11 @@ export class InvoicesService {
             container: true,
           },
         },
-        packages: true,
+        package: {
+          include: {
+            items: true,
+          },
+        },
         payments: {
           include: {
             processedBy: {
@@ -478,7 +476,11 @@ export class InvoicesService {
               container: true,
             },
           },
-          packages: true,
+          package: {
+            include: {
+              items: true,
+            },
+          },
         },
       });
 
@@ -516,7 +518,7 @@ export class InvoicesService {
               container: true,
             },
           },
-          packages: {
+          package: {
             select: {
               id: true,
               trackingCode: true,
@@ -597,13 +599,19 @@ export class InvoicesService {
         },
         include: {
           customer: true,
-          packages: true,
+          package: {
+            include: {
+              items: true,
+            },
+          },
         },
       });
 
       // Update package payment status
       await tx.package.updateMany({
-        where: { invoiceId: id },
+        where: {
+          id: invoice.packageId || '',
+        },
         data: { paymentStatus: 'PAID' },
       });
 
@@ -651,9 +659,15 @@ export class InvoicesService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Unlink packages from this invoice
-      await tx.package.updateMany({
-        where: { invoiceId: id },
-        data: { invoiceId: null },
+      await tx.package.update({
+        where: {
+          id: existingInvoice.packageId || '',
+        },
+        data: {
+          invoice: {
+            disconnect: true,
+          },
+        },
       });
 
       const deletedInvoice = await tx.invoice.delete({
@@ -691,14 +705,17 @@ export class InvoicesService {
         // Type assertion since findOne includes the relations
         const invoiceWithRelations = invoice as any;
 
+        // Get company info from PDF service (which uses config)
+        const companyInfo = {
+          name: 'AOSTP Logistics',
+          address: 'Accra, Ghana',
+          phone: '+233 XX XXX XXXX',
+          email: 'info@aostp.com',
+        };
+
         // Prepare invoice data for PDF generation similar to packing-lists service
         const pdfData = {
-          company: {
-            name: 'AOSTP Logistics',
-            address: '123 Logistics Street, Business City',
-            phone: '+1-555-0123',
-            email: 'billing@aostp.com',
-          },
+          company: companyInfo,
           invoice: {
             number: invoiceWithRelations.invoiceNumber,
             date: invoiceWithRelations.createdAt.toISOString().split('T')[0],
@@ -726,8 +743,41 @@ export class InvoicesService {
                   invoiceWithRelations.packingList.destinationCity || 'Unknown',
               }
             : undefined,
+          package: invoiceWithRelations.package
+            ? {
+                trackingCode: invoiceWithRelations.package.trackingCode,
+                description: invoiceWithRelations.package.description,
+                shippingMode: invoiceWithRelations.package.shippingMode,
+                airType: invoiceWithRelations.package.airShippingType,
+                quantity: invoiceWithRelations.package.quantity,
+                weightKg: invoiceWithRelations.package.weight,
+                cbm: invoiceWithRelations.package.cbm,
+                destinationCity: invoiceWithRelations.package.destinationCity,
+                warehouse: invoiceWithRelations.package.warehouse?.name,
+              }
+            : undefined,
+          // Use package items directly
+          items:
+            invoiceWithRelations.package?.items?.map((item) => ({
+              description: item.description || '',
+              quantity: item.quantity,
+              unitPrice:
+                invoiceWithRelations.package.shippingMode === 'SEA'
+                  ? (item.cbm || 0) *
+                    (invoiceWithRelations.totalAmount /
+                      (invoiceWithRelations.package.quantity || 1))
+                  : (item.weight || 0) *
+                    (invoiceWithRelations.totalAmount /
+                      (invoiceWithRelations.package.quantity || 1)),
+              total:
+                (invoiceWithRelations.totalAmount /
+                  (invoiceWithRelations.package.quantity || 1)) *
+                item.quantity,
+            })) || [],
           totals: {
             total: invoiceWithRelations.totalAmount,
+            paid: invoiceWithRelations.paidAmount || 0,
+            balance: invoiceWithRelations.balance,
             currency: invoiceWithRelations.currency,
           },
           currency: invoiceWithRelations.currency,

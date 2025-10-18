@@ -13,14 +13,14 @@ import {
 export class BankTransferProvider implements PaymentGatewayProvider {
   private readonly logger = new Logger(BankTransferProvider.name);
 
-  async processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
+  processPayment(data: ProcessPaymentData): Promise<PaymentResult> {
     this.logger.log(
       `Processing bank transfer: ${data.amount} ${data.currency} - ${data.reference}`,
     );
 
     // For bank transfers, we create a pending transaction
     // In a real implementation, this would integrate with bank APIs or create bank reference
-    return {
+    return Promise.resolve({
       success: true,
       gatewayTransactionId: `BT-${Date.now()}`,
       status: PaymentStatus.PENDING,
@@ -33,16 +33,16 @@ export class BankTransferProvider implements PaymentGatewayProvider {
         processingDays: 3,
         initiatedAt: new Date().toISOString(),
       },
-    };
+    });
   }
 
-  async refundPayment(data: RefundPaymentData): Promise<RefundResult> {
+  refundPayment(data: RefundPaymentData): Promise<RefundResult> {
     this.logger.log(
       `Processing bank transfer refund: ${data.gatewayTransactionId}`,
     );
 
     // Bank transfer refunds require manual processing
-    return {
+    return Promise.resolve({
       success: true,
       refundId: `REFUND-BT-${Date.now()}`,
       status: RefundStatus.PENDING,
@@ -53,14 +53,12 @@ export class BankTransferProvider implements PaymentGatewayProvider {
         processingNotes:
           'Bank transfer refunds require manual bank instruction',
       },
-    };
+    });
   }
 
-  async getPaymentStatus(
-    _gatewayTransactionId: string,
-  ): Promise<PaymentStatus> {
+  getPaymentStatus(_gatewayTransactionId: string): Promise<PaymentStatus> {
     // In a real implementation, this would query the bank API
     // For now, return pending as transfers take time
-    return PaymentStatus.PENDING;
+    return Promise.resolve(PaymentStatus.PENDING);
   }
 }

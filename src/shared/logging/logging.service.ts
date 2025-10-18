@@ -92,28 +92,28 @@ export class LoggingService {
   error(message: string, meta?: any): void {
     this.winstonLogger.error(message, meta);
     // Save to database asynchronously
-    this.saveActivityLog('error', message, meta);
+    void this.saveActivityLog('error', message, meta);
   }
 
   // Method to log warn level
   warn(message: string, meta?: any): void {
     this.winstonLogger.warn(message, meta);
     // Save to database asynchronously
-    this.saveActivityLog('warn', message, meta);
+    void this.saveActivityLog('warn', message, meta);
   }
 
   // Method to log info level
   info(message: string, meta?: any): void {
     this.winstonLogger.info(message, meta);
     // Save to database asynchronously
-    this.saveActivityLog('info', message, meta);
+    void this.saveActivityLog('info', message, meta);
   }
 
   // Method to log debug level
   debug(message: string, meta?: any): void {
     this.winstonLogger.debug(message, meta);
     // Save to database asynchronously
-    this.saveActivityLog('debug', message, meta);
+    void this.saveActivityLog('debug', message, meta);
   }
 
   // Method to log http requests specifically

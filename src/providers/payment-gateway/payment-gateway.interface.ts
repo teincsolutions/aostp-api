@@ -25,6 +25,7 @@ export interface ProcessPaymentData {
   currency: string;
   customerEmail?: string;
   customerPhone?: string;
+  customerName?: string;
   reference: string;
   description?: string;
   metadata?: Record<string, any>;
@@ -35,6 +36,7 @@ export interface PaymentResult {
   gatewayTransactionId?: string;
   status: PaymentStatus;
   fees?: number;
+  paymentUrl?: string;
   errorMessage?: string;
   gatewayResponse?: any;
 }
