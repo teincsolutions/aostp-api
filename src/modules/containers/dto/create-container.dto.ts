@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsNotEmpty,
   IsEnum,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ContainerStatus, ContainerType } from '@prisma/client';
@@ -26,15 +27,19 @@ export class CreateContainerDto {
   @IsDateString()
   loadingDate: string;
 
-  @ApiProperty({ description: 'Departure city' })
-  @IsString()
-  @IsNotEmpty()
-  departureCity: string;
+  @ApiProperty({
+    description: 'Departure city ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsUUID()
+  departureCityId: string;
 
-  @ApiProperty({ description: 'Destination city' })
-  @IsString()
-  @IsNotEmpty()
-  destinationCity: string;
+  @ApiProperty({
+    description: 'Destination city ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsUUID()
+  destinationCityId: string;
 
   @ApiProperty({
     description: 'Estimated time of arrival (ETA)',

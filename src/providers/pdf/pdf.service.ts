@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { S3Service } from '../storage/s3.service';
 import PDFDocument from 'pdfkit';
 import { PassThrough } from 'stream';
+import { City } from '@prisma/client';
 
 // =====================
 // Base interfaces
@@ -113,7 +114,7 @@ export interface PackageIntakeData extends PDFTemplateData {
     quantity: number;
     weightKg?: number;
     cbm?: number;
-    destinationCity?: string;
+    destinationCity?: City;
   };
   notes?: string;
 }
@@ -1011,7 +1012,7 @@ export class PDFService {
 
     writeLineClamped(
       doc,
-      `Qty: ${data.package.quantity} • Weight: ${data.package.weightKg || 0} KG${data.package.cbm ? ` • CBM: ${data.package.cbm}` : ''}${data.package.destinationCity ? ` • Dest: ${data.package.destinationCity}` : ''}`,
+      `Qty: ${data.package.quantity} ${data.package.destinationCity ? ` • Dest: ${data.package.destinationCity.name}` : ''}`,
       L + 8,
       py,
       boxW - 16,
@@ -1043,9 +1044,9 @@ export class PDFService {
     doc.font('Helvetica').fontSize(8);
     writeLineClamped(
       doc,
-      `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
+      `Generated on ${new Date().toLocaleDateString()} by ${this.companyInfo.name}`,
       L,
-      H - 16,
+      H - 26,
       contentW,
       'center',
     );

@@ -9,7 +9,6 @@ import {
   Package,
   Invoice,
   Payment,
-  Container,
 } from '@prisma/client';
 
 interface NotificationChannelContent {
@@ -472,7 +471,7 @@ export class NotificationsService {
   }
 
   async notifyContainerArrival(
-    container: Container,
+    container,
     customers: Customer[],
   ): Promise<any[]> {
     const notifications: Promise<any[]>[] = [];
@@ -490,8 +489,8 @@ export class NotificationsService {
             <table style="border-collapse: collapse; width: 100%;">
               <tr><td><strong>Container Number:</strong></td><td>${container.containerNumber}</td></tr>
               <tr><td><strong>Arrival Date:</strong></td><td>${new Date(container.actualArrival || new Date()).toLocaleDateString()}</td></tr>
-              <tr><td><strong>Origin:</strong></td><td>${container.departureCity}</td></tr>
-              <tr><td><strong>Destination:</strong></td><td>${container.destinationCity}</td></tr>
+              <tr><td><strong>Origin:</strong></td><td>${container.departureCity?.name}</td></tr>
+              <tr><td><strong>Destination:</strong></td><td>${container.destinationCity?.name}</td></tr>
             </table>
             <p>Please prepare for collection of your packages.</p>
             <p>Thank you for your patience.</p>
@@ -515,7 +514,7 @@ export class NotificationsService {
               : null;
 
         if (channel) {
-          const content = `Hi ${customer.firstName}, container ${container.containerNumber} has arrived from ${container.departureCity} to ${container.destinationCity}. Prepare for package collection.`;
+          const content = `Hi ${customer.firstName}, container ${container.containerNumber} has arrived from ${container.departureCity?.name} to ${container.destinationCity?.name}. Prepare for package collection.`;
           channels.push({
             channel,
             recipient: customer.phoneNumber,

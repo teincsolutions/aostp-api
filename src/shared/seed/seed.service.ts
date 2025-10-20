@@ -9,7 +9,7 @@ export class SeedService {
 
   async runAllSeeds(): Promise<void> {
     await this.seedUsers();
-    await this.seedCustomers();
+    //await this.seedCustomers();
   }
 
   private async seedUsers(): Promise<void> {

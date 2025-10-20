@@ -8,7 +8,13 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
-import { Prisma, Invoice, InvoiceStatus, ShippingMode } from '@prisma/client';
+import {
+  Prisma,
+  Invoice,
+  InvoiceStatus,
+  ShippingMode,
+  AirShippingType,
+} from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 
@@ -31,7 +37,27 @@ export class InvoicesService {
       where: { id: packingListId },
       include: {
         packages: {
+          select: {
+            id: true,
+            trackingCode: true,
+            description: true,
+            weight: true,
+            cbm: true,
+            customerId: true,
+            shippingMode: true,
+            airShippingType: true,
+            quantity: true,
+            customer: {
+              select: {
+                customerCode: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+            items: true, // Include package items now
+          },
           include: {
+            warehouse: true,
             customer: true,
             items: true, // Include package items now
           },
@@ -70,18 +96,17 @@ export class InvoicesService {
         continue;
       }
 
-      // Calculate total amount based on package items
+      // Calculate total amount based on package weight/cbm * shipping rate
+      const rate = await this.getShippingRate(
+        pkg.shippingMode,
+        pkg.airShippingType,
+        packingList.container.departureCityId,
+      );
       let totalAmount = 0;
-      for (const item of pkg.items) {
-        const rate = await this.getShippingRate(
-          pkg.shippingMode,
-          pkg.airShippingType,
-        );
-        if (pkg.shippingMode === ShippingMode.SEA) {
-          totalAmount += (item.cbm || 0) * rate;
-        } else {
-          totalAmount += (item.weight || 0) * rate;
-        }
+      if (pkg.shippingMode === ShippingMode.SEA) {
+        totalAmount = (pkg.cbm || 0) * rate * (pkg.quantity || 1);
+      } else {
+        totalAmount = (pkg.weight || 0) * rate * (pkg.quantity || 1);
       }
 
       // Generate invoice number
@@ -192,12 +217,14 @@ export class InvoicesService {
 
   private async getShippingRate(
     shippingMode: ShippingMode,
-    airShippingType?: any,
+    airShippingType: AirShippingType | null,
+    cityId?: string,
   ): Promise<number> {
     const rate = await this.prisma.shippingRate.findFirst({
       where: {
         shippingMode,
         airShippingType: airShippingType || null,
+        cityId: cityId,
         isActive: true,
         effectiveFrom: {
           lte: new Date(),
@@ -422,12 +449,18 @@ export class InvoicesService {
         customer: true,
         packingList: {
           include: {
-            container: true,
+            container: {
+              include: {
+                departureCity: true,
+                destinationCity: true,
+              },
+            },
           },
         },
         package: {
           include: {
             items: true,
+            warehouse: true,
           },
         },
         payments: {
@@ -738,9 +771,12 @@ export class InvoicesService {
                 loadingDate: invoiceWithRelations.packingList.loadingDate
                   .toISOString()
                   .split('T')[0],
-                origin: invoiceWithRelations.packingList.origin || 'Unknown',
+                origin:
+                  invoiceWithRelations.packingList.container.departureCity
+                    ?.name || 'Unknown',
                 destination:
-                  invoiceWithRelations.packingList.destinationCity || 'Unknown',
+                  invoiceWithRelations.packingList.container.destinationCity
+                    ?.name || 'Unknown',
               }
             : undefined,
           package: invoiceWithRelations.package

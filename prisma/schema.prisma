@@ -330,14 +330,16 @@ model PackagePhoto {
 }
 
 model City {
-  id            String       @id @default(uuid())
-  name          String
-  country       String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                          String        @id @default(uuid())
+  name                        String
+  country                     String
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
 
   // Relations
-  shippingRates ShippingRate[]
+  shippingRates               ShippingRate[]
+  departureContainers         Container[]   @relation("ContainerDepartureCity")
+  destinationContainers       Container[]   @relation("ContainerDestinationCity")
 
   @@unique([name, country])
   @@index([country])
@@ -362,21 +364,23 @@ model ShippingRate {
 }
 
 model Container {
-  id              String          @id @default(uuid())
-  containerNumber String          @unique
-  containerType   ContainerType   // For air/sea mode filtering
-  loadingDate     DateTime
-  departureCity   String
-  destinationCity String
-  eta             DateTime        // Estimated arrival (40-45 days)
-  actualArrival   DateTime?
-  status          ContainerStatus @default(PLANNED)
-  notes           String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                String          @id @default(uuid())
+  containerNumber   String          @unique
+  containerType     ContainerType   // For air/sea mode filtering
+  loadingDate       DateTime
+  departureCityId   String          // Departure city reference
+  departureCity     City            @relation("ContainerDepartureCity", fields: [departureCityId], references: [id])
+  destinationCityId String          // Destination city reference
+  destinationCity   City            @relation("ContainerDestinationCity", fields: [destinationCityId], references: [id])
+  eta               DateTime        // Estimated arrival (40-45 days)
+  actualArrival     DateTime?
+  status            ContainerStatus @default(PLANNED)
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   // Relations
-  packingLists    PackingList[]
+  packingLists      PackingList[]
 
   @@index([containerNumber])
   @@index([status])
@@ -384,27 +388,26 @@ model Container {
 }
 
 model PackingList {
-  id              String             @id @default(uuid())
-  name            String             @unique // Default to loading date
-  containerId     String
-  container       Container          @relation(fields: [containerId], references: [id])
-  warehouseId     String?
-  warehouse       Warehouse?         @relation(fields: [warehouseId], references: [id])
-  destinationCity String             // Required destination city
-  eta             DateTime?          // Estimated time of arrival
-  loadingDate     DateTime
-  status          PackingListStatus  @default(DRAFT) // Status of packing list
-  totalPackages   Int                @default(0)
-  totalCustomers  Int                @default(0)
-  totalCBM        Float              @default(0)
-  totalWeight     Float              @default(0)
-  notes           String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id                String             @id @default(uuid())
+  name              String             @unique // Default to loading date
+  containerId       String
+  container         Container          @relation(fields: [containerId], references: [id])
+  warehouseId       String?
+  warehouse         Warehouse?         @relation(fields: [warehouseId], references: [id])
+  eta               DateTime?          // Estimated time of arrival
+  loadingDate       DateTime
+  status            PackingListStatus  @default(DRAFT) // Status of packing list
+  totalPackages     Int                @default(0)
+  totalCustomers    Int                @default(0)
+  totalCBM          Float              @default(0)
+  totalWeight       Float              @default(0)
+  notes             String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   // Relations
-  packages        Package[]
-  invoices        Invoice[]
+  packages          Package[]
+  invoices          Invoice[]
 
   @@index([containerId])
   @@index([warehouseId])

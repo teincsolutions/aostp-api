@@ -14,6 +14,7 @@ import { Prisma, PackageStatus, ShippingMode } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PackagesService {
@@ -22,9 +23,9 @@ export class PackagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdfService: PDFService,
-    @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
     private readonly idGeneratorService: IdGeneratorService,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(createPackageDto: CreatePackageDto, userId: string) {
@@ -687,10 +688,13 @@ export class PackagesService {
     if (!pkg) {
       throw new NotFoundException(`Package with ID ${packageId} not found`);
     }
+    const cdnUrl = `https://${this.configService.get('CDN_DOMAIN')}`;
+    const packageBucket = this.configService.get('AWS_PACKAGES_BUCKET_NAME');
 
     if (pkg.receiptKey) {
-      // Stub return for now - TODO: Implement S3 service injection
-      return { url: `https://example.com/receipts/${pkg.receiptKey}` };
+      return {
+        url: `${cdnUrl}/${packageBucket}/${pkg.receiptKey}`,
+      };
     }
 
     // Receipt doesn't exist or package has no receiptKey - regenerate
@@ -708,9 +712,9 @@ export class PackagesService {
     if (!updatedPkg.receiptKey) {
       throw new BadRequestException('Failed to generate package receipt');
     }
-
-    // Stub return for now - TODO: Implement S3 service injection
-    return { url: `https://example.com/receipts/${updatedPkg.receiptKey}` };
+    return {
+      url: `${cdnUrl}/${packageBucket}/${updatedPkg.receiptKey}`,
+    };
   }
 
   /**

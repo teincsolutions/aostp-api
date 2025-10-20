@@ -18,13 +18,6 @@ export class CreatePackingListDto {
   @IsUUID()
   containerId: string;
 
-  @ApiProperty({
-    description: 'Destination city for the packing list',
-    example: 'Accra',
-  })
-  @IsString()
-  destinationCity: string;
-
   @ApiPropertyOptional({
     description: 'Warehouse ID for the packing list',
     example: '123e4567-e89b-12d3-a456-426614174000',

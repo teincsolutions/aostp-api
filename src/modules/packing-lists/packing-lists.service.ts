@@ -8,7 +8,7 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePackingListDto } from './dto/create-packing-list.dto';
 import { UpdatePackingListDto } from './dto/update-packing-list.dto';
 import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
-import { Prisma, PackageStatus, ContainerStatus } from '@prisma/client';
+import { Prisma, PackageStatus } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -31,15 +31,8 @@ export class PackingListsService {
     createPackingListDto: CreatePackingListDto,
     userId: string,
   ): Promise<any> {
-    const {
-      containerId,
-      destinationCity,
-      eta,
-      loadingDate,
-      name,
-      notes,
-      warehouseId,
-    } = createPackingListDto;
+    const { containerId, eta, loadingDate, name, notes, warehouseId } =
+      createPackingListDto;
 
     // Verify container exists
     const container = await this.prisma.container.findUnique({
@@ -50,45 +43,8 @@ export class PackingListsService {
       throw new NotFoundException(`Container with ID ${containerId} not found`);
     }
 
-    // Validate container type restrictions for SEA vs AIR shipping
-    // Container type should be enforced based on shipping mode
-    // SEA = CONTAINER, AIR = BAG
-    // Group by shipping mode to determine container type
-    const shippingModeGroups = await this.prisma.package.groupBy({
-      by: ['shippingMode'],
-      where: {
-        packingList: {
-          containerId,
-        },
-      },
-      _count: true,
-    });
-
-    // Enforce container type based on shipping modes
-    const hasSeaPackages = shippingModeGroups.some(
-      (g) => g.shippingMode === 'SEA',
-    );
-    const hasAirPackages = shippingModeGroups.some(
-      (g) => g.shippingMode === 'AIR',
-    );
-
-    if (hasSeaPackages && hasAirPackages) {
-      throw new BadRequestException(
-        'Container cannot contain both SEA and AIR packages. Use separate containers.',
-      );
-    }
-
-    if (hasSeaPackages && container.containerType !== 'CONTAINER') {
-      throw new BadRequestException(
-        'SEA packages must be loaded in CONTAINER type containers.',
-      );
-    }
-
-    if (hasAirPackages && container.containerType !== 'BAG') {
-      throw new BadRequestException(
-        'AIR packages must be loaded in BAG type containers.',
-      );
-    }
+    // TODO: Consider validating that the container has cities defined when creating packing lists
+    // This validation can be done here if needed
 
     // Generate name if not provided (default to loading date + container number)
     const packingListName =
@@ -114,7 +70,6 @@ export class PackingListsService {
         data: {
           name: packingListName,
           containerId,
-          destinationCity,
           eta: eta ? new Date(eta) : null,
           warehouseId,
           loadingDate: new Date(loadingDate),
@@ -209,7 +164,28 @@ export class PackingListsService {
         skip,
         take: limit,
         include: {
-          container: true,
+          container: {
+            select: {
+              id: true,
+              containerNumber: true,
+              containerType: true,
+              status: true,
+              departureCity: {
+                select: {
+                  id: true,
+                  name: true,
+                  country: true,
+                },
+              },
+              destinationCity: {
+                select: {
+                  id: true,
+                  name: true,
+                  country: true,
+                },
+              },
+            },
+          },
           warehouse: true,
           packages: {
             select: {
@@ -249,7 +225,24 @@ export class PackingListsService {
     const packingList = await this.prisma.packingList.findUnique({
       where: { id },
       include: {
-        container: true,
+        container: {
+          include: {
+            departureCity: {
+              select: {
+                id: true,
+                name: true,
+                country: true,
+              },
+            },
+            destinationCity: {
+              select: {
+                id: true,
+                name: true,
+                country: true,
+              },
+            },
+          },
+        },
         warehouse: true,
         packages: {
           include: {

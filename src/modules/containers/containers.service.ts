@@ -28,12 +28,39 @@ export class ContainersService {
       );
     }
 
+    // Verify departure city exists
+    const departureCity = await this.prisma.city.findUnique({
+      where: { id: createContainerDto.departureCityId },
+    });
+
+    if (!departureCity) {
+      throw new NotFoundException(
+        `City with ID ${createContainerDto.departureCityId} not found`,
+      );
+    }
+
+    // Verify destination city exists
+    const destinationCity = await this.prisma.city.findUnique({
+      where: { id: createContainerDto.destinationCityId },
+    });
+
+    if (!destinationCity) {
+      throw new NotFoundException(
+        `City with ID ${createContainerDto.destinationCityId} not found`,
+      );
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       const container = await tx.container.create({
         data: {
-          ...createContainerDto,
+          containerNumber: createContainerDto.containerNumber,
+          containerType: createContainerDto.containerType,
           loadingDate: new Date(createContainerDto.loadingDate),
           eta: new Date(createContainerDto.eta),
+          departureCityId: createContainerDto.departureCityId,
+          destinationCityId: createContainerDto.destinationCityId,
+          status: createContainerDto.status || ContainerStatus.PLANNED,
+          notes: createContainerDto.notes,
         },
         include: {
           packingLists: true,
@@ -83,15 +110,19 @@ export class ContainersService {
 
     if (filters?.departureCity) {
       where.departureCity = {
-        contains: filters.departureCity,
-        mode: 'insensitive',
+        name: {
+          contains: filters.departureCity,
+          mode: 'insensitive',
+        },
       };
     }
 
     if (filters?.destinationCity) {
       where.destinationCity = {
-        contains: filters.destinationCity,
-        mode: 'insensitive',
+        name: {
+          contains: filters.destinationCity,
+          mode: 'insensitive',
+        },
       };
     }
 

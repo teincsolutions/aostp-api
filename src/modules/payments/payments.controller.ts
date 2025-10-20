@@ -47,7 +47,6 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Hubtel payment callback' })
   @ApiResponse({ status: 200, description: 'Callback processed' })
   @ApiResponse({ status: 400, description: 'Invalid callback data' })
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async hubtelCallback(
     @Body() callbackData: any,
   ): Promise<{ status: 'success' | 'failed' }> {
