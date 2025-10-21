@@ -46,9 +46,9 @@ export class HubtelProvider implements PaymentGatewayProvider {
   private readonly logger = new Logger(HubtelProvider.name);
   private readonly baseUrl: string;
   private readonly posSalesId: string;
-  private readonly username: string;
-  private readonly password: string;
+  private readonly apiId: string;
   private readonly apiKey: string;
+  private readonly callbackUrl: string;
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl = this.configService.get<string>(
@@ -56,9 +56,12 @@ export class HubtelProvider implements PaymentGatewayProvider {
       'https://invoicing.hubtel.com',
     );
     this.posSalesId = this.configService.get<string>('HUBTEL_POS_SALES_ID', '');
-    this.username = this.configService.get<string>('HUBTEL_USERNAME', '');
-    this.password = this.configService.get<string>('HUBTEL_PASSWORD', '');
+    this.apiId = this.configService.get<string>('HUBTEL_API_ID', '');
     this.apiKey = this.configService.get<string>('HUBTEL_API_KEY', '');
+    this.callbackUrl = this.configService.get<string>(
+      'HUBTEL_CALLBACK_URL',
+      '',
+    );
 
     if (!this.apiKey) {
       this.logger.warn('HubtelProvider: Hubtel API key not configured');
@@ -88,7 +91,7 @@ export class HubtelProvider implements PaymentGatewayProvider {
             unitPrice: data.amount,
           },
         ],
-        callbackUrl: data.metadata?.callbackUrl || '',
+        callbackUrl: this.callbackUrl,
         reminders: data.metadata?.reminders || [
           {
             days: 5,
@@ -108,7 +111,7 @@ export class HubtelProvider implements PaymentGatewayProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`).toString('base64')}`,
+          Authorization: `Basic ${Buffer.from(`${this.apiId}:${this.apiKey}`).toString('base64')}`,
           'Cache-Control': 'no-cache',
         },
         body: JSON.stringify(invoicePayload),
@@ -200,7 +203,7 @@ export class HubtelProvider implements PaymentGatewayProvider {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`).toString('base64')}`,
+          Authorization: `Basic ${Buffer.from(`${this.apiId}:${this.apiKey}`).toString('base64')}`,
           'Cache-Control': 'no-cache',
         },
       });

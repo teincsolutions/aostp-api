@@ -71,6 +71,14 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentGatewayStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
 enum InvoiceStatus {
   PAID
   UNPAID
@@ -448,26 +456,30 @@ model Invoice {
 }
 
 model Payment {
-  id              String        @id @default(uuid())
-  paymentCode     String        @unique
-  customerId      String
-  customer        Customer      @relation(fields: [customerId], references: [id])
-  amount          Float
-  currency        String
-  exchangeRateId  String
-  exchangeRate    ExchangeRate  @relation(fields: [exchangeRateId], references: [id])
-  localAmount     Float
-  paymentMethod   String        // CASH, BANK_TRANSFER, MOBILE_MONEY, etc.
-  reference       String?       // Transaction reference
-  notes           String?
-  processedById   String
-  processedBy     User          @relation("PaymentProcessedBy", fields: [processedById], references: [id])
-  processedAt     DateTime      @default(now())
-  createdAt       DateTime      @default(now())
-  
+  id                 String                  @id @default(uuid())
+  paymentCode        String                  @unique
+  customerId         String
+  customer           Customer                @relation(fields: [customerId], references: [id])
+  amount             Float
+  currency           String
+  exchangeRateId     String
+  exchangeRate       ExchangeRate            @relation(fields: [exchangeRateId], references: [id])
+  localAmount        Float
+  paymentMethod      String                  // CASH, BANK_TRANSFER, MOBILE_MONEY, etc.
+  reference          String?                 // Transaction reference
+  notes              String?
+  processedById      String
+  processedBy        User                    @relation("PaymentProcessedBy", fields: [processedById], references: [id])
+  processedAt        DateTime                @default(now())
+  createdAt          DateTime                @default(now())
+
+  // Gateway integration fields
+  gatewayTransactionId String?                 // ID from payment gateway (e.g. Hubtel checkout ID)
+  gatewayStatus       PaymentGatewayStatus?   // Status from payment gateway
+
   // Relations
-  invoices        Invoice[]
-  
+  invoices           Invoice[]
+
   @@index([paymentCode])
   @@index([customerId])
 }

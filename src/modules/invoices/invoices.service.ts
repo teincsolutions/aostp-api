@@ -54,12 +54,8 @@ export class InvoicesService {
                 lastName: true,
               },
             },
-            items: true, // Include package items now
-          },
-          include: {
+            items: true,
             warehouse: true,
-            customer: true,
-            items: true, // Include package items now
           },
         },
         container: true,
@@ -187,32 +183,6 @@ export class InvoicesService {
     }
 
     return invoices;
-  }
-
-  private async generateInvoiceNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `INV${year}`;
-
-    const lastInvoice = await this.prisma.invoice.findFirst({
-      where: {
-        invoiceNumber: {
-          startsWith: prefix,
-        },
-      },
-      orderBy: {
-        invoiceNumber: 'desc',
-      },
-    });
-
-    let sequence = 1;
-    if (lastInvoice) {
-      const lastSequence = parseInt(
-        lastInvoice.invoiceNumber.replace(prefix, ''),
-      );
-      sequence = lastSequence + 1;
-    }
-
-    return `${prefix}${sequence.toString().padStart(6, '0')}`;
   }
 
   private async getShippingRate(

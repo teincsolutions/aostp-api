@@ -9,7 +9,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
-import { PaymentStatus as GatewayPaymentStaus } from '../../providers/payment-gateway/payment-gateway.interface';
+import { PaymentStatus as GatewayPaymentStatus } from '../../providers/payment-gateway/payment-gateway.interface';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
@@ -100,10 +100,75 @@ export class PaymentsService {
     // Calculate local amount using exchange rate
     const localAmount = amount * exchangeRate.rate;
 
-    // Generate payment code (receipt number)
-    const paymentCode = await this.idGeneratorService.generateReceiptNumber();
+    // Check if this is a gateway payment method
+    const isGatewayPayment = paymentMethod === 'MOBILE_MONEY';
+
+    // For gateway payments, process through gateway first but DON'T update invoices yet
+    let gatewayResult: any = null;
+    let paymentCode = await this.idGeneratorService.generateReceiptNumber();
+
+    if (isGatewayPayment) {
+      try {
+        gatewayResult = await this.paymentGatewayService.processPayment(
+          paymentMethod,
+          {
+            amount: localAmount,
+            currency: 'GHS',
+            customerEmail: customer.email || undefined,
+            customerPhone: customer.phoneNumber,
+            customerName: `${customer.firstName} ${customer.lastName}`,
+            reference: paymentCode,
+            description: `Payment for invoices: ${invoicesToPay.map((inv: any) => inv.invoiceNumber).join(', ')}`,
+            metadata: {
+              userId,
+              customerCode: customer.customerCode,
+              paymentMethod,
+            },
+          },
+        );
+
+        if (!gatewayResult.success) {
+          throw new BadRequestException(
+            `Gateway payment initiation failed: ${gatewayResult.errorMessage}`,
+          );
+        }
+
+        // Use gateway transaction ID as payment code if available
+        if (gatewayResult.gatewayTransactionId) {
+          paymentCode = gatewayResult.gatewayTransactionId;
+        }
+
+        this.logger.log(
+          `Gateway payment initiated: ${paymentCode} - Status: ${gatewayResult.status}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Gateway payment initiation failed: ${error.message}`,
+        );
+        throw new BadRequestException(
+          `Failed to initiate gateway payment: ${error.message}`,
+        );
+      }
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Prepare payment notes with gateway info for gateway payments
+      let paymentNotes = notes;
+      if (isGatewayPayment && gatewayResult) {
+        const notesParts: string[] = [];
+        if (notes) notesParts.push(notes);
+        if (gatewayResult.paymentUrl) {
+          notesParts.push(`GATEWAY PAYMENT URL: ${gatewayResult.paymentUrl}`);
+        }
+        notesParts.push(`GATEWAY STATUS: PENDING`);
+        if (gatewayResult.gatewayTransactionId) {
+          notesParts.push(
+            `GATEWAY TRANSACTION ID: ${gatewayResult.gatewayTransactionId}`,
+          );
+        }
+        paymentNotes = notesParts.join('\n');
+      }
+
       // Create payment
       const payment = await tx.payment.create({
         data: {
@@ -119,7 +184,7 @@ export class PaymentsService {
           localAmount,
           paymentMethod,
           reference,
-          notes,
+          notes: paymentNotes,
           processedBy: {
             connect: { id: userId },
           },
@@ -138,8 +203,21 @@ export class PaymentsService {
         },
       });
 
-      // Link payment to invoices if specified
-      if (invoiceIds && invoiceIds.length > 0) {
+      // For gateway payments, link to invoices but DON'T update their status yet
+      // The actual payment application happens on successful callback
+      if (isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
+        // Store intended invoice IDs in notes for later processing
+        const updatedNotes = payment.notes
+          ? `${payment.notes}\nINTENDED INVOICES: ${invoiceIds.join(',')}`
+          : `INTENDED INVOICES: ${invoiceIds.join(',')}`;
+
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { notes: updatedNotes },
+        });
+      }
+      // For non-gateway payments, apply payment immediately as before
+      else if (!isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
         // Create payment-invoice relationships
         await tx.$executeRaw`
           INSERT INTO "_InvoiceToPayment" ("A", "B")
@@ -201,6 +279,7 @@ export class PaymentsService {
             invoiceCount: invoiceIds ? invoiceIds.length : 0,
             localAmount,
             paymentMethod,
+            isGatewayPayment,
           },
         },
       });
@@ -213,32 +292,6 @@ export class PaymentsService {
     );
 
     return result;
-  }
-
-  private async generatePaymentCode(): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `PAY${year}`;
-
-    const lastPayment = await this.prisma.payment.findFirst({
-      where: {
-        paymentCode: {
-          startsWith: prefix,
-        },
-      },
-      orderBy: {
-        paymentCode: 'desc',
-      },
-    });
-
-    let sequence = 1;
-    if (lastPayment) {
-      const lastSequence = parseInt(
-        lastPayment.paymentCode.replace(prefix, ''),
-      );
-      sequence = lastSequence + 1;
-    }
-
-    return `${prefix}${sequence.toString().padStart(6, '0')}`;
   }
 
   async findAll(
@@ -648,7 +701,7 @@ export class PaymentsService {
       );
 
       // Add any gateway validation errors
-      if (gatewayStatus === GatewayPaymentStaus.FAILED) {
+      if (gatewayStatus === GatewayPaymentStatus.FAILED) {
         discrepancies.push('Gateway status indicates failed payment');
       }
     } catch (error) {
@@ -785,23 +838,159 @@ export class PaymentsService {
   }
 
   private async processHubtelSuccessCallback(data: any): Promise<void> {
-    // TODO: Implement actual payment lookup using Data.CheckoutId
-    // Map CheckoutId back to our payment record
-    // Update payment status to COMPLETED
-    // Update associated invoices
-    // Log the successful payment
+    const { CheckoutId, ReceiptNumber } = data;
+
+    // Find payment by CheckoutId (which should be paymentCode)
+    const payment = await this.prisma.payment.findUnique({
+      where: { paymentCode: CheckoutId },
+      include: {
+        invoices: true,
+        customer: true,
+      },
+    });
+
+    if (!payment) {
+      this.logger.warn(`Payment not found for CheckoutId: ${CheckoutId}`);
+      return;
+    }
+
+    if (payment.paymentMethod !== 'MOBILE_MONEY') {
+      this.logger.warn(`Payment ${CheckoutId} is not a mobile money payment`);
+      return;
+    }
+
+    // Extract intended invoice IDs from notes
+    const notesLines = payment.notes?.split('\n') || [];
+    const intendedInvoicesLine = notesLines.find((line) =>
+      line.startsWith('INTENDED INVOICES:'),
+    );
+    const invoiceIds =
+      intendedInvoicesLine
+        ?.replace('INTENDED INVOICES:', '')
+        .trim()
+        .split(',')
+        .map((id) => id.trim()) || [];
+
+    if (invoiceIds.length === 0) {
+      this.logger.warn(`No intended invoices found for payment ${CheckoutId}`);
+      return;
+    }
+
+    // Verify invoices still exist and belong to customer
+    const invoicesToPay = await this.prisma.invoice.findMany({
+      where: {
+        id: { in: invoiceIds },
+        customerId: payment.customerId,
+        status: {
+          in: [InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID],
+        },
+      },
+    });
+
+    if (invoicesToPay.length === 0) {
+      this.logger.warn(`No valid invoices found for payment ${CheckoutId}`);
+      return;
+    }
+
+    // Apply the payment to invoices (similar to the create method logic)
+    await this.prisma.$transaction(async (tx) => {
+      // Create payment-invoice relationships
+      await tx.$executeRaw`
+        INSERT INTO "_InvoiceToPayment" ("A", "B")
+        SELECT unnest(${invoiceIds}::text[]) as "A", ${payment.id} as "B"
+      `;
+
+      // Update invoice paid amounts and status
+      let remainingAmount = payment.amount;
+      for (const invoice of invoicesToPay) {
+        const outstandingAmount = invoice.totalAmount - invoice.paidAmount;
+        const paymentAmount = Math.min(remainingAmount, outstandingAmount);
+
+        const newPaidAmount = invoice.paidAmount + paymentAmount;
+        const newBalance = invoice.totalAmount - newPaidAmount;
+        const newStatus =
+          newPaidAmount >= invoice.totalAmount
+            ? InvoiceStatus.PAID
+            : newPaidAmount > invoice.paidAmount
+              ? InvoiceStatus.PARTIALLY_PAID
+              : invoice.status;
+
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            paidAmount: newPaidAmount,
+            balance: newBalance,
+            status: newStatus,
+          },
+        });
+
+        // Update package payment status if invoice is fully paid
+        if (newStatus === InvoiceStatus.PAID) {
+          await tx.package.updateMany({
+            where: { id: invoice.packageId || '' },
+            data: { paymentStatus: PaymentStatus.PAID },
+          });
+        } else if (newPaidAmount > 0) {
+          await tx.package.updateMany({
+            where: { id: invoice.packageId || '' },
+            data: { paymentStatus: PaymentStatus.PARTIAL },
+          });
+        }
+
+        remainingAmount -= paymentAmount;
+        if (remainingAmount <= 0) break;
+      }
+
+      // Update payment notes with success information and completed status
+      const updatedNotes = payment.notes
+        ? `${payment.notes}\nGATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber}`
+        : `GATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber}`;
+
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { notes: updatedNotes },
+      });
+    });
+
     this.logger.log(
-      `Hubtel success callback for ${data.CheckoutId}: ${data.ReceiptNumber}`,
+      `Hubtel success callback processed for payment ${CheckoutId}: ${ReceiptNumber}`,
     );
   }
 
   private async processHubtelFailedCallback(data: any): Promise<void> {
-    // TODO: Implement actual payment lookup using Data.CheckoutId
-    // Map CheckoutId back to our payment record
-    // Update payment status to FAILED
-    // Log the failed payment reason
+    const { CheckoutId, Description } = data;
+
+    // Find payment by CheckoutId (which should be paymentCode)
+    const payment = await this.prisma.payment.findUnique({
+      where: { paymentCode: CheckoutId },
+      include: {
+        invoices: true,
+        customer: true,
+      },
+    });
+
+    if (!payment) {
+      this.logger.warn(`Payment not found for CheckoutId: ${CheckoutId}`);
+      return;
+    }
+
+    if (payment.paymentMethod !== 'MOBILE_MONEY') {
+      this.logger.warn(`Payment ${CheckoutId} is not a mobile money payment`);
+      return;
+    }
+
+    // Update payment notes with failure information
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        notes: payment.notes
+          ? `${payment.notes}\nGATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}`
+          : `GATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}`,
+      },
+    });
+
     this.logger.log(
-      `Hubtel failed callback for ${data.CheckoutId}: ${data.Description}`,
+      `Hubtel failed callback processed for payment ${CheckoutId}: ${Description}`,
     );
   }
 
@@ -841,17 +1030,8 @@ export class PaymentsService {
       throw new NotFoundException(`Payment with ID ${paymentId} not found`);
     }
 
-    // Get company information (config-based)
-    const companyInfo = {
-      name: 'AOSTP Logistics',
-      address: 'Accra, Ghana',
-      phone: '+233 XX XXX XXXX',
-      email: 'info@aostp.com',
-    };
-
     // Prepare receipt data with payment information
     const receiptData = {
-      company: companyInfo,
       receipt: {
         number: payment.paymentCode,
         date: payment.processedAt.toLocaleDateString(),

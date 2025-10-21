@@ -123,12 +123,6 @@ export interface PackageIntakeData extends PDFTemplateData {
 // Payment receipt (monochrome) + package summary
 // =====================
 export interface ReceiptData extends PDFTemplateData {
-  company: {
-    name: string;
-    address: string;
-    phone: string;
-    email: string;
-  };
   receipt: {
     number: string;
     date: string;
@@ -509,7 +503,7 @@ export class PDFService {
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont).fillColor('#000');
     writeLineClamped(
       doc,
-      safe(data.company.name),
+      safe(this.companyInfo.name),
       L + 40,
       LAYOUT.topY,
       contentW - 60 - LAYOUT.dateBoxW - 6,
@@ -531,14 +525,14 @@ export class PDFService {
     );
 
     // Address small (below date box)
-    if (safe(data.company.address)) {
+    if (safe(this.companyInfo.address)) {
       doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
       writeLineClamped(
         doc,
-        safe(data.company.address),
+        safe(this.companyInfo.address),
         dateBoxX - 20,
         dateBoxY + LAYOUT.dateBoxH + 4,
-        100,
+        130,
         'right',
       );
     }

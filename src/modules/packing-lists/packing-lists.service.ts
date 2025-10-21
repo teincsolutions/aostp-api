@@ -791,13 +791,16 @@ export class PackingListsService {
     for (const invoice of invoices) {
       try {
         // Prepare invoice data for PDF generation
+        // Prepare invoice data for PDF generation similar to packing-lists service
+        // Get company info from PDF service (which uses config)
+        const companyInfo = {
+          name: 'AOSTP Logistics',
+          address: 'Accra, Ghana',
+          phone: '+233 XX XXX XXXX',
+          email: 'info@aostp.com',
+        };
         const pdfData = {
-          company: {
-            name: 'AOSTP Logistics',
-            address: '123 Logistics Street, Business City',
-            phone: '+1-555-0123',
-            email: 'billing@aostp.com',
-          },
+          company: companyInfo,
           invoice: {
             number: invoice.invoiceNumber,
             date: invoice.createdAt.toISOString().split('T')[0],
@@ -817,12 +820,46 @@ export class PackingListsService {
                 loadingDate: invoice.packingList.loadingDate
                   .toISOString()
                   .split('T')[0],
-                origin: invoice.packingList.origin || 'Unknown',
-                destination: invoice.packingList.destinationCity || 'Unknown',
+                origin:
+                  invoice.packingList.container.departureCity?.name ||
+                  'Unknown',
+                destination:
+                  invoice.packingList.container.destinationCity?.name ||
+                  'Unknown',
               }
             : undefined,
+          package: invoice.package
+            ? {
+                trackingCode: invoice.package.trackingCode,
+                description: invoice.package.description,
+                shippingMode: invoice.package.shippingMode,
+                airType: invoice.package.airShippingType,
+                quantity: invoice.package.quantity,
+                weightKg: invoice.package.weight,
+                cbm: invoice.package.cbm,
+                destinationCity: invoice.package.destinationCity,
+                warehouse: invoice.package.warehouse?.name,
+              }
+            : undefined,
+          // Use package items directly
+          items:
+            invoice.package?.items?.map((item) => ({
+              description: item.description || '',
+              quantity: item.quantity,
+              unitPrice:
+                invoice.package.shippingMode === 'SEA'
+                  ? (item.cbm || 0) *
+                    (invoice.totalAmount / (invoice.package.quantity || 1))
+                  : (item.weight || 0) *
+                    (invoice.totalAmount / (invoice.package.quantity || 1)),
+              total:
+                (invoice.totalAmount / (invoice.package.quantity || 1)) *
+                item.quantity,
+            })) || [],
           totals: {
             total: invoice.totalAmount,
+            paid: invoice.paidAmount || 0,
+            balance: invoice.balance,
             currency: invoice.currency,
           },
           currency: invoice.currency,

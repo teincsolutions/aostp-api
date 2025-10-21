@@ -22,6 +22,7 @@ export class PaymentGatewayService {
     this.providers.set('CASH', cashProvider);
     this.providers.set('BANK_TRANSFER', bankTransferProvider);
     this.providers.set('HUBTEL', hubtelProvider);
+    this.providers.set('MOBILE_MONEY', hubtelProvider); // Mobile money uses Hubtel provider
   }
 
   /**
