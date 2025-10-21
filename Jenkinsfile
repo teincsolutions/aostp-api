@@ -151,7 +151,10 @@ pipeline {
                                                 string(credentialsId: 's3-logs-bucket-prod', variable: 'AWS_LOGS_BUCKET_NAME'),
                                             string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
                                             string(credentialsId: 'jwt-refresh-secret-prod', variable: 'JWT_REFRESH_SECRET'),
-                                            string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY')]) {
+                                            string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY'),
+                                            string(credentialsId: 'hubtel-api-id-prod', variable: 'HUBTEL_API_ID'),
+                                            string(credentialsId: 'hubtel-api-key-prod', variable: 'HUBTEL_API_KEY'),
+                                            string(credentialsId: 'hubtel-pos-sales-id-prod', variable: 'HUBTEL_POS_SALES_ID')]) {
                     sh '''
                         if [ -f .env.example ]; then
                               envsubst < .env.example > .env.production
