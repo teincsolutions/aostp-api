@@ -805,68 +805,165 @@ export class PaymentsService {
   }
 
   /**
-   * Process Hubtel callback when payment status is received from hubtel
+   * Generic payment callback processor that works with any payment provider
+   * Uses flexible lookup strategies to find payments based on callback data
    */
-  async processHubtelCallback(
+  async processPaymentCallback(
+    paymentMethod: string,
     callbackData: any,
   ): Promise<{ status: 'success' | 'failed' }> {
     try {
       this.logger.log(
-        `Processing Hubtel callback: ${JSON.stringify(callbackData)}`,
+        `Processing ${paymentMethod} callback: ${JSON.stringify(callbackData)}`,
       );
 
-      // Validate callback data matches the expected Hubtel structure
-      const { ResponseCode, Data } = callbackData;
+      // Extract relevant fields from callback data - provider agnostic
+      const extractedData = this.extractPaymentCallbackData(callbackData);
 
-      if (ResponseCode === '0000' || ResponseCode === '0001') {
-        // 0000 = Success, 0001 = Pending/Accepted
-        await this.processHubtelSuccessCallback(Data);
+      if (extractedData.status === 'success') {
+        await this.processPaymentSuccessCallback(paymentMethod, extractedData);
         return { status: 'success' };
-      } else if (ResponseCode && parseInt(ResponseCode) >= 4000) {
-        // Hubtel uses 4xxx-5xxx codes for failures
-        await this.processHubtelFailedCallback(Data);
-        return { status: 'success' }; // Return success to acknowledge receipt
+      } else if (extractedData.status === 'failed') {
+        await this.processPaymentFailedCallback(paymentMethod, extractedData);
+        return { status: 'success' }; // Still acknowledge receipt
       }
 
-      this.logger.warn(`Unknown Hubtel callback ResponseCode: ${ResponseCode}`);
-      return { status: 'success' }; // Acknowledge receipt regardless
+      this.logger.warn(
+        `Unknown callback status for ${paymentMethod}: ${extractedData.status}`,
+      );
+      return { status: 'success' };
     } catch (error) {
       this.logger.error(
-        `Hubtel callback processing failed: ${error.message}`,
+        `${paymentMethod} callback processing failed: ${error.message}`,
         error.stack,
       );
       return { status: 'failed' };
     }
   }
 
-  private async processHubtelSuccessCallback(data: any): Promise<void> {
-    const { TransactionId, ReceiptNumber, ClientReference, Amount } = data;
+  /**
+   * Extract payment callback data in a provider-agnostic way
+   * Maps various callback formats to a standardized interface
+   */
+  private extractPaymentCallbackData(callbackData: any): {
+    status: 'success' | 'failed' | 'unknown';
+    transactionId?: string;
+    clientReference?: string;
+    amount?: number;
+    description?: string;
+    receiptNumber?: string;
+    additionalData?: any;
+  } {
+    // Handle Hubtel callback format
+    if (callbackData.ResponseCode !== undefined) {
+      const { ResponseCode, Data } = callbackData;
+      if (ResponseCode === '0000' || ResponseCode === '0001') {
+        return {
+          status: 'success',
+          transactionId: Data.TransactionId,
+          clientReference: Data.ClientReference,
+          amount: Data.Amount,
+          description: Data.Description,
+          receiptNumber: Data.ReceiptNumber,
+          additionalData: Data,
+        };
+      } else if (ResponseCode && parseInt(ResponseCode) >= 4000) {
+        return {
+          status: 'failed',
+          transactionId: Data?.TransactionId,
+          clientReference: Data?.ClientReference,
+          description: Data?.Description,
+          additionalData: Data,
+        };
+      }
+    }
 
-    // Find payment by TransactionId (which was set as paymentCode during creation)
-    const payment = await this.prisma.payment.findUnique({
-      where: { paymentCode: TransactionId },
-      include: {
-        invoices: true,
-        customer: true,
-      },
-    });
+    // Add other provider formats here as needed (e.g., PayPal, Stripe, etc.)
+    // Example for a generic provider:
+    // if (callbackData.status === 'completed') {
+    //   return {
+    //     status: 'success',
+    //     transactionId: callbackData.transaction_id,
+    //     clientReference: callbackData.reference,
+    //     amount: callbackData.amount,
+    //     description: callbackData.description,
+    //     additionalData: callbackData,
+    //   };
+    // }
+
+    return {
+      status: 'unknown',
+      additionalData: callbackData,
+    };
+  }
+
+  /**
+   * Find payment using flexible lookup strategies
+   * Tries multiple fields to locate the payment regardless of provider structure
+   */
+  private async findPaymentByCallbackData(data: {
+    transactionId?: string;
+    clientReference?: string;
+  }): Promise<any> {
+    // Try lookup strategies in order of preference
+
+    // 1. By client reference (our internal payment code)
+    if (data.clientReference) {
+      const payment = await this.prisma.payment.findUnique({
+        where: { paymentCode: data.clientReference },
+        include: { invoices: true, customer: true },
+      });
+      if (payment) return payment;
+    }
+
+    // 2. By transactionId (could be either paymentCode or stored gatewayTransactionId)
+    if (data.transactionId) {
+      const payment = await this.prisma.payment.findUnique({
+        where: { paymentCode: data.transactionId },
+        include: { invoices: true, customer: true },
+      });
+      if (payment) return payment;
+
+      // Try finding by gatewayTransactionId
+      const payments = await this.prisma.payment.findMany({
+        where: { gatewayTransactionId: data.transactionId },
+        include: { invoices: true, customer: true },
+      });
+      if (payments.length > 0) return payments[0];
+    }
+
+    return null;
+  }
+
+  private async processPaymentSuccessCallback(
+    paymentMethod: string,
+    data: any,
+  ): Promise<void> {
+    // Find payment using flexible lookup
+    const payment = await this.findPaymentByCallbackData(data);
 
     if (!payment) {
-      this.logger.warn(`Payment not found for TransactionId: ${TransactionId}`);
+      this.logger.warn(`Payment not found for callback data: ${JSON.stringify(data)}`);
       return;
     }
 
-    if (payment.paymentMethod !== 'MOBILE_MONEY') {
+    if (payment.paymentMethod !== paymentMethod) {
       this.logger.warn(
-        `Payment ${TransactionId} is not a mobile money payment`,
+        `Payment ${payment.paymentCode} method mismatch: expected ${paymentMethod}, got ${payment.paymentMethod}`,
       );
-      return;
+      return; // Allow different payment methods to be processed
     }
 
     // Log successful payment completion
     this.logger.log(
-      `Hubtel payment succeeded - TransactionId: ${TransactionId}, Amount: ${Amount}, Receipt: ${ReceiptNumber}`,
+      `${paymentMethod} payment succeeded - ID: ${payment.paymentCode}, Gateway TXN: ${payment.gatewayTransactionId}, Amount: ${data.amount}`,
     );
+
+    // Store gateway transaction ID if not already stored
+    const needsGatewayTxnUpdate =
+      !payment.gatewayTransactionId && data.transactionId;
+
+    const gatewayTxnId = data.transactionId;
 
     // Extract intended invoice IDs from notes
     const notesLines = payment.notes?.split('\n') || [];
@@ -882,7 +979,7 @@ export class PaymentsService {
 
     if (invoiceIds.length === 0) {
       this.logger.warn(
-        `No intended invoices found for payment ${TransactionId}`,
+        `No intended invoices found for payment ${payment.paymentCode}`,
       );
       return;
     }
@@ -899,11 +996,11 @@ export class PaymentsService {
     });
 
     if (invoicesToPay.length === 0) {
-      this.logger.warn(`No valid invoices found for payment ${TransactionId}`);
+      this.logger.warn(`No valid invoices found for payment ${payment.paymentCode}`);
       return;
     }
 
-    // Apply the payment to invoices (similar to the create method logic)
+    // Apply the payment to invoices
     await this.prisma.$transaction(async (tx) => {
       // Create payment-invoice relationships
       await tx.$executeRaw`
@@ -952,64 +1049,103 @@ export class PaymentsService {
         if (remainingAmount <= 0) break;
       }
 
-      // Update payment notes with success information and completed status
-      const updatedNotes = payment.notes
-        ? `${payment.notes}\nGATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber || 'N/A'}\nCLIENT REFERENCE: ${ClientReference}`
-        : `GATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber || 'N/A'}\nCLIENT REFERENCE: ${ClientReference}`;
+      // Prepare update data
+      const updateData: any = {};
 
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { notes: updatedNotes },
-      });
+      // Update gateway transaction ID if needed
+      if (needsGatewayTxnUpdate && gatewayTxnId) {
+        updateData.gatewayTransactionId = gatewayTxnId;
+      }
+
+      // Update gateway status
+      if (gatewayTxnId) {
+        updateData.gatewayStatus = GatewayPaymentStatus.COMPLETED;
+      }
+
+      // Update payment notes with success information
+      const successNotes = [
+        `GATEWAY STATUS: COMPLETED`,
+        data.receiptNumber ? `${paymentMethod.toUpperCase()} RECEIPT: ${data.receiptNumber}` : null,
+        data.clientReference ? `CLIENT REFERENCE: ${data.clientReference}` : null,
+        data.description ? `DESCRIPTION: ${data.description}` : null,
+        gatewayTxnId ? `GATEWAY TRANSACTION ID: ${gatewayTxnId}` : null,
+      ].filter(Boolean).join('\n');
+
+      updateData.notes = payment.notes
+        ? `${payment.notes}\n${successNotes}`
+        : successNotes;
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: updateData,
+        });
+      }
     });
 
     this.logger.log(
-      `Hubtel success callback processed for payment ${TransactionId}: ${ReceiptNumber}`,
+      `${paymentMethod} success callback processed for payment ${payment.paymentCode}`,
     );
   }
 
-  private async processHubtelFailedCallback(data: any): Promise<void> {
-    const { TransactionId, Description, ClientReference } = data;
-
-    // Find payment by TransactionId (which was set as paymentCode during creation)
-    const payment = await this.prisma.payment.findUnique({
-      where: { paymentCode: TransactionId },
-      include: {
-        invoices: true,
-        customer: true,
-      },
-    });
+  private async processPaymentFailedCallback(
+    paymentMethod: string,
+    data: any,
+  ): Promise<void> {
+    // Find payment using flexible lookup
+    const payment = await this.findPaymentByCallbackData(data);
 
     if (!payment) {
-      this.logger.warn(`Payment not found for TransactionId: ${TransactionId}`);
+      this.logger.warn(`Payment not found for failed callback data: ${JSON.stringify(data)}`);
       return;
     }
 
-    if (payment.paymentMethod !== 'MOBILE_MONEY') {
+    if (payment.paymentMethod !== paymentMethod) {
       this.logger.warn(
-        `Payment ${TransactionId} is not a mobile money payment`,
+        `Payment ${payment.paymentCode} method mismatch: expected ${paymentMethod}, got ${payment.paymentMethod}`,
       );
       return;
     }
 
     // Log failed payment
     this.logger.log(
-      `Hubtel payment failed - TransactionId: ${TransactionId}, Reason: ${Description}`,
+      `${paymentMethod} payment failed - ID: ${payment.paymentCode}, Reason: ${data.description}`,
     );
 
-    // Update payment notes with failure information
-    const updatedNotes = payment.notes
-      ? `${payment.notes}\nGATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}\nCLIENT REFERENCE: ${ClientReference}`
-      : `GATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}\nCLIENT REFERENCE: ${ClientReference}`;
+    // Update payment with failure information
+    const failureNotes = [
+      `GATEWAY STATUS: FAILED`,
+      data.description ? `${paymentMethod.toUpperCase()} FAILED: ${data.description}` : `Payment failed`,
+      data.clientReference ? `CLIENT REFERENCE: ${data.clientReference}` : null,
+      data.transactionId ? `TRANSACTION ID: ${data.transactionId}` : null,
+    ].filter(Boolean).join('\n');
+
+    const updateData: any = {
+      notes: payment.notes
+        ? `${payment.notes}\n${failureNotes}`
+        : failureNotes,
+    };
+
+    // Update gateway status if tracking it
+    if (payment.gatewayStatus !== GatewayPaymentStatus.FAILED) {
+      updateData.gatewayStatus = GatewayPaymentStatus.FAILED;
+    }
 
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { notes: updatedNotes },
+      data: updateData,
     });
 
     this.logger.log(
-      `Hubtel failed callback processed for payment ${TransactionId}: ${Description}`,
+      `${paymentMethod} failed callback processed for payment ${payment.paymentCode}: ${data.description}`,
     );
+  }
+
+  // Legacy method - redirect to generic processor
+  async processHubtelCallback(
+    callbackData: any,
+  ): Promise<{ status: 'success' | 'failed' }> {
+    return this.processPaymentCallback('MOBILE_MONEY', callbackData);
   }
 
   /**
