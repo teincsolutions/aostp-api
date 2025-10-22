@@ -61,7 +61,7 @@ export class PaymentsController {
   ): Promise<{ status: 'success' | 'failed' }> {
     try {
       // Verify the signed token to ensure callback authenticity
-      const tokenData = this.paymentsService.verifyCallbackToken(token);
+      const tokenData = await this.paymentsService.verifyCallbackToken(token);
 
       this.logger.log(
         `Verified callback token for payment ${tokenData.paymentCode}`,
@@ -176,28 +176,5 @@ export class PaymentsController {
     @Request() req: any,
   ) {
     return this.paymentsService.update(id, updatePaymentDto, req.user.id);
-  }
-
-  @Post(':id/refund')
-  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Request a refund for a payment' })
-  @ApiResponse({ status: 200, description: 'Refund request processed' })
-  @ApiResponse({ status: 404, description: 'Payment not found' })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid refund amount or other validation error',
-  })
-  requestRefund(
-    @Param('id') id: string,
-    @Body('refundAmount') refundAmount: number,
-    @Body('reason') reason: string,
-    @Request() req: any,
-  ) {
-    return this.paymentsService.processRefund(
-      id,
-      refundAmount,
-      reason,
-      req.user.id,
-    );
   }
 }

@@ -3,13 +3,18 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
-import { PaymentStatus as GatewayPaymentStatus } from '../../providers/payment-gateway/payment-gateway.interface';
+import {
+  PaymentStatus as GatewayPaymentStatus,
+  PaymentResult,
+} from '../../providers/payment-gateway/payment-gateway.interface';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
@@ -106,10 +111,10 @@ export class PaymentsService {
     const isGatewayPayment = paymentMethod === 'MOBILE_MONEY';
 
     // For gateway payments, process through gateway first but DON'T update invoices yet
-    let gatewayResult: any = null;
+    let gatewayResult: PaymentResult | null = null;
     let gatewayTransactionId: string | null = null;
 
-    let paymentCode = await this.idGeneratorService.generateReceiptNumber();
+    const paymentCode = await this.idGeneratorService.generateReceiptNumber();
 
     if (isGatewayPayment) {
       try {
@@ -143,12 +148,9 @@ export class PaymentsService {
             `Gateway payment initiation failed: ${gatewayResult.errorMessage}`,
           );
         }
-
         // Use gateway transaction ID as payment code if available
-        if (gatewayResult.gatewayTransactionId) {
-          paymentCode = gatewayResult.gatewayTransactionId;
+        if (gatewayResult.gatewayTransactionId)
           gatewayTransactionId = gatewayResult.gatewayTransactionId;
-        }
 
         this.logger.log(
           `Gateway payment initiated: ${paymentCode} - Status: ${gatewayResult.status} - Callback token generated`,
@@ -231,52 +233,13 @@ export class PaymentsService {
       }
       // For non-gateway payments, apply payment immediately as before
       else if (!isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
-        // Create payment-invoice relationships
-        await tx.$executeRaw`
-          INSERT INTO "_InvoiceToPayment" ("A", "B")
-          SELECT unnest(${invoiceIds}::text[]) as "A", ${payment.id} as "B"
-        `;
-
-        // Update invoice paid amounts and status
-        let remainingAmount = amount;
-        for (const invoice of invoicesToPay) {
-          const outstandingAmount = invoice.totalAmount - invoice.paidAmount;
-          const paymentAmount = Math.min(remainingAmount, outstandingAmount);
-
-          const newPaidAmount = invoice.paidAmount + paymentAmount;
-          const newBalance = invoice.totalAmount - newPaidAmount;
-          const newStatus =
-            newPaidAmount >= invoice.totalAmount
-              ? InvoiceStatus.PAID
-              : newPaidAmount > invoice.paidAmount
-                ? InvoiceStatus.PARTIALLY_PAID
-                : invoice.status;
-
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              paidAmount: newPaidAmount,
-              balance: newBalance,
-              status: newStatus,
-            },
-          });
-
-          // Update package payment status if invoice is fully paid
-          if (newStatus === InvoiceStatus.PAID) {
-            await tx.package.updateMany({
-              where: { id: invoice.packageId || '' },
-              data: { paymentStatus: PaymentStatus.PAID },
-            });
-          } else if (newPaidAmount > 0) {
-            await tx.package.updateMany({
-              where: { id: invoice.packageId || '' },
-              data: { paymentStatus: PaymentStatus.PARTIAL },
-            });
-          }
-
-          remainingAmount -= paymentAmount;
-          if (remainingAmount <= 0) break;
-        }
+        await this.applyPaymentToInvoices(
+          tx,
+          payment.id,
+          invoiceIds,
+          amount,
+          invoicesToPay,
+        );
       }
 
       // Log the action
@@ -605,9 +568,6 @@ export class PaymentsService {
     };
   }
 
-  // TODO: Implement refund functionality
-  // This would require proper integration with payment gateways
-  // and more complex business logic for handling refunds
   // Automated reconciliation for payments
   async reconcilePayments(dateFrom?: Date, dateTo?: Date) {
     const where: any = {
@@ -693,6 +653,65 @@ export class PaymentsService {
     return reconciliationResults;
   }
 
+  /**
+   * Helper method to apply payment to invoices
+   * Distributes payment amount across specified invoices
+   */
+  private async applyPaymentToInvoices(
+    tx: Prisma.TransactionClient,
+    paymentId: string,
+    invoiceIds: string[],
+    paymentAmount: number,
+    invoicesToPay: any[],
+  ): Promise<void> {
+    // Create payment-invoice relationships
+    await tx.$executeRaw`
+      INSERT INTO "_InvoiceToPayment" ("A", "B")
+      SELECT unnest(${invoiceIds}::text[]) as "A", ${paymentId} as "B"
+    `;
+
+    // Update invoice paid amounts and status
+    let remainingAmount = paymentAmount;
+    for (const invoice of invoicesToPay) {
+      const outstandingAmount = invoice.totalAmount - invoice.paidAmount;
+      const amountToApply = Math.min(remainingAmount, outstandingAmount);
+
+      const newPaidAmount = invoice.paidAmount + amountToApply;
+      const newBalance = invoice.totalAmount - newPaidAmount;
+      const newStatus =
+        newPaidAmount >= invoice.totalAmount
+          ? InvoiceStatus.PAID
+          : newPaidAmount > invoice.paidAmount
+            ? InvoiceStatus.PARTIALLY_PAID
+            : invoice.status;
+
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount: newPaidAmount,
+          balance: newBalance,
+          status: newStatus,
+        },
+      });
+
+      // Update package payment status if invoice is fully paid
+      if (newStatus === InvoiceStatus.PAID) {
+        await tx.package.updateMany({
+          where: { id: invoice.packageId || '' },
+          data: { paymentStatus: PaymentStatus.PAID },
+        });
+      } else if (newPaidAmount > 0) {
+        await tx.package.updateMany({
+          where: { id: invoice.packageId || '' },
+          data: { paymentStatus: PaymentStatus.PARTIAL },
+        });
+      }
+
+      remainingAmount -= amountToApply;
+      if (remainingAmount <= 0) break;
+    }
+  }
+
   private async performReconciliationChecks(payment: any) {
     const discrepancies: string[] = [];
 
@@ -739,82 +758,6 @@ export class PaymentsService {
       hasDiscrepancy: discrepancies.length > 0,
       discrepancies,
     };
-  }
-
-  // Legacy refund method with gateway integration
-  async processRefund(
-    paymentId: string,
-    refundAmount: number,
-    reason: string,
-    userId: string,
-  ) {
-    const payment = await this.findOne(paymentId);
-
-    if (refundAmount > payment.amount) {
-      throw new BadRequestException(
-        'Refund amount cannot exceed payment amount',
-      );
-    }
-
-    // Process refund via payment gateway
-    try {
-      const refundResult = await this.paymentGatewayService.processRefund(
-        payment.paymentMethod,
-        payment.paymentCode,
-        refundAmount,
-        reason,
-      );
-
-      if (!refundResult.success) {
-        throw new BadRequestException(
-          `Refund failed: ${refundResult.errorMessage}`,
-        );
-      }
-
-      // Log successful refund
-      await this.prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'REFUND_COMPLETED',
-          entity: 'Payment',
-          entityId: payment.id,
-          metadata: {
-            refundAmount,
-            reason,
-            originalAmount: payment.amount,
-            refundId: refundResult.refundId,
-          },
-        },
-      });
-
-      this.logger.log(
-        `Refund processed for payment ${payment.paymentCode} - Amount: ${refundAmount} ${payment.currency}`,
-      );
-
-      return {
-        success: true,
-        refundAmount,
-        refundId: refundResult.refundId,
-        paymentCode: payment.paymentCode,
-      };
-    } catch (error) {
-      // Log failed refund attempt
-      await this.prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'REFUND_FAILED',
-          entity: 'Payment',
-          entityId: payment.id,
-          metadata: {
-            refundAmount,
-            reason,
-            error: error.message,
-          },
-        },
-      });
-
-      throw error;
-    }
   }
 
   /**
@@ -890,19 +833,6 @@ export class PaymentsService {
         };
       }
     }
-
-    // Add other provider formats here as needed (e.g., PayPal, Stripe, etc.)
-    // Example for a generic provider:
-    // if (callbackData.status === 'completed') {
-    //   return {
-    //     status: 'success',
-    //     transactionId: callbackData.transaction_id,
-    //     clientReference: callbackData.reference,
-    //     amount: callbackData.amount,
-    //     description: callbackData.description,
-    //     additionalData: callbackData,
-    //   };
-    // }
 
     return {
       status: 'unknown',
@@ -1019,52 +949,13 @@ export class PaymentsService {
 
     // Apply the payment to invoices
     await this.prisma.$transaction(async (tx) => {
-      // Create payment-invoice relationships
-      await tx.$executeRaw`
-        INSERT INTO "_InvoiceToPayment" ("A", "B")
-        SELECT unnest(${invoiceIds}::text[]) as "A", ${payment.id} as "B"
-      `;
-
-      // Update invoice paid amounts and status
-      let remainingAmount = payment.amount;
-      for (const invoice of invoicesToPay) {
-        const outstandingAmount = invoice.totalAmount - invoice.paidAmount;
-        const paymentAmount = Math.min(remainingAmount, outstandingAmount);
-
-        const newPaidAmount = invoice.paidAmount + paymentAmount;
-        const newBalance = invoice.totalAmount - newPaidAmount;
-        const newStatus =
-          newPaidAmount >= invoice.totalAmount
-            ? InvoiceStatus.PAID
-            : newPaidAmount > invoice.paidAmount
-              ? InvoiceStatus.PARTIALLY_PAID
-              : invoice.status;
-
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            paidAmount: newPaidAmount,
-            balance: newBalance,
-            status: newStatus,
-          },
-        });
-
-        // Update package payment status if invoice is fully paid
-        if (newStatus === InvoiceStatus.PAID) {
-          await tx.package.updateMany({
-            where: { id: invoice.packageId || '' },
-            data: { paymentStatus: PaymentStatus.PAID },
-          });
-        } else if (newPaidAmount > 0) {
-          await tx.package.updateMany({
-            where: { id: invoice.packageId || '' },
-            data: { paymentStatus: PaymentStatus.PARTIAL },
-          });
-        }
-
-        remainingAmount -= paymentAmount;
-        if (remainingAmount <= 0) break;
-      }
+      await this.applyPaymentToInvoices(
+        tx,
+        payment.id,
+        invoiceIds,
+        payment.amount,
+        invoicesToPay,
+      );
 
       // Prepare update data
       const updateData: any = {};
@@ -1166,13 +1057,6 @@ export class PaymentsService {
     this.logger.log(
       `${paymentMethod} failed callback processed for payment ${payment.paymentCode}: ${data.description}`,
     );
-  }
-
-  // Legacy method - redirect to generic processor
-  async processHubtelCallback(
-    callbackData: any,
-  ): Promise<{ status: 'success' | 'failed' }> {
-    return this.processPaymentCallback('MOBILE_MONEY', callbackData);
   }
 
   /**

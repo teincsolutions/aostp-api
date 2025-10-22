@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import * as crypto from 'crypto';
+import { response } from 'express';
 
 @Injectable()
 export class CallbackTokenService {
@@ -22,10 +23,7 @@ export class CallbackTokenService {
   /**
    * Generate a signed token for payment callback verification
    */
-  generateCallbackToken(paymentData: {
-    paymentCode: string;
-    amount?: number;
-  }): string {
+  generateCallbackToken(paymentData: { paymentCode: string }): string {
     const payload: any = {
       paymentCode: paymentData.paymentCode,
       iat: Math.floor(Date.now() / 1000), // Issued at time
@@ -55,8 +53,8 @@ export class CallbackTokenService {
    * Verify a callback token
    */
   async verifyCallbackToken(token: string): Promise<{
-    paymentId: string;
     paymentCode: string;
+    paymentId: string;
     paymentMethod: string;
     amount: number;
   }> {
@@ -81,26 +79,12 @@ export class CallbackTokenService {
 
       // Validate minimum required fields
       if (!payload.paymentCode) {
-        throw new Error('Invalid token payload structure');
+        throw new Error('Invalid token payload structure', payload);
       }
 
       this.logger.debug(
         `Verified callback token for payment ${payload.paymentCode}`,
       );
-
-      // If full data is in token, return it
-      if (
-        payload.paymentId &&
-        payload.paymentMethod &&
-        payload.amount !== undefined
-      ) {
-        return {
-          paymentId: payload.paymentId,
-          paymentCode: payload.paymentCode,
-          paymentMethod: payload.paymentMethod,
-          amount: payload.amount,
-        };
-      }
 
       // Otherwise, lookup payment from database
       const payment = await this.findPaymentByCode(payload.paymentCode);
@@ -116,7 +100,7 @@ export class CallbackTokenService {
       };
     } catch (error) {
       this.logger.error(`Invalid callback token: ${error.message}`);
-      throw new Error('Invalid or expired callback token');
+      throw new Error('Invalid or expired callback token', error);
     }
   }
 
@@ -130,15 +114,11 @@ export class CallbackTokenService {
       paymentMethod: string;
       amount: number;
     },
-    baseCallbackUrl?: string,
+    baseCallbackUrl: string,
   ): string {
     const token = this.generateCallbackToken(paymentData);
-
-    // Default to current API callback URL if not provided
-    const baseUrl = baseCallbackUrl || this.getBaseCallbackUrl();
-
     // Add token as path parameter for security
-    const callbackUrl = `${baseUrl}/${token}`;
+    const callbackUrl = `${baseCallbackUrl}/${token}`;
 
     this.logger.debug(
       `Generated callback URL for payment ${paymentData.paymentCode}`,
@@ -162,7 +142,8 @@ export class CallbackTokenService {
       throw new Error('No callback token found in URL');
     }
 
-    return this.verifyCallbackToken(token);
+    const response = await this.verifyCallbackToken(token);
+    return response;
   }
 
   /**
@@ -183,19 +164,6 @@ export class CallbackTokenService {
     }
 
     return null;
-  }
-
-  /**
-   * Get base callback URL from configuration
-   */
-  private getBaseCallbackUrl(): string {
-    const baseUrl = this.configService.get<string>(
-      'API_BASE_URL',
-      'http://localhost:3000',
-    );
-    const apiPrefix = this.configService.get<string>('API_PREFIX', 'api/v1');
-
-    return `${baseUrl}/${apiPrefix}/payments/callback`;
   }
 
   private async findPaymentByCode(paymentCode: string) {
