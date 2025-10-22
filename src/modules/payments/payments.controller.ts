@@ -24,6 +24,7 @@ import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Public } from '../../shared/decorators/public.decorator';
 import { UserRole } from '@prisma/client';
 import { Logger } from '@nestjs/common';
 
@@ -47,7 +48,7 @@ export class PaymentsController {
   }
 
   @Post('hubtel/callback/:token')
-  @UseGuards() // Remove auth and role guards for this endpoint
+  @Public()
   @ApiOperation({
     summary: 'Generic payment callback with signed token verification',
   })
