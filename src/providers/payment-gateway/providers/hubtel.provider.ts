@@ -75,7 +75,7 @@ export class HubtelProvider implements PaymentGatewayProvider {
 
     try {
       // Build callback URL from token if provided
-      const callbackUrl = `$${this.callbackUrl}/${data.callbackToken}`;
+      const callbackUrl = `${this.callbackUrl}/${data.callbackToken}`;
 
       this.logger.log(`Using callback URL: ${callbackUrl}`);
 

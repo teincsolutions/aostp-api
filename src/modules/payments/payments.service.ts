@@ -107,16 +107,15 @@ export class PaymentsService {
 
     // For gateway payments, process through gateway first but DON'T update invoices yet
     let gatewayResult: any = null;
+    let gatewayTransactionId: string | null = null;
+
     let paymentCode = await this.idGeneratorService.generateReceiptNumber();
 
     if (isGatewayPayment) {
       try {
         // Generate signed callback token for security
         const callbackToken = this.callbackTokenService.generateCallbackToken({
-          paymentId: paymentCode, // Use payment code as temporary ID
           paymentCode,
-          paymentMethod,
-          amount,
         });
 
         // Process payment through gateway with signed callback token
@@ -148,6 +147,7 @@ export class PaymentsService {
         // Use gateway transaction ID as payment code if available
         if (gatewayResult.gatewayTransactionId) {
           paymentCode = gatewayResult.gatewayTransactionId;
+          gatewayTransactionId = gatewayResult.gatewayTransactionId;
         }
 
         this.logger.log(
@@ -185,6 +185,7 @@ export class PaymentsService {
       const payment = await tx.payment.create({
         data: {
           paymentCode,
+          gatewayTransactionId,
           customer: {
             connect: { id: customerId },
           },

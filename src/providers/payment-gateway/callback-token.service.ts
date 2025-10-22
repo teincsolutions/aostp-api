@@ -1,27 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../../shared/prisma/prisma.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class CallbackTokenService {
   private readonly logger = new Logger(CallbackTokenService.name);
   private readonly secret: string;
-  private readonly expiresIn: string;
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {
     // Use a separate secret for callback tokens
     this.secret = this.configService.get<string>(
       'CALLBACK_TOKEN_SECRET',
       this.configService.get<string>('JWT_SECRET', 'fallback-secret'),
-    );
-
-    // Shorter expiration for callback tokens
-    this.expiresIn = this.configService.get<string>(
-      'CALLBACK_TOKEN_EXPIRES_IN',
-      '24h', // 24 hours
     );
   }
 
@@ -29,25 +23,23 @@ export class CallbackTokenService {
    * Generate a signed token for payment callback verification
    */
   generateCallbackToken(paymentData: {
-    paymentId: string;
     paymentCode: string;
-    paymentMethod: string;
-    amount: number;
+    amount?: number;
   }): string {
-    const payload = {
-      sub: 'callback-verification', // Subject identifier for callbacks
-      paymentId: paymentData.paymentId,
+    const payload: any = {
       paymentCode: paymentData.paymentCode,
-      paymentMethod: paymentData.paymentMethod,
-      amount: paymentData.amount,
       iat: Math.floor(Date.now() / 1000), // Issued at time
     };
 
     try {
-      const token = this.jwtService.sign(payload, {
-        secret: this.secret,
-        expiresIn: this.expiresIn,
-      });
+      const payloadStr = JSON.stringify(payload);
+      const payloadB64 = Buffer.from(payloadStr).toString('base64url');
+      const signature = crypto
+        .createHmac('sha256', this.secret)
+        .update(payloadB64)
+        .digest('base64url');
+
+      const token = `${payloadB64}.${signature}`;
 
       this.logger.debug(
         `Generated callback token for payment ${paymentData.paymentCode}`,
@@ -62,35 +54,65 @@ export class CallbackTokenService {
   /**
    * Verify a callback token
    */
-  verifyCallbackToken(token: string): {
+  async verifyCallbackToken(token: string): Promise<{
     paymentId: string;
     paymentCode: string;
     paymentMethod: string;
     amount: number;
-  } {
+  }> {
     try {
-      const payload = this.jwtService.verify(token, {
-        secret: this.secret,
-      });
+      const parts = token.split('.');
+      if (parts.length !== 2) {
+        throw new Error('Invalid token format');
+      }
 
-      // Validate payload structure
-      if (
-        !payload.paymentId ||
-        !payload.paymentCode ||
-        !payload.paymentMethod ||
-        payload.amount === undefined
-      ) {
+      const [payloadB64, signature] = parts;
+      const expectedSignature = crypto
+        .createHmac('sha256', this.secret)
+        .update(payloadB64)
+        .digest('base64url');
+
+      if (signature !== expectedSignature) {
+        throw new Error('Invalid signature');
+      }
+
+      const payloadStr = Buffer.from(payloadB64, 'base64url').toString();
+      const payload = JSON.parse(payloadStr);
+
+      // Validate minimum required fields
+      if (!payload.paymentCode) {
         throw new Error('Invalid token payload structure');
       }
 
       this.logger.debug(
         `Verified callback token for payment ${payload.paymentCode}`,
       );
+
+      // If full data is in token, return it
+      if (
+        payload.paymentId &&
+        payload.paymentMethod &&
+        payload.amount !== undefined
+      ) {
+        return {
+          paymentId: payload.paymentId,
+          paymentCode: payload.paymentCode,
+          paymentMethod: payload.paymentMethod,
+          amount: payload.amount,
+        };
+      }
+
+      // Otherwise, lookup payment from database
+      const payment = await this.findPaymentByCode(payload.paymentCode);
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
+
       return {
-        paymentId: payload.paymentId,
-        paymentCode: payload.paymentCode,
-        paymentMethod: payload.paymentMethod,
-        amount: payload.amount,
+        paymentId: payment.id,
+        paymentCode: payment.paymentCode,
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount,
       };
     } catch (error) {
       this.logger.error(`Invalid callback token: ${error.message}`);
@@ -127,12 +149,12 @@ export class CallbackTokenService {
   /**
    * Extract and verify token from callback URL
    */
-  verifyCallbackFromUrl(urlPath: string): {
+  async verifyCallbackFromUrl(urlPath: string): Promise<{
     paymentId: string;
     paymentCode: string;
     paymentMethod: string;
     amount: number;
-  } {
+  }> {
     // Extract token from URL path (assuming format: /payments/callback/{token})
     const token = this.extractTokenFromPath(urlPath);
 
@@ -155,8 +177,8 @@ export class CallbackTokenService {
     // Token should be the last part of the path
     const token = pathParts[pathParts.length - 1];
 
-    // Basic validation - JWT tokens have 3 parts separated by dots
-    if (token && token.split('.').length === 3) {
+    // Basic validation - tokens have 2 parts separated by dots
+    if (token && token.split('.').length === 2) {
       return token;
     }
 
@@ -174,5 +196,13 @@ export class CallbackTokenService {
     const apiPrefix = this.configService.get<string>('API_PREFIX', 'api/v1');
 
     return `${baseUrl}/${apiPrefix}/payments/callback`;
+  }
+
+  private async findPaymentByCode(paymentCode: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { paymentCode },
+    });
+
+    return payment;
   }
 }
