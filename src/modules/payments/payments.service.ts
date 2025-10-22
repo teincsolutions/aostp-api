@@ -815,18 +815,20 @@ export class PaymentsService {
         `Processing Hubtel callback: ${JSON.stringify(callbackData)}`,
       );
 
-      // Validate callback data matches the expected structure from docs
-      const { Status, Data } = callbackData;
+      // Validate callback data matches the expected Hubtel structure
+      const { ResponseCode, Data } = callbackData;
 
-      if (Status === 'Successful') {
+      if (ResponseCode === '0000' || ResponseCode === '0001') {
+        // 0000 = Success, 0001 = Pending/Accepted
         await this.processHubtelSuccessCallback(Data);
         return { status: 'success' };
-      } else if (Status === 'Failed') {
+      } else if (ResponseCode && parseInt(ResponseCode) >= 4000) {
+        // Hubtel uses 4xxx-5xxx codes for failures
         await this.processHubtelFailedCallback(Data);
-        return { status: 'success' }; // Returned success even on failure (hubtel ping received)
+        return { status: 'success' }; // Return success to acknowledge receipt
       }
 
-      this.logger.warn(`Unknown Hubtel callback status: ${Status}`);
+      this.logger.warn(`Unknown Hubtel callback ResponseCode: ${ResponseCode}`);
       return { status: 'success' }; // Acknowledge receipt regardless
     } catch (error) {
       this.logger.error(
@@ -838,11 +840,11 @@ export class PaymentsService {
   }
 
   private async processHubtelSuccessCallback(data: any): Promise<void> {
-    const { CheckoutId, ReceiptNumber } = data;
+    const { TransactionId, ReceiptNumber, ClientReference, Amount } = data;
 
-    // Find payment by CheckoutId (which should be paymentCode)
+    // Find payment by TransactionId (which was set as paymentCode during creation)
     const payment = await this.prisma.payment.findUnique({
-      where: { paymentCode: CheckoutId },
+      where: { paymentCode: TransactionId },
       include: {
         invoices: true,
         customer: true,
@@ -850,14 +852,21 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      this.logger.warn(`Payment not found for CheckoutId: ${CheckoutId}`);
+      this.logger.warn(`Payment not found for TransactionId: ${TransactionId}`);
       return;
     }
 
     if (payment.paymentMethod !== 'MOBILE_MONEY') {
-      this.logger.warn(`Payment ${CheckoutId} is not a mobile money payment`);
+      this.logger.warn(
+        `Payment ${TransactionId} is not a mobile money payment`,
+      );
       return;
     }
+
+    // Log successful payment completion
+    this.logger.log(
+      `Hubtel payment succeeded - TransactionId: ${TransactionId}, Amount: ${Amount}, Receipt: ${ReceiptNumber}`,
+    );
 
     // Extract intended invoice IDs from notes
     const notesLines = payment.notes?.split('\n') || [];
@@ -872,7 +881,9 @@ export class PaymentsService {
         .map((id) => id.trim()) || [];
 
     if (invoiceIds.length === 0) {
-      this.logger.warn(`No intended invoices found for payment ${CheckoutId}`);
+      this.logger.warn(
+        `No intended invoices found for payment ${TransactionId}`,
+      );
       return;
     }
 
@@ -888,7 +899,7 @@ export class PaymentsService {
     });
 
     if (invoicesToPay.length === 0) {
-      this.logger.warn(`No valid invoices found for payment ${CheckoutId}`);
+      this.logger.warn(`No valid invoices found for payment ${TransactionId}`);
       return;
     }
 
@@ -943,8 +954,8 @@ export class PaymentsService {
 
       // Update payment notes with success information and completed status
       const updatedNotes = payment.notes
-        ? `${payment.notes}\nGATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber}`
-        : `GATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber}`;
+        ? `${payment.notes}\nGATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber || 'N/A'}\nCLIENT REFERENCE: ${ClientReference}`
+        : `GATEWAY STATUS: COMPLETED\nHUBTEL SUCCESS RECEIPT: ${ReceiptNumber || 'N/A'}\nCLIENT REFERENCE: ${ClientReference}`;
 
       await tx.payment.update({
         where: { id: payment.id },
@@ -953,16 +964,16 @@ export class PaymentsService {
     });
 
     this.logger.log(
-      `Hubtel success callback processed for payment ${CheckoutId}: ${ReceiptNumber}`,
+      `Hubtel success callback processed for payment ${TransactionId}: ${ReceiptNumber}`,
     );
   }
 
   private async processHubtelFailedCallback(data: any): Promise<void> {
-    const { CheckoutId, Description } = data;
+    const { TransactionId, Description, ClientReference } = data;
 
-    // Find payment by CheckoutId (which should be paymentCode)
+    // Find payment by TransactionId (which was set as paymentCode during creation)
     const payment = await this.prisma.payment.findUnique({
-      where: { paymentCode: CheckoutId },
+      where: { paymentCode: TransactionId },
       include: {
         invoices: true,
         customer: true,
@@ -970,27 +981,34 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      this.logger.warn(`Payment not found for CheckoutId: ${CheckoutId}`);
+      this.logger.warn(`Payment not found for TransactionId: ${TransactionId}`);
       return;
     }
 
     if (payment.paymentMethod !== 'MOBILE_MONEY') {
-      this.logger.warn(`Payment ${CheckoutId} is not a mobile money payment`);
+      this.logger.warn(
+        `Payment ${TransactionId} is not a mobile money payment`,
+      );
       return;
     }
 
+    // Log failed payment
+    this.logger.log(
+      `Hubtel payment failed - TransactionId: ${TransactionId}, Reason: ${Description}`,
+    );
+
     // Update payment notes with failure information
+    const updatedNotes = payment.notes
+      ? `${payment.notes}\nGATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}\nCLIENT REFERENCE: ${ClientReference}`
+      : `GATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}\nCLIENT REFERENCE: ${ClientReference}`;
+
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: {
-        notes: payment.notes
-          ? `${payment.notes}\nGATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}`
-          : `GATEWAY STATUS: FAILED\nHUBTEL FAILED: ${Description}`,
-      },
+      data: { notes: updatedNotes },
     });
 
     this.logger.log(
-      `Hubtel failed callback processed for payment ${CheckoutId}: ${Description}`,
+      `Hubtel failed callback processed for payment ${TransactionId}: ${Description}`,
     );
   }
 
