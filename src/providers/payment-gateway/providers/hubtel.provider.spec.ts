@@ -52,18 +52,9 @@ describe('HubtelProvider', () => {
         'HUBTEL_POS_SALES_ID',
         '',
       );
-      expect(mockConfigService.get).toHaveBeenCalledWith(
-        'HUBTEL_USERNAME',
-        '',
-      );
-      expect(mockConfigService.get).toHaveBeenCalledWith(
-        'HUBTEL_PASSWORD',
-        '',
-      );
-      expect(mockConfigService.get).toHaveBeenCalledWith(
-        'HUBTEL_API_KEY',
-        '',
-      );
+      expect(mockConfigService.get).toHaveBeenCalledWith('HUBTEL_USERNAME', '');
+      expect(mockConfigService.get).toHaveBeenCalledWith('HUBTEL_PASSWORD', '');
+      expect(mockConfigService.get).toHaveBeenCalledWith('HUBTEL_API_KEY', '');
     });
 
     it('should use default values when config is not set', () => {
@@ -98,7 +89,7 @@ describe('HubtelProvider', () => {
     });
 
     const validPaymentData: ProcessPaymentData = {
-      amount: 100.50,
+      amount: 100.5,
       currency: 'GHS',
       customerEmail: 'test@example.com',
       customerPhone: '+233501234567',
@@ -170,7 +161,9 @@ describe('HubtelProvider', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe(PaymentStatus.FAILED);
-      expect(result.errorMessage).toContain('Payment processing failed: Network timeout');
+      expect(result.errorMessage).toContain(
+        'Payment processing failed: Network timeout',
+      );
     });
 
     it('should create proper invoice payload', async () => {
@@ -202,7 +195,7 @@ describe('HubtelProvider', () => {
           {
             description: 'Test payment for invoice',
             quantity: 1,
-            unitPrice: 100.50,
+            unitPrice: 100.5,
           },
         ],
         callbackUrl: '',
@@ -217,7 +210,7 @@ describe('HubtelProvider', () => {
 
     it('should handle missing customer data gracefully', async () => {
       const paymentDataWithoutCustomer: ProcessPaymentData = {
-        amount: 50.00,
+        amount: 50.0,
         currency: 'GHS',
         reference: 'PAY002',
         description: 'Payment without customer info',
@@ -336,12 +329,14 @@ describe('HubtelProvider', () => {
     it('should return refund not supported message', async () => {
       const result = await provider.refundPayment({
         gatewayTransactionId: 'TXN-123',
-        amount: 50.00,
+        amount: 50.0,
         reason: 'Customer request',
       });
 
       expect(result.success).toBe(false);
-      expect(result.errorMessage).toBe('Refunds must be processed through Hubtel dashboard');
+      expect(result.errorMessage).toBe(
+        'Refunds must be processed through Hubtel dashboard',
+      );
     });
   });
 

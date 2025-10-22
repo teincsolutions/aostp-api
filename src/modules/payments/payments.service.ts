@@ -13,6 +13,7 @@ import { PaymentStatus as GatewayPaymentStatus } from '../../providers/payment-g
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
+import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
 
 @Injectable()
 export class PaymentsService {
@@ -22,6 +23,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
     private readonly paymentGatewayService: PaymentGatewayService,
+    private readonly callbackTokenService: CallbackTokenService,
     private readonly pdfService: PDFService,
   ) {}
 
@@ -109,6 +111,15 @@ export class PaymentsService {
 
     if (isGatewayPayment) {
       try {
+        // Generate signed callback token for security
+        const callbackToken = this.callbackTokenService.generateCallbackToken({
+          paymentId: paymentCode, // Use payment code as temporary ID
+          paymentCode,
+          paymentMethod,
+          amount,
+        });
+
+        // Process payment through gateway with signed callback token
         gatewayResult = await this.paymentGatewayService.processPayment(
           paymentMethod,
           {
@@ -119,6 +130,7 @@ export class PaymentsService {
             customerName: `${customer.firstName} ${customer.lastName}`,
             reference: paymentCode,
             description: `Payment for invoices: ${invoicesToPay.map((inv: any) => inv.invoiceNumber).join(', ')}`,
+            callbackToken: callbackToken,
             metadata: {
               userId,
               customerCode: customer.customerCode,
@@ -139,7 +151,7 @@ export class PaymentsService {
         }
 
         this.logger.log(
-          `Gateway payment initiated: ${paymentCode} - Status: ${gatewayResult.status}`,
+          `Gateway payment initiated: ${paymentCode} - Status: ${gatewayResult.status} - Callback token generated`,
         );
       } catch (error) {
         this.logger.error(
@@ -943,7 +955,9 @@ export class PaymentsService {
     const payment = await this.findPaymentByCallbackData(data);
 
     if (!payment) {
-      this.logger.warn(`Payment not found for callback data: ${JSON.stringify(data)}`);
+      this.logger.warn(
+        `Payment not found for callback data: ${JSON.stringify(data)}`,
+      );
       return;
     }
 
@@ -996,7 +1010,9 @@ export class PaymentsService {
     });
 
     if (invoicesToPay.length === 0) {
-      this.logger.warn(`No valid invoices found for payment ${payment.paymentCode}`);
+      this.logger.warn(
+        `No valid invoices found for payment ${payment.paymentCode}`,
+      );
       return;
     }
 
@@ -1065,11 +1081,17 @@ export class PaymentsService {
       // Update payment notes with success information
       const successNotes = [
         `GATEWAY STATUS: COMPLETED`,
-        data.receiptNumber ? `${paymentMethod.toUpperCase()} RECEIPT: ${data.receiptNumber}` : null,
-        data.clientReference ? `CLIENT REFERENCE: ${data.clientReference}` : null,
+        data.receiptNumber
+          ? `${paymentMethod.toUpperCase()} RECEIPT: ${data.receiptNumber}`
+          : null,
+        data.clientReference
+          ? `CLIENT REFERENCE: ${data.clientReference}`
+          : null,
         data.description ? `DESCRIPTION: ${data.description}` : null,
         gatewayTxnId ? `GATEWAY TRANSACTION ID: ${gatewayTxnId}` : null,
-      ].filter(Boolean).join('\n');
+      ]
+        .filter(Boolean)
+        .join('\n');
 
       updateData.notes = payment.notes
         ? `${payment.notes}\n${successNotes}`
@@ -1096,7 +1118,9 @@ export class PaymentsService {
     const payment = await this.findPaymentByCallbackData(data);
 
     if (!payment) {
-      this.logger.warn(`Payment not found for failed callback data: ${JSON.stringify(data)}`);
+      this.logger.warn(
+        `Payment not found for failed callback data: ${JSON.stringify(data)}`,
+      );
       return;
     }
 
@@ -1115,15 +1139,17 @@ export class PaymentsService {
     // Update payment with failure information
     const failureNotes = [
       `GATEWAY STATUS: FAILED`,
-      data.description ? `${paymentMethod.toUpperCase()} FAILED: ${data.description}` : `Payment failed`,
+      data.description
+        ? `${paymentMethod.toUpperCase()} FAILED: ${data.description}`
+        : `Payment failed`,
       data.clientReference ? `CLIENT REFERENCE: ${data.clientReference}` : null,
       data.transactionId ? `TRANSACTION ID: ${data.transactionId}` : null,
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     const updateData: any = {
-      notes: payment.notes
-        ? `${payment.notes}\n${failureNotes}`
-        : failureNotes,
+      notes: payment.notes ? `${payment.notes}\n${failureNotes}` : failureNotes,
     };
 
     // Update gateway status if tracking it
@@ -1218,5 +1244,10 @@ export class PaymentsService {
     );
 
     return result;
+  }
+
+  // verify token
+  verifyCallbackToken(token: string): any {
+    return this.callbackTokenService.verifyCallbackToken(token);
   }
 }

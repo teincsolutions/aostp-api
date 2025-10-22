@@ -40,6 +40,8 @@ export class PaymentGatewayService {
 
     this.logger.log(`Processing payment via ${paymentMethod} provider`);
 
+    // If no callback URL provided, this is not a gateway payment - just process normally
+    // Gateway payments will have callbackUrl set by the payments service
     return provider.processPayment(data);
   }
 

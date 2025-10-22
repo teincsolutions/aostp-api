@@ -74,6 +74,11 @@ export class HubtelProvider implements PaymentGatewayProvider {
     );
 
     try {
+      // Build callback URL from token if provided
+      const callbackUrl = `$${this.callbackUrl}/${data.callbackToken}`;
+
+      this.logger.log(`Using callback URL: ${callbackUrl}`);
+
       // Create invoice payload for "Pay at Once"
       const invoicePayload: HubtelInvoicePayload = {
         invoiceNumber: data.reference || `INV-${Date.now()}`,
@@ -91,7 +96,7 @@ export class HubtelProvider implements PaymentGatewayProvider {
             unitPrice: data.amount,
           },
         ],
-        callbackUrl: this.callbackUrl,
+        callbackUrl,
         reminders: data.metadata?.reminders || [
           {
             days: 5,

@@ -28,6 +28,7 @@ export interface ProcessPaymentData {
   customerName?: string;
   reference: string;
   description?: string;
+  callbackToken?: string;
   metadata?: Record<string, any>;
 }
 

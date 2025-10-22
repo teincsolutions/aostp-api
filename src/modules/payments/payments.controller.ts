@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,12 +25,15 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('payments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
@@ -42,15 +46,35 @@ export class PaymentsController {
     return this.paymentsService.create(createPaymentDto, req.user.id);
   }
 
-  @Post('hubtel/callback')
+  @Post('hubtel/callback/:token')
   @UseGuards() // Remove auth and role guards for this endpoint
-  @ApiOperation({ summary: 'Hubtel payment callback' })
+  @ApiOperation({
+    summary: 'Generic payment callback with signed token verification',
+  })
   @ApiResponse({ status: 200, description: 'Callback processed' })
   @ApiResponse({ status: 400, description: 'Invalid callback data' })
-  async hubtelCallback(
+  @ApiResponse({ status: 401, description: 'Invalid callback token' })
+  async paymentCallback(
+    @Param('token') token: string,
     @Body() callbackData: any,
   ): Promise<{ status: 'success' | 'failed' }> {
-    return this.paymentsService.processHubtelCallback(callbackData);
+    try {
+      // Verify the signed token to ensure callback authenticity
+      const tokenData = this.paymentsService.verifyCallbackToken(token);
+
+      this.logger.log(
+        `Verified callback token for payment ${tokenData.paymentCode}`,
+      );
+
+      // Process the callback with the verified payment method
+      return await this.paymentsService.processPaymentCallback(
+        tokenData.paymentMethod,
+        callbackData,
+      );
+    } catch (error) {
+      this.logger.error(`Callback token verification failed: ${error.message}`);
+      throw new UnauthorizedException('Invalid callback token');
+    }
   }
 
   @Get()
