@@ -92,6 +92,10 @@ export class CallbackTokenService {
         throw new Error('Payment not found');
       }
 
+      this.logger.debug(
+        `Callback token corresponds to payment method ${payment.paymentMethod}`,
+      );
+
       return {
         paymentId: payment.id,
         paymentCode: payment.paymentCode,
@@ -124,46 +128,6 @@ export class CallbackTokenService {
       `Generated callback URL for payment ${paymentData.paymentCode}`,
     );
     return callbackUrl;
-  }
-
-  /**
-   * Extract and verify token from callback URL
-   */
-  async verifyCallbackFromUrl(urlPath: string): Promise<{
-    paymentId: string;
-    paymentCode: string;
-    paymentMethod: string;
-    amount: number;
-  }> {
-    // Extract token from URL path (assuming format: /payments/callback/{token})
-    const token = this.extractTokenFromPath(urlPath);
-
-    if (!token) {
-      throw new Error('No callback token found in URL');
-    }
-
-    const response = await this.verifyCallbackToken(token);
-    return response;
-  }
-
-  /**
-   * Extract token from URL path
-   * Example: /api/v1/payments/callback/REDACTED_JWT...
-   */
-  private extractTokenFromPath(urlPath: string): string | null {
-    // Remove query parameters and split by '/'
-    const pathWithoutQuery = urlPath.split('?')[0];
-    const pathParts = pathWithoutQuery.split('/');
-
-    // Token should be the last part of the path
-    const token = pathParts[pathParts.length - 1];
-
-    // Basic validation - tokens have 2 parts separated by dots
-    if (token && token.split('.').length === 2) {
-      return token;
-    }
-
-    return null;
   }
 
   private async findPaymentByCode(paymentCode: string) {

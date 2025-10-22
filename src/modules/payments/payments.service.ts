@@ -19,6 +19,7 @@ import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
+import { HubtelCallbackData } from 'src/providers/payment-gateway/providers/hubtel.provider';
 
 @Injectable()
 export class PaymentsService {
@@ -801,7 +802,7 @@ export class PaymentsService {
    * Extract payment callback data in a provider-agnostic way
    * Maps various callback formats to a standardized interface
    */
-  private extractPaymentCallbackData(callbackData: any): {
+  private extractPaymentCallbackData(callbackData: HubtelCallbackData): {
     status: 'success' | 'failed' | 'unknown';
     transactionId?: string;
     clientReference?: string;
@@ -813,21 +814,19 @@ export class PaymentsService {
     // Handle Hubtel callback format
     if (callbackData.ResponseCode !== undefined) {
       const { ResponseCode, Data } = callbackData;
-      if (ResponseCode === '0000' || ResponseCode === '0001') {
+      if (ResponseCode === '0000') {
         return {
           status: 'success',
-          transactionId: Data.TransactionId,
-          clientReference: Data.ClientReference,
-          amount: Data.Amount,
+          transactionId: Data.InvoiceId,
+          amount: Data.AmountPaid,
           description: Data.Description,
           receiptNumber: Data.ReceiptNumber,
           additionalData: Data,
         };
-      } else if (ResponseCode && parseInt(ResponseCode) >= 4000) {
+      } else if (ResponseCode == '0001') {
         return {
           status: 'failed',
-          transactionId: Data?.TransactionId,
-          clientReference: Data?.ClientReference,
+          transactionId: Data.InvoiceId,
           description: Data?.Description,
           additionalData: Data,
         };
@@ -861,13 +860,13 @@ export class PaymentsService {
 
     // 2. By transactionId (could be either paymentCode or stored gatewayTransactionId)
     if (data.transactionId) {
-      const payment = await this.prisma.payment.findUnique({
-        where: { paymentCode: data.transactionId },
+      const payment = await this.prisma.payment.findFirst({
+        where: { gatewayTransactionId: data.transactionId },
         include: { invoices: true, customer: true },
       });
       if (payment) return payment;
 
-      // Try finding by gatewayTransactionId
+      // Try finding by gatewayTransactionId (fallback to multiple results)
       const payments = await this.prisma.payment.findMany({
         where: { gatewayTransactionId: data.transactionId },
         include: { invoices: true, customer: true },
@@ -1132,7 +1131,7 @@ export class PaymentsService {
   }
 
   // verify token
-  verifyCallbackToken(token: string): any {
-    return this.callbackTokenService.verifyCallbackToken(token);
+  async verifyCallbackToken(token: string) {
+    return await this.callbackTokenService.verifyCallbackToken(token);
   }
 }

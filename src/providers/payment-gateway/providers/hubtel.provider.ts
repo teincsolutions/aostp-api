@@ -32,12 +32,26 @@ interface HubtelInvoicePayload {
   callbackUrl: string;
 }
 
-interface HubtelInvoiceResponse {
+export interface HubtelInvoiceResponse {
   message: string;
   code: number;
   data: {
     invoiceId: string;
     paymentUrl: string;
+  };
+}
+
+export interface HubtelCallbackData {
+  Status: 'Successful' | 'Failed';
+  ResponseCode: '0000' | '0001';
+  Data: {
+    AmountPaid: number;
+    InvoiceId: string;
+    ReceiptNumber: string;
+    Description: string;
+    PaymentMethod: string;
+    PaymentChannel: string;
+    PayeePhoneNumber: string;
   };
 }
 
