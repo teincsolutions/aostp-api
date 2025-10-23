@@ -109,7 +109,8 @@ export class PaymentsService {
     const localAmount = amount * exchangeRate.rate;
 
     // Check if this is a gateway payment method
-    const isGatewayPayment = paymentMethod === 'MOBILE_MONEY';
+    const isGatewayPayment =
+      paymentMethod === 'MOBILE_MONEY' || paymentMethod === 'CARD';
 
     // For gateway payments, process through gateway first but DON'T update invoices yet
     let gatewayResult: PaymentResult | null = null;
