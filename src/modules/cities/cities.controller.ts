@@ -52,7 +52,12 @@ export class CitiesController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PAYMENT_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.OPERATIONS_CLERK,
+  )
   @ApiOperation({
     summary: 'Get all cities with pagination',
     description: 'Retrieve a paginated list of cities with optional filters',
@@ -70,7 +75,12 @@ export class CitiesController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PAYMENT_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.OPERATIONS_CLERK,
+  )
   @ApiOperation({
     summary: 'Get city by ID',
     description: 'Retrieve a single city by its unique identifier',
@@ -85,7 +95,12 @@ export class CitiesController {
   }
 
   @Get('country/:country')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PAYMENT_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.OPERATIONS_CLERK,
+  )
   @ApiOperation({
     summary: 'Get cities by country',
     description: 'Retrieve all cities for a specific country',
