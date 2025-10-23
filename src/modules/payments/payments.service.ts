@@ -220,21 +220,10 @@ export class PaymentsService {
         },
       });
 
-      // For gateway payments, link to invoices but DON'T update their status yet
-      // The actual payment application happens on successful callback
-      if (isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
-        // Store intended invoice IDs in notes for later processing
-        const updatedNotes = payment.notes
-          ? `${payment.notes}\nINTENDED INVOICES: ${invoiceIds.join(',')}`
-          : `INTENDED INVOICES: ${invoiceIds.join(',')}`;
-
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: { notes: updatedNotes },
-        });
-      }
-      // For non-gateway payments, apply payment immediately as before
-      else if (!isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
+      // Link invoices to payment immediately for both gateway and non-gateway payments
+      // This ensures invoices show up on payment records right away
+      if (invoiceIds && invoiceIds.length > 0) {
+        // Apply payment to invoices - create relationship and update amounts
         await this.applyPaymentToInvoices(
           tx,
           payment.id,
@@ -242,6 +231,18 @@ export class PaymentsService {
           amount,
           invoicesToPay,
         );
+
+        // For gateway payments, store additional notes for tracking
+        if (isGatewayPayment) {
+          const updatedNotes = payment.notes
+            ? `${payment.notes}\nGATEWAY PAYMENT - Pending settlement`
+            : `GATEWAY PAYMENT - Pending settlement`;
+
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: { notes: updatedNotes },
+          });
+        }
       }
 
       // Log the action
@@ -904,71 +905,18 @@ export class PaymentsService {
       `${paymentMethod} payment succeeded - ID: ${payment.paymentCode}, Gateway TXN: ${payment.gatewayTransactionId}, Amount: ${data.amount}`,
     );
 
-    // Store gateway transaction ID if not already stored
-    const needsGatewayTxnUpdate =
-      !payment.gatewayTransactionId && data.transactionId;
-
-    const gatewayTxnId = data.transactionId;
-
-    // Extract intended invoice IDs from notes
-    const notesLines = payment.notes?.split('\n') || [];
-    const intendedInvoicesLine = notesLines.find((line) =>
-      line.startsWith('INTENDED INVOICES:'),
-    );
-    const invoiceIds =
-      intendedInvoicesLine
-        ?.replace('INTENDED INVOICES:', '')
-        .trim()
-        .split(',')
-        .map((id) => id.trim()) || [];
-
-    if (invoiceIds.length === 0) {
-      this.logger.warn(
-        `No intended invoices found for payment ${payment.paymentCode}`,
-      );
-      return;
-    }
-
-    // Verify invoices still exist and belong to customer
-    const invoicesToPay = await this.prisma.invoice.findMany({
-      where: {
-        id: { in: invoiceIds },
-        customerId: payment.customerId,
-        status: {
-          in: [InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID],
-        },
-      },
-    });
-
-    if (invoicesToPay.length === 0) {
-      this.logger.warn(
-        `No valid invoices found for payment ${payment.paymentCode}`,
-      );
-      return;
-    }
-
-    // Apply the payment to invoices
+    // Since invoices are already linked when payment is created, we just need to update the gateway status
     await this.prisma.$transaction(async (tx) => {
-      await this.applyPaymentToInvoices(
-        tx,
-        payment.id,
-        invoiceIds,
-        payment.amount,
-        invoicesToPay,
-      );
-
       // Prepare update data
       const updateData: any = {};
 
-      // Update gateway transaction ID if needed
-      if (needsGatewayTxnUpdate && gatewayTxnId) {
-        updateData.gatewayTransactionId = gatewayTxnId;
+      // Update gateway transaction ID if not already stored
+      if (!payment.gatewayTransactionId && data.transactionId) {
+        updateData.gatewayTransactionId = data.transactionId;
       }
 
       // Update gateway status
-      if (gatewayTxnId) {
-        updateData.gatewayStatus = GatewayPaymentStatus.COMPLETED;
-      }
+      updateData.gatewayStatus = GatewayPaymentStatus.COMPLETED;
 
       // Update payment notes with success information
       const successNotes = [
@@ -980,13 +928,19 @@ export class PaymentsService {
           ? `CLIENT REFERENCE: ${data.clientReference}`
           : null,
         data.description ? `DESCRIPTION: ${data.description}` : null,
-        gatewayTxnId ? `GATEWAY TRANSACTION ID: ${gatewayTxnId}` : null,
+        data.transactionId
+          ? `GATEWAY TRANSACTION ID: ${data.transactionId}`
+          : null,
       ]
         .filter(Boolean)
         .join('\n');
 
+      // Replace the "Gateway Payment - Pending settlement" with success notes
       updateData.notes = payment.notes
-        ? `${payment.notes}\n${successNotes}`
+        ? payment.notes.replace(
+            'GATEWAY PAYMENT - Pending settlement',
+            successNotes,
+          )
         : successNotes;
 
       if (Object.keys(updateData).length > 0) {
