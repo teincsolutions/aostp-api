@@ -20,6 +20,8 @@ import { WarehousePackagesDto } from './dto/warehouse-packages.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Public } from '../../shared/decorators/public.decorator';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole, PackageStatus } from '@prisma/client';
 import {
   ApiTags,
@@ -112,6 +114,7 @@ export class PackagesController {
   }
 
   @Get('tracking/:trackingCode')
+  @Public()
   @ApiOperation({ summary: 'Get package by tracking code' })
   @ApiParam({ name: 'trackingCode', description: 'Package tracking code' })
   findByTrackingCode(@Param('trackingCode') trackingCode: string) {

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validate } from './config/env.validation';
 import { PrismaModule } from './shared/prisma/prisma.module';
@@ -31,6 +32,7 @@ import { CitiesModule } from './modules/cities/cities.module';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     ConfigModule.forRoot({
       isGlobal: true,
       validate,
