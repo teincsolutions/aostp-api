@@ -88,6 +88,24 @@ export class PackagesService {
       );
     }
 
+    // Auto-calculate shippingCost if shippingRate is provided but no shippingCost
+    let finalShippingCost = packageData.shippingCost;
+    if (
+      packageData.shippingRate !== undefined &&
+      finalShippingCost === undefined
+    ) {
+      const shippingRate = packageData.shippingRate;
+      let units = 0;
+
+      if (packageData.shippingMode === ShippingMode.SEA) {
+        units = packageData.cbm || 0;
+      } else {
+        units = packageData.weight || 0;
+      }
+
+      finalShippingCost = shippingRate * units * packageData.quantity;
+    }
+
     // Check if provided tracking code is unique
     const existingPackage = await this.prisma.package.findUnique({
       where: { trackingCode: packageTrackingCode },
@@ -111,8 +129,8 @@ export class PackagesService {
           weight: packageData.weight,
           cbm: packageData.cbm,
           quantity: packageData.quantity,
-          shippingRateId: packageData.shippingRateId,
-          shippingCost: packageData.shippingCost,
+          shippingRate: packageData.shippingRate,
+          shippingCost: finalShippingCost,
           shippingMode: packageData.shippingMode,
           airShippingType: packageData.airShippingType,
           status: PackageStatus.IN_WAREHOUSE,
@@ -347,13 +365,37 @@ export class PackagesService {
   async update(id: string, updatePackageDto: UpdatePackageDto, userId: string) {
     const existingPackage = await this.findOne(id);
 
+    // Auto-calculate shippingCost if shippingRate is provided and we have the necessary data
+    let calculatedShippingCost = updatePackageDto.shippingCost;
+    if (
+      updatePackageDto.shippingRate !== undefined &&
+      !calculatedShippingCost
+    ) {
+      const pkg = existingPackage;
+      const shippingRate = updatePackageDto.shippingRate;
+      let units = 0;
+
+      if (pkg.shippingMode === ShippingMode.SEA) {
+        units = pkg.cbm || 0;
+      } else {
+        units = pkg.weight || 0;
+      }
+
+      calculatedShippingCost = shippingRate * units * pkg.quantity;
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
+      const updateData = {
+        ...updatePackageDto,
+        updatedById: userId,
+        ...(calculatedShippingCost !== undefined && {
+          shippingCost: calculatedShippingCost,
+        }),
+      };
+
       const updatedPackage = await tx.package.update({
         where: { id },
-        data: {
-          ...updatePackageDto,
-          updatedById: userId,
-        },
+        data: updateData,
         include: {
           customer: true,
           photos: true,

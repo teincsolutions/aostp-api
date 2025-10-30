@@ -57,15 +57,16 @@ export class CreatePackageDto {
   quantity: number = 1;
 
   @ApiPropertyOptional({
-    description: 'Shipping rate ID for cost calculation',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'Rate per unit (per CBM for SEA, per KG for AIR)',
+    minimum: 0,
   })
   @IsOptional()
-  @IsString()
-  shippingRateId?: string;
+  @IsNumber()
+  @Min(0)
+  shippingRate?: number;
 
   @ApiPropertyOptional({
-    description: 'Pre-calculated shipping cost (rate * quantity)',
+    description: 'Pre-calculated shipping cost (rate * units * quantity)',
     minimum: 0,
   })
   @IsOptional()

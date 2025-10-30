@@ -846,20 +846,15 @@ export class PackingListsService {
                 warehouse: invoice.package.warehouse?.name,
               }
             : undefined,
-          // Use package items directly
+          // Use package items directly with package-level shipping rate
           items:
             invoice.package?.items?.map((item) => ({
               description: item.description || '',
               quantity: item.quantity,
-              unitPrice:
-                invoice.package.shippingMode === 'SEA'
-                  ? (item.cbm || 0) *
-                    (invoice.totalAmount / (invoice.package.quantity || 1))
-                  : (item.weight || 0) *
-                    (invoice.totalAmount / (invoice.package.quantity || 1)),
-              total:
-                (invoice.totalAmount / (invoice.package.quantity || 1)) *
-                item.quantity,
+              unitPrice: invoice.package?.shippingRate
+                ? invoice.package.shippingRate
+                : 0,
+              total: item.quantity * (invoice.package?.shippingRate || 0),
             })) || [],
           totals: {
             total: invoice.totalAmount,

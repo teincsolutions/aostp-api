@@ -262,8 +262,8 @@ model Package {
   weight          Float? // in KG (computed from items)
   cbm             Float? // Cubic meters (computed from items)
   quantity        Int              @default(1)
-  shippingRateId  String? // Reference to shipping rate used for calculation
-  shippingCost    Float? // Per package shipping cost (rate * quantity)
+  shippingRate    Float? // Rate per unit (per CBM for SEA, per KG for AIR)
+  shippingCost    Float? // Per package shipping cost (rate * units * quantity)
   shippingMode    ShippingMode
   airShippingType AirShippingType?
   isConsolidated  Boolean          @default(false) // True for parent packages
