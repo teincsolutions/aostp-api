@@ -47,6 +47,7 @@ export class InvoicesService {
             shippingMode: true,
             airShippingType: true,
             quantity: true,
+            shippingCost: true,
             customer: {
               select: {
                 customerCode: true,
@@ -92,17 +93,25 @@ export class InvoicesService {
         continue;
       }
 
-      // Calculate total amount based on package weight/cbm * shipping rate
-      const rate = await this.getShippingRate(
-        pkg.shippingMode,
-        pkg.airShippingType,
-        packingList.container.departureCityId,
-      );
-      let totalAmount = 0;
-      if (pkg.shippingMode === ShippingMode.SEA) {
-        totalAmount = (pkg.cbm || 0) * rate * (pkg.quantity || 1);
-      } else {
-        totalAmount = (pkg.weight || 0) * rate * (pkg.quantity || 1);
+      // Use package's pre-calculated shipping cost
+      let totalAmount = pkg.shippingCost || 0;
+
+      // If shipping cost is not calculated, fall back to dynamic calculation
+      if (!totalAmount) {
+        const rate = await this.getShippingRate(
+          pkg.shippingMode,
+          pkg.airShippingType,
+          packingList.container.departureCityId,
+        );
+        if (pkg.shippingMode === ShippingMode.SEA) {
+          totalAmount = (pkg.cbm || 0) * rate * (pkg.quantity || 1);
+        } else {
+          totalAmount = (pkg.weight || 0) * rate * (pkg.quantity || 1);
+        }
+
+        this.logger.warn(
+          `Package ${pkg.trackingCode} has no shipping cost - using calculated amount: ${totalAmount}`,
+        );
       }
 
       // Generate invoice number

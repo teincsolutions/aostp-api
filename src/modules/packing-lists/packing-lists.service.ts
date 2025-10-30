@@ -639,6 +639,10 @@ export class PackingListsService {
       0,
     );
     const totalCBM = packages.reduce((sum, pkg) => sum + (pkg.cbm || 0), 0);
+    const totalShippingCost = packages.reduce(
+      (sum, pkg) => sum + (pkg.shippingCost || 0),
+      0,
+    );
     const totalCustomers = new Set(packages.map((pkg) => pkg.customerId)).size;
 
     // Update the packing list totals
@@ -649,6 +653,7 @@ export class PackingListsService {
         totalCustomers,
         totalWeight,
         totalCBM,
+        totalShippingCost,
       },
       include: {
         container: true,

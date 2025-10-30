@@ -10,7 +10,12 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
-import { Prisma, PackageStatus, ShippingMode } from '@prisma/client';
+import {
+  Prisma,
+  PackageStatus,
+  ShippingMode,
+  AirShippingType,
+} from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
@@ -106,6 +111,8 @@ export class PackagesService {
           weight: packageData.weight,
           cbm: packageData.cbm,
           quantity: packageData.quantity,
+          shippingRateId: packageData.shippingRateId,
+          shippingCost: packageData.shippingCost,
           shippingMode: packageData.shippingMode,
           airShippingType: packageData.airShippingType,
           status: PackageStatus.IN_WAREHOUSE,

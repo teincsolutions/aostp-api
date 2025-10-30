@@ -56,6 +56,23 @@ export class CreatePackageDto {
   @Min(1)
   quantity: number = 1;
 
+  @ApiPropertyOptional({
+    description: 'Shipping rate ID for cost calculation',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsOptional()
+  @IsString()
+  shippingRateId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Pre-calculated shipping cost (rate * quantity)',
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  shippingCost?: number;
+
   @ApiProperty({ enum: ShippingMode, description: 'Shipping mode' })
   @IsEnum(ShippingMode)
   shippingMode: ShippingMode;
