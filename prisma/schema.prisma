@@ -252,31 +252,34 @@ model PackageItemPhoto {
 }
 
 model Package {
-  id              String           @id @default(uuid())
-  trackingCode    String           @unique
-  customerId      String
-  customer        Customer         @relation(fields: [customerId], references: [id])
-  warehouseId     String?
-  warehouse       Warehouse?       @relation(fields: [warehouseId], references: [id])
-  description     String
-  weight          Float? // in KG (computed from items)
-  cbm             Float? // Cubic meters (computed from items)
-  quantity        Int              @default(1)
-  shippingRate    Float? // Rate per unit (per CBM for SEA, per KG for AIR)
-  shippingCost    Float? // Per package shipping cost (rate * units * quantity)
-  shippingMode    ShippingMode
-  airShippingType AirShippingType?
-  isConsolidated  Boolean          @default(false) // True for parent packages
-  status          PackageStatus    @default(RECEIVED)
-  receivedDate    DateTime         @default(now())
-  daysInWarehouse Int              @default(0)
-  photos          PackagePhoto[]
-  notes           String?
+  id                String           @id @default(uuid())
+  trackingCode      String           @unique
+  customerId        String
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  warehouseId       String?
+  warehouse         Warehouse?       @relation(fields: [warehouseId], references: [id])
+  description       String
+  weight            Float? // in KG (computed from items)
+  cbm               Float? // Cubic meters (computed from items)
+  quantity          Int              @default(1)
+  destinationCityId String? // Destination city for this package
+  shippingRate      Float? // Rate per unit (per CBM for SEA, per KG for AIR)
+  shippingCurrency  String           @default("USD") // Currency for shipping rate
+  shippingCost      Float? // Per package shipping cost (rate * units * quantity)
+  shippingMode      ShippingMode
+  airShippingType   AirShippingType?
+  isConsolidated    Boolean          @default(false) // True for parent packages
+  status            PackageStatus    @default(RECEIVED)
+  receivedDate      DateTime         @default(now())
+  daysInWarehouse   Int              @default(0)
+  photos            PackagePhoto[]
+  notes             String?
 
   // Relations
-  packingListId String?
-  packingList   PackingList? @relation(fields: [packingListId], references: [id])
-  invoice       Invoice?
+  packingListId   String?
+  packingList     PackingList? @relation(fields: [packingListId], references: [id])
+  invoice         Invoice?
+  destinationCity City?        @relation(fields: [destinationCityId], references: [id])
 
   // Two-table structure
   items PackageItem[]
@@ -350,6 +353,7 @@ model City {
   shippingRates         ShippingRate[]
   departureContainers   Container[]    @relation("ContainerDepartureCity")
   destinationContainers Container[]    @relation("ContainerDestinationCity")
+  destinationPackages   Package[]
 
   @@unique([name, country])
   @@index([country])

@@ -66,6 +66,14 @@ export class CreatePackageDto {
   shippingRate?: number;
 
   @ApiPropertyOptional({
+    description: 'Currency for shipping rate',
+    example: 'USD',
+  })
+  @IsOptional()
+  @IsString()
+  shippingCurrency?: string = 'USD';
+
+  @ApiPropertyOptional({
     description: 'Pre-calculated shipping cost (rate * units * quantity)',
     minimum: 0,
   })
@@ -102,6 +110,14 @@ export class CreatePackageDto {
   @IsString()
   @IsOptional()
   warehouseId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Destination city ID for this package',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsOptional()
+  @IsString()
+  destinationCityId?: string;
 
   @ApiPropertyOptional({ description: 'Additional notes' })
   @IsOptional()
