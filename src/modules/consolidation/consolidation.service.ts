@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
-import { Prisma, ShippingMode } from '@prisma/client';
+import { Package, Prisma, ShippingMode } from '@prisma/client';
 
 @Injectable()
 export class ConsolidationService {
@@ -25,6 +25,7 @@ export class ConsolidationService {
       include: {
         items: true,
         customer: true,
+        photos: true,
       },
     });
 
@@ -37,6 +38,7 @@ export class ConsolidationService {
     const shippingMode = sourcePackages[0].shippingMode;
     const airShippingType = sourcePackages[0].airShippingType;
     const warehouseId = sourcePackages[0].warehouseId;
+    const destinationCityId = sourcePackages[0].destinationCityId;
 
     for (const pkg of sourcePackages) {
       if (pkg.customerId !== firstCustomerId) {
@@ -64,6 +66,12 @@ export class ConsolidationService {
           'All packages must have the same warehouse',
         );
       }
+      if (pkg.destinationCityId !== destinationCityId) {
+        throw new BadRequestException(
+          'All package must have the same destination city',
+        );
+      }
+
       if (!['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status)) {
         throw new BadRequestException(
           `Package ${pkg.trackingCode} has invalid status for consolidation`,
@@ -72,9 +80,10 @@ export class ConsolidationService {
     }
 
     // Check target tracking code doesn't exist
-    const existingPackage = await this.prisma.package.findUnique({
-      where: { trackingCode: targetTrackingCode },
-    });
+    const existingPackage: Package | null =
+      await this.prisma.package.findUnique({
+        where: { trackingCode: targetTrackingCode },
+      });
     if (existingPackage) {
       throw new BadRequestException(
         `Tracking code ${targetTrackingCode} already exists`,
@@ -96,6 +105,11 @@ export class ConsolidationService {
       0,
     );
 
+    const daysInWarehouse = sourcePackages.reduce(
+      (sum, pkg) => sum + (pkg.daysInWarehouse || 0),
+      0,
+    );
+
     const result = await this.prisma.$transaction(async (tx) => {
       // Create consolidated parent package
       const parentPackage = await tx.package.create({
@@ -111,6 +125,10 @@ export class ConsolidationService {
           isConsolidated: true,
           status: 'IN_WAREHOUSE',
           warehouseId,
+          notes: `Consolidation of packages: ${sourceTrackingCodes.join(', ')}`,
+          receivedDate: new Date(),
+          daysInWarehouse,
+          photos: sourcePackages.flatMap((p) => p.photos || []) as any,
           createdById: userId,
         },
       });
@@ -124,10 +142,14 @@ export class ConsolidationService {
           customerId: item.customerId,
           warehouseId: item.warehouseId || '',
           shippingMode: item.shippingMode,
+          airShippingType: item.airShippingType,
+          intakePhotos: item.photos || [],
           description: item.description,
           weight: item.weight,
           cbm: item.cbm,
           quantity: item.quantity,
+          notes: item.notes,
+          intakeDate: item.receivedDate || new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
