@@ -128,32 +128,46 @@ export class ConsolidationService {
           notes: `Consolidation of packages: ${sourceTrackingCodes.join(', ')}`,
           receivedDate: new Date(),
           daysInWarehouse,
-          photos: sourcePackages.flatMap((p) => p.photos || []) as any,
+          photos: {
+            create: sourcePackages.flatMap((p) =>
+              (p.photos || []).map((photo) => ({
+                url: photo.url,
+                key: photo.key,
+                uploadedAt: photo.uploadedAt,
+              })),
+            ),
+          },
           createdById: userId,
         },
       });
 
       // Link all package items to the parent package
-      await tx.packageItem.createMany({
-        data: sourcePackages.map((item) => ({
-          packageId: parentPackage.id,
-          // include required fields from the source package
-          intakeTrackingCode: item.trackingCode,
-          customerId: item.customerId,
-          warehouseId: item.warehouseId || '',
-          shippingMode: item.shippingMode,
-          airShippingType: item.airShippingType,
-          intakePhotos: item.photos || [],
-          description: item.description,
-          weight: item.weight,
-          cbm: item.cbm,
-          quantity: item.quantity,
-          notes: item.notes,
-          intakeDate: item.receivedDate || new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })),
-      });
+      for (const item of sourcePackages) {
+        await tx.packageItem.create({
+          data: {
+            packageId: parentPackage.id,
+            // include required fields from the source package
+            intakeTrackingCode: item.trackingCode,
+            customerId: item.customerId,
+            warehouseId: item.warehouseId || '',
+            shippingMode: item.shippingMode,
+            airShippingType: item.airShippingType,
+            intakePhotos: {
+              create: (item.photos || []).map((photo) => ({
+                url: photo.url,
+                key: photo.key,
+                uploadedAt: photo.uploadedAt,
+              })),
+            },
+            description: item.description,
+            weight: item.weight,
+            cbm: item.cbm,
+            quantity: item.quantity,
+            notes: item.notes,
+            intakeDate: item.receivedDate || new Date(),
+          },
+        });
+      }
 
       // Delete old single packages
       await tx.package.deleteMany({
