@@ -32,7 +32,7 @@ export class ConsolidationController {
   constructor(private readonly consolidationService: ConsolidationService) {}
 
   @Post('consolidate')
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
   @ApiOperation({
     summary: 'Consolidate multiple packages into one parent package',
     description:
@@ -94,7 +94,7 @@ export class ConsolidationController {
   }
 
   @Get('packages-for-consolidation')
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
   @ApiOperation({
     summary: 'Get eligible packages for consolidation',
     description:
