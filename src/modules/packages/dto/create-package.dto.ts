@@ -134,6 +134,14 @@ export class CreatePackageDto {
   @Type(() => CreatePackagePhotoDto)
   photos: CreatePackagePhotoDto[];
 
+  @ApiPropertyOptional({
+    description: 'Pickup code for package identification (unique, optional)',
+    example: 'PICK-123456789',
+  })
+  @IsOptional()
+  @IsString()
+  pickupCode?: string;
+
   @ApiProperty({
     description: 'Tracking code for the package',
     example: 'PKG-123456789',

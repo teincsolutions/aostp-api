@@ -48,6 +48,7 @@ export class InvoicesService {
             airShippingType: true,
             quantity: true,
             shippingCost: true,
+            shippingCurrency: true,
             customer: {
               select: {
                 customerCode: true,
@@ -93,24 +94,12 @@ export class InvoicesService {
         continue;
       }
 
-      // Use package's pre-calculated shipping cost
-      let totalAmount = pkg.shippingCost || 0;
+      // Use package's pre-calculated shipping cost directly
+      const totalAmount = pkg.shippingCost || 0;
 
-      // If shipping cost is not calculated, fall back to dynamic calculation
       if (!totalAmount) {
-        const rate = await this.getShippingRate(
-          pkg.shippingMode,
-          pkg.airShippingType,
-          packingList.container.departureCityId,
-        );
-        if (pkg.shippingMode === ShippingMode.SEA) {
-          totalAmount = (pkg.cbm || 0) * rate * (pkg.quantity || 1);
-        } else {
-          totalAmount = (pkg.weight || 0) * rate * (pkg.quantity || 1);
-        }
-
         this.logger.warn(
-          `Package ${pkg.trackingCode} has no shipping cost - using calculated amount: ${totalAmount}`,
+          `Package ${pkg.trackingCode} has no shipping cost set`,
         );
       }
 
@@ -131,7 +120,7 @@ export class InvoicesService {
             packingListId,
             packageId: pkg.id,
             totalAmount,
-            currency: 'USD',
+            currency: pkg.shippingCurrency || 'USD', // Use package's shipping currency
             localAmount: 0, // FX deferred to payment time
             status: InvoiceStatus.UNPAID,
             dueDate,
@@ -192,6 +181,138 @@ export class InvoicesService {
     }
 
     return invoices;
+  }
+
+  /**
+   * Generate invoice for a single package (not through packing list)
+   */
+  async generateFromPackage(
+    packageId: string,
+    userId: string,
+  ): Promise<Invoice> {
+    // Get package with related data
+    const pkg = await this.prisma.package.findUnique({
+      where: { id: packageId },
+      select: {
+        id: true,
+        trackingCode: true,
+        description: true,
+        weight: true,
+        cbm: true,
+        customerId: true,
+        shippingMode: true,
+        airShippingType: true,
+        quantity: true,
+        shippingCost: true,
+        shippingCurrency: true,
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        warehouse: true,
+      },
+    });
+
+    if (!pkg) {
+      throw new NotFoundException(`Package with ID ${packageId} not found`);
+    }
+
+    // Check if invoice already exists for this package
+    const existingInvoice = await this.prisma.invoice.findFirst({
+      where: {
+        packageId: pkg.id,
+      },
+    });
+
+    if (existingInvoice) {
+      throw new BadRequestException(
+        `Invoice already exists for package ${pkg.trackingCode}`,
+      );
+    }
+
+    // Use package's pre-calculated shipping cost directly
+    const totalAmount = pkg.shippingCost || 0;
+
+    if (!totalAmount) {
+      throw new BadRequestException(
+        `Package ${pkg.trackingCode} has no shipping cost set`,
+      );
+    }
+
+    // Generate invoice number
+    const invoiceNumber = await this.idGeneratorService.generateInvoiceNumber();
+
+    // Calculate due date (30 days from now)
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create invoice for the package
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          customerId: pkg.customerId,
+          packageId: pkg.id,
+          totalAmount,
+          currency: pkg.shippingCurrency || 'USD', // Use package's shipping currency
+          localAmount: 0, // FX deferred to payment time
+          status: InvoiceStatus.UNPAID,
+          dueDate,
+          balance: totalAmount, // Initial balance equals total amount
+          notes: `Invoice for package ${pkg.trackingCode}`,
+        },
+        include: {
+          customer: true,
+          package: {
+            include: {
+              items: true,
+              warehouse: true,
+            },
+          },
+        },
+      });
+
+      // Update package to link to this invoice
+      await tx.package.update({
+        where: { id: pkg.id },
+        data: {
+          invoice: {
+            connect: { id: invoice.id },
+          },
+        },
+      });
+
+      // Log the action
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entity: 'Invoice',
+          entityId: invoice.id,
+          after: invoice as any,
+          metadata: {
+            packageId: pkg.id,
+            packageTrackingCode: pkg.trackingCode,
+            customerCode: pkg.customer.customerCode,
+            generatedFromPackage: true,
+          },
+        },
+      });
+
+      return invoice;
+    });
+
+    // Return the complete invoice with relations
+    const completeInvoice = await this.findOne(result.id);
+
+    this.logger.log(
+      `Invoice ${invoiceNumber} generated for package ${result.package?.trackingCode} - Amount: ${totalAmount} ${pkg.shippingCurrency || 'USD'}`,
+    );
+
+    return completeInvoice;
   }
 
   private async getShippingRate(
@@ -771,23 +892,15 @@ export class InvoicesService {
                 warehouse: invoiceWithRelations.package.warehouse?.name,
               }
             : undefined,
-          // Use package items directly
+          // Use package items with correct unit pricing based on shipping rate
           items:
             invoiceWithRelations.package?.items?.map((item) => ({
               description: item.description || '',
               quantity: item.quantity,
-              unitPrice:
-                invoiceWithRelations.package.shippingMode === 'SEA'
-                  ? (item.cbm || 0) *
-                    (invoiceWithRelations.totalAmount /
-                      (invoiceWithRelations.package.quantity || 1))
-                  : (item.weight || 0) *
-                    (invoiceWithRelations.totalAmount /
-                      (invoiceWithRelations.package.quantity || 1)),
+              unitPrice: invoiceWithRelations.package?.shippingRate || 0,
               total:
-                (invoiceWithRelations.totalAmount /
-                  (invoiceWithRelations.package.quantity || 1)) *
-                item.quantity,
+                item.quantity *
+                (invoiceWithRelations.package?.shippingRate || 0),
             })) || [],
           totals: {
             total: invoiceWithRelations.totalAmount,

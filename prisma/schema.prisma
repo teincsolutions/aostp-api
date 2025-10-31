@@ -287,6 +287,9 @@ model Package {
   // Payment status
   paymentStatus PaymentStatus @default(PENDING)
 
+  // Pickup code - unique and optional for package identification
+  pickupCode String? @unique
+
   // Receipt
   receiptKey String? // S3 key for package intake receipt PDF
 
@@ -434,8 +437,8 @@ model Invoice {
   invoiceNumber String        @unique
   customerId    String
   customer      Customer      @relation(fields: [customerId], references: [id])
-  packingListId String
-  packingList   PackingList   @relation(fields: [packingListId], references: [id])
+  packingListId String? // Optional - invoices can exist without packing lists
+  packingList   PackingList?  @relation(fields: [packingListId], references: [id])
   packageId     String? // One invoice per package
   package       Package?      @relation(fields: [packageId], references: [id])
   totalAmount   Float

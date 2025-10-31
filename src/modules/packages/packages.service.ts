@@ -137,6 +137,7 @@ export class PackagesService {
           airShippingType: packageData.airShippingType,
           status: PackageStatus.IN_WAREHOUSE,
           notes: packageData.notes,
+          pickupCode: packageData.pickupCode,
           isConsolidated: false,
           createdById: userId,
           photos: {
@@ -253,6 +254,7 @@ export class PackagesService {
         { trackingCode: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
         { notes: { contains: filters.search, mode: 'insensitive' } },
+        { pickupCode: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
@@ -366,6 +368,22 @@ export class PackagesService {
 
   async update(id: string, updatePackageDto: UpdatePackageDto, userId: string) {
     const existingPackage = await this.findOne(id);
+
+    // Validate pickupCode uniqueness if provided
+    if (
+      updatePackageDto.pickupCode &&
+      updatePackageDto.pickupCode !== existingPackage.pickupCode
+    ) {
+      const existingWithPickupCode = await this.prisma.package.findUnique({
+        where: { pickupCode: updatePackageDto.pickupCode },
+      });
+
+      if (existingWithPickupCode) {
+        throw new BadRequestException(
+          `Pickup code ${updatePackageDto.pickupCode} already exists`,
+        );
+      }
+    }
 
     // Auto-calculate shippingCost if shippingRate is provided and we have the necessary data
     let calculatedShippingCost = updatePackageDto.shippingCost;
@@ -660,6 +678,7 @@ export class PackagesService {
         { trackingCode: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
         { notes: { contains: filters.search, mode: 'insensitive' } },
+        { pickupCode: { contains: filters.search, mode: 'insensitive' } },
         {
           customer: {
             firstName: { contains: filters.search, mode: 'insensitive' },
