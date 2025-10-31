@@ -36,6 +36,7 @@ export class ConsolidationService {
     const firstCustomerId = sourcePackages[0].customerId;
     const shippingMode = sourcePackages[0].shippingMode;
     const airShippingType = sourcePackages[0].airShippingType;
+    const warehouseId = sourcePackages[0].warehouseId;
 
     for (const pkg of sourcePackages) {
       if (pkg.customerId !== firstCustomerId) {
@@ -56,6 +57,11 @@ export class ConsolidationService {
       if (pkg.airShippingType !== airShippingType) {
         throw new BadRequestException(
           'All packages must have the same air shipping type',
+        );
+      }
+      if (pkg.warehouseId !== warehouseId) {
+        throw new BadRequestException(
+          'All packages must have the same warehouse',
         );
       }
       if (!['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status)) {
@@ -104,28 +110,33 @@ export class ConsolidationService {
           airShippingType,
           isConsolidated: true,
           status: 'IN_WAREHOUSE',
+          warehouseId,
           createdById: userId,
         },
       });
 
       // Link all package items to the parent package
-      await tx.packageItem.updateMany({
-        where: {
-          packageId: { in: sourcePackages.map((p) => p.id) },
-        },
-        data: {
+      await tx.packageItem.createMany({
+        data: sourcePackages.map((item) => ({
           packageId: parentPackage.id,
-          status: 'CONSOLIDATED',
-        },
+          // include required fields from the source package
+          intakeTrackingCode: item.trackingCode,
+          customerId: item.customerId,
+          warehouseId: item.warehouseId || '',
+          shippingMode: item.shippingMode,
+          description: item.description,
+          weight: item.weight,
+          cbm: item.cbm,
+          quantity: item.quantity,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
       });
 
-      // Mark old single packages as consolidated children
-      await tx.package.updateMany({
+      // Delete old single packages
+      await tx.package.deleteMany({
         where: {
           id: { in: sourcePackages.map((p) => p.id) },
-        },
-        data: {
-          status: 'CONSOLIDATED',
         },
       });
 
@@ -155,14 +166,7 @@ export class ConsolidationService {
       });
 
       return {
-        parentPackage: {
-          id: parentPackage.id,
-          trackingCode: parentPackage.trackingCode,
-          totalWeight,
-          totalCBM,
-          totalQuantity,
-          itemCount: sourcePackages.length,
-        },
+        parentPackage,
         consolidatedPackages: sourcePackages.map((p) => ({
           id: p.id,
           trackingCode: p.trackingCode,
