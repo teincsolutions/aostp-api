@@ -55,18 +55,6 @@ export class InvoicesController {
     };
   }
 
-  @Post()
-  @Roles(
-    UserRole.OPERATIONS_CLERK,
-    UserRole.FINANCE_MANAGER,
-    UserRole.SUPER_ADMIN,
-  )
-  @ApiOperation({ summary: 'Create a new invoice manually' })
-  @ApiResponse({ status: 201, description: 'Invoice created successfully' })
-  create(@Body() createInvoiceDto: CreateInvoiceDto, @Request() req: any) {
-    return this.invoicesService.create(createInvoiceDto, req.user.sub);
-  }
-
   @Get()
   @Roles(
     UserRole.OPERATIONS_CLERK,

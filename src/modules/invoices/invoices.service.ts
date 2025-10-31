@@ -119,9 +119,9 @@ export class InvoicesService {
             customerId: pkg.customerId,
             packingListId,
             packageId: pkg.id,
-            totalAmount,
+            totalAmount: pkg.shippingCurrency === 'USD' ? totalAmount : 0, // FX deferred to payment time
             currency: pkg.shippingCurrency || 'USD', // Use package's shipping currency
-            localAmount: 0, // FX deferred to payment time
+            localAmount: pkg.shippingCurrency === 'GHS' ? totalAmount : 0, // FX deferred to payment time
             status: InvoiceStatus.UNPAID,
             dueDate,
             balance: totalAmount, // Initial balance equals total amount
@@ -343,120 +343,6 @@ export class InvoicesService {
     }
 
     return rate.ratePerUnit;
-  }
-
-  async create(
-    createInvoiceDto: CreateInvoiceDto,
-    userId: string,
-  ): Promise<Invoice> {
-    const {
-      customerId,
-      packingListId,
-      dueDate,
-      notes,
-      currency = 'USD',
-      exchangeRate: providedRate,
-    } = createInvoiceDto;
-
-    // Verify customer exists
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-
-    if (!customer) {
-      throw new NotFoundException(`Customer with ID ${customerId} not found`);
-    }
-
-    // Verify packing list exists
-    const packingList = await this.prisma.packingList.findUnique({
-      where: { id: packingListId },
-      include: {
-        packages: {
-          where: { customerId },
-        },
-      },
-    });
-
-    if (!packingList) {
-      throw new NotFoundException(
-        `Packing list with ID ${packingListId} not found`,
-      );
-    }
-
-    if (packingList.packages.length === 0) {
-      throw new BadRequestException(
-        'No packages found for this customer in the packing list',
-      );
-    }
-
-    // Calculate total amount - NO currency conversion per Use Case rule
-    let totalAmount = 0;
-    for (const pkg of packingList.packages) {
-      const rate = await this.getShippingRate(
-        pkg.shippingMode,
-        pkg.airShippingType,
-      );
-      if (pkg.shippingMode === ShippingMode.SEA) {
-        totalAmount += (pkg.cbm || 0) * rate;
-      } else {
-        totalAmount += (pkg.weight || 0) * rate;
-      }
-    }
-
-    const invoiceNumber = await this.idGeneratorService.generateInvoiceNumber();
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.create({
-        data: {
-          invoiceNumber,
-          customerId,
-          packingListId,
-          totalAmount,
-          currency,
-          localAmount: 0, // FX conversion deferred to payment time per use case rule
-          status: InvoiceStatus.UNPAID,
-          dueDate: dueDate
-            ? new Date(dueDate)
-            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          balance: totalAmount, // Initial balance equals total amount
-          notes,
-        },
-        include: {
-          customer: true,
-          packingList: {
-            include: {
-              container: true,
-            },
-          },
-          package: {
-            include: {
-              items: true,
-            },
-          },
-        },
-      });
-
-      // Update package to link to this invoice (old create method, need to update)
-      // Note: This method might not be needed anymore since we changed to 1 invoice per package
-
-      // Log the action
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'CREATE',
-          entity: 'Invoice',
-          entityId: invoice.id,
-          after: invoice as any,
-        },
-      });
-
-      return invoice;
-    });
-
-    this.logger.log(
-      `Invoice ${invoiceNumber} created for customer ${customer.customerCode}`,
-    );
-    return result;
   }
 
   async findAll(

@@ -230,6 +230,7 @@ export class PaymentsService {
           invoiceIds,
           amount,
           invoicesToPay,
+          currency,
         );
 
         // For gateway payments, store additional notes for tracking
@@ -658,7 +659,7 @@ export class PaymentsService {
 
   /**
    * Helper method to apply payment to invoices
-   * Distributes payment amount across specified invoices
+   * Distributes payment amount across specified invoices with currency conversion
    */
   private async applyPaymentToInvoices(
     tx: Prisma.TransactionClient,
@@ -666,7 +667,18 @@ export class PaymentsService {
     invoiceIds: string[],
     paymentAmount: number,
     invoicesToPay: any[],
+    paymentCurrency: string,
   ): Promise<void> {
+    // Get the payment with exchange rate for currency conversion
+    const payment = await tx.payment.findUnique({
+      where: { id: paymentId },
+      include: { exchangeRate: true },
+    });
+
+    if (!payment) {
+      throw new BadRequestException(`Payment with ID ${paymentId} not found`);
+    }
+
     // Create payment-invoice relationships
     await tx.$executeRaw`
       INSERT INTO "_InvoiceToPayment" ("A", "B")
@@ -674,12 +686,33 @@ export class PaymentsService {
     `;
 
     // Update invoice paid amounts and status
+    // remainingAmount is tracked in payment currency
     let remainingAmount = paymentAmount;
-    for (const invoice of invoicesToPay) {
-      const outstandingAmount = invoice.totalAmount - invoice.paidAmount;
-      const amountToApply = Math.min(remainingAmount, outstandingAmount);
 
-      const newPaidAmount = invoice.paidAmount + amountToApply;
+    for (const invoice of invoicesToPay) {
+      // Convert outstanding invoice amount to payment currency for comparison
+      const outstandingAmountInPaymentCurrency = this.convertAmountToCurrency(
+        invoice.totalAmount - invoice.paidAmount,
+        invoice.currency,
+        paymentCurrency,
+        payment.exchangeRate,
+      );
+
+      // Calculate how much to apply in payment currency
+      const amountToApplyInPaymentCurrency = Math.min(
+        remainingAmount,
+        outstandingAmountInPaymentCurrency,
+      );
+
+      // Convert the amount to apply back to invoice currency
+      const amountToApplyInInvoiceCurrency = this.convertAmountToCurrency(
+        amountToApplyInPaymentCurrency,
+        paymentCurrency,
+        invoice.currency,
+        payment.exchangeRate,
+      );
+
+      const newPaidAmount = invoice.paidAmount + amountToApplyInInvoiceCurrency;
       const newBalance = invoice.totalAmount - newPaidAmount;
       const newStatus =
         newPaidAmount >= invoice.totalAmount
@@ -710,8 +743,46 @@ export class PaymentsService {
         });
       }
 
-      remainingAmount -= amountToApply;
+      // Reduce remaining amount in payment currency
+      remainingAmount -= amountToApplyInPaymentCurrency;
       if (remainingAmount <= 0) break;
+    }
+  }
+
+  /**
+   * Helper method to convert amount between currencies using exchange rate
+   */
+  private convertAmountToCurrency(
+    amount: number,
+    fromCurrency: string,
+    toCurrency: string,
+    exchangeRate: any,
+  ): number {
+    // If currencies are the same, no conversion needed
+    if (fromCurrency === toCurrency) {
+      return amount;
+    }
+
+    // Use the exchange rate to convert
+    // The exchange rate represents how many toCurrency units = 1 fromCurrency unit
+    if (
+      exchangeRate.fromCurrency === fromCurrency &&
+      exchangeRate.toCurrency === toCurrency
+    ) {
+      return amount * exchangeRate.rate;
+    } else if (
+      exchangeRate.fromCurrency === toCurrency &&
+      exchangeRate.toCurrency === fromCurrency
+    ) {
+      return amount / exchangeRate.rate;
+    } else {
+      // If the exchange rate doesn't match the conversion direction, we need to handle it
+      // For now, assume the rate is stored as fromCurrency to toCurrency
+      // This might need adjustment based on how exchange rates are stored
+      this.logger.warn(
+        `Exchange rate direction mismatch: trying to convert ${fromCurrency} to ${toCurrency} but rate is ${exchangeRate.fromCurrency} to ${exchangeRate.toCurrency}`,
+      );
+      return amount * exchangeRate.rate;
     }
   }
 
