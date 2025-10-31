@@ -29,6 +29,7 @@ import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { CitiesModule } from './modules/cities/cities.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { CitiesModule } from './modules/cities/cities.module';
     AuthModule,
     CitiesModule,
     CustomersModule,
+    DashboardModule,
     PackagesModule,
     PackingListsModule,
     ContainersModule,
