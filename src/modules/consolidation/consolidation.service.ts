@@ -35,6 +35,7 @@ export class ConsolidationService {
     // Check eligibility - must be the same customer, not already consolidated, not shipped
     const firstCustomerId = sourcePackages[0].customerId;
     const shippingMode = sourcePackages[0].shippingMode;
+    const airShippingType = sourcePackages[0].airShippingType;
 
     for (const pkg of sourcePackages) {
       if (pkg.customerId !== firstCustomerId) {
@@ -50,6 +51,11 @@ export class ConsolidationService {
       if (pkg.shippingMode !== shippingMode) {
         throw new BadRequestException(
           'All packages must have the same shipping mode',
+        );
+      }
+      if (pkg.airShippingType !== airShippingType) {
+        throw new BadRequestException(
+          'All packages must have the same air shipping type',
         );
       }
       if (!['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status)) {
@@ -70,16 +76,16 @@ export class ConsolidationService {
     }
 
     // Calculate totals from package items
-    const packageItems = sourcePackages.flatMap((pkg) => pkg.items);
-    const totalWeight = packageItems.reduce(
+    const newDescription = `Consolidated package - ${sourcePackages.map((pkg) => pkg.description).join(', ')}`;
+    const totalWeight = sourcePackages.reduce(
       (sum, item) => sum + (item.weight || 0),
       0,
     );
-    const totalCBM = packageItems.reduce(
+    const totalCBM = sourcePackages.reduce(
       (sum, item) => sum + (item.cbm || 0),
       0,
     );
-    const totalQuantity = packageItems.reduce(
+    const totalQuantity = sourcePackages.reduce(
       (sum, item) => sum + item.quantity,
       0,
     );
@@ -90,11 +96,12 @@ export class ConsolidationService {
         data: {
           trackingCode: targetTrackingCode,
           customerId: firstCustomerId,
-          description: `Consolidated package - ${sourceTrackingCodes.join(', ')}`,
+          description: newDescription,
           weight: totalWeight,
           cbm: totalCBM,
           quantity: totalQuantity,
           shippingMode,
+          airShippingType,
           isConsolidated: true,
           status: 'IN_WAREHOUSE',
           createdById: userId,
@@ -134,7 +141,7 @@ export class ConsolidationService {
             sourcePackages: sourceTrackingCodes,
             totalWeight,
             totalCBM,
-            itemCount: packageItems.length,
+            itemCount: sourcePackages.length,
           },
           metadata: {
             action: 'PACKAGE_CONSOLIDATION',
@@ -154,7 +161,7 @@ export class ConsolidationService {
           totalWeight,
           totalCBM,
           totalQuantity,
-          itemCount: packageItems.length,
+          itemCount: sourcePackages.length,
         },
         consolidatedPackages: sourcePackages.map((p) => ({
           id: p.id,
