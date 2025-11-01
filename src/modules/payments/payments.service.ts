@@ -697,12 +697,7 @@ export class PaymentsService {
       throw new BadRequestException(`Payment with ID ${paymentId} not found`);
     }
 
-    // Create payment-invoice relationships
-    await tx.$executeRaw`
-      INSERT INTO "_InvoiceToPayment" ("A", "B")
-      SELECT unnest(${invoiceIds}::text[]) as "A", ${paymentId} as "B"
-    `;
-
+    // Note: Payment-invoice relationships are already created via the connect in payment creation
     // Update invoice paid amounts and status
     // remainingAmount is tracked in payment currency
     let remainingAmount = paymentAmount;
