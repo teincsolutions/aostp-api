@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
 import {
   EmailProvider,
   EmailResponse,
   EmailOptions,
 } from '../../interfaces/email-provider.interface';
-import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class NodemailerProvider implements EmailProvider {
@@ -62,32 +62,14 @@ export class NodemailerProvider implements EmailProvider {
       return {
         success: false,
         error:
-          'Nodemailer email provider is not configured. Please install nodemailer and configure SMTP settings.',
+          'Nodemailer email provider is not configured. Please configure SMTP settings.',
       };
     }
 
     try {
-      // Dynamic import to avoid build errors when nodemailer is not installed
-
       this.logger.debug(`Sending email to ${to} with subject: ${subject}`);
 
-      const smtpHost = this.configService.get<string>('SMTP_HOST');
-      const smtpPort = this.configService.get<number>('SMTP_PORT', 587);
-      const smtpUser = this.configService.get<string>('SMTP_USER');
-      const smtpPass = this.configService.get<string>('SMTP_PASS');
-      const smtpSecure = this.configService.get<boolean>('SMTP_SECURE', false);
-
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpSecure,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
-
-      const mailOptions: any = {
+      const mailOptions: nodemailer.SendMailOptions = {
         from: options.from || this.defaultFrom,
         to,
         subject,
@@ -112,7 +94,7 @@ export class NodemailerProvider implements EmailProvider {
         }));
       }
 
-      const info = await transporter.sendMail(mailOptions);
+      const info = await this.transporter.sendMail(mailOptions);
 
       this.logger.debug('Email sent successfully', {
         messageId: info.messageId,
@@ -152,23 +134,7 @@ export class NodemailerProvider implements EmailProvider {
     }
 
     try {
-      const smtpHost = this.configService.get<string>('SMTP_HOST');
-      const smtpPort = this.configService.get<number>('SMTP_PORT', 587);
-      const smtpUser = this.configService.get<string>('SMTP_USER');
-      const smtpPass = this.configService.get<string>('SMTP_PASS');
-      const smtpSecure = this.configService.get<boolean>('SMTP_SECURE', false);
-
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpSecure,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
-
-      await transporter.verify();
+      await this.transporter.verify();
       return { success: true };
     } catch (error) {
       this.logger.error('SMTP connection verification failed:', error);
