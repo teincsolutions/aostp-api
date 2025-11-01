@@ -205,6 +205,9 @@ export class PaymentsService {
           processedBy: {
             connect: { id: userId },
           },
+          invoices: {
+            connect: invoiceIds ? invoiceIds.map((id) => ({ id })) : [],
+          },
         },
         include: {
           customer: true,
