@@ -487,6 +487,9 @@ model Payment {
   gatewayTransactionId String? // ID from payment gateway (e.g. Hubtel checkout ID)
   gatewayStatus        PaymentGatewayStatus? // Status from payment gateway
 
+  // Receipt
+  receiptKey String? // S3 key for payment receipt PDF
+
   // Relations
   invoices Invoice[]
 

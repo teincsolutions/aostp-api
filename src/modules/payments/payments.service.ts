@@ -267,6 +267,21 @@ export class PaymentsService {
       return payment;
     });
 
+    // Generate receipt for cash payments immediately
+    if (!isGatewayPayment) {
+      try {
+        const receiptResult = await this.generatePaymentReceipt(result.id);
+        this.logger.log(
+          `Payment receipt generated for cash payment ${paymentCode}: ${receiptResult.key}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate receipt for cash payment ${paymentCode}: ${error.message}`,
+        );
+        // Don't fail the payment creation if receipt generation fails
+      }
+    }
+
     this.logger.log(
       `Payment ${paymentCode} processed for customer ${customer.customerCode} - Amount: ${amount} ${currency}`,
     );
@@ -1022,6 +1037,19 @@ export class PaymentsService {
       }
     });
 
+    // Generate receipt for successful gateway payment
+    try {
+      const receiptResult = await this.generatePaymentReceipt(payment.id);
+      this.logger.log(
+        `Payment receipt generated for successful gateway payment ${payment.paymentCode}: ${receiptResult.key}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate receipt for successful gateway payment ${payment.paymentCode}: ${error.message}`,
+      );
+      // Don't fail the callback processing if receipt generation fails
+    }
+
     this.logger.log(
       `${paymentMethod} success callback processed for payment ${payment.paymentCode}`,
     );
@@ -1149,6 +1177,12 @@ export class PaymentsService {
 
     const result = await this.pdfService.generateReceiptPDF(receiptData);
 
+    // Store the receipt key in the payment record
+    await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: { receiptKey: result.key },
+    });
+
     this.logger.log(
       `Payment receipt generated for ${payment.paymentCode}: ${result.key}`,
     );
@@ -1159,5 +1193,12 @@ export class PaymentsService {
   // verify token
   async verifyCallbackToken(token: string) {
     return await this.callbackTokenService.verifyCallbackToken(token);
+  }
+
+  /**
+   * Get signed download URL for a payment receipt
+   */
+  async getPaymentReceiptUrl(receiptKey: string): Promise<string> {
+    return await this.pdfService.generateSignedDownloadUrl(receiptKey);
   }
 }

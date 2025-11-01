@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -176,5 +177,38 @@ export class PaymentsController {
     @Request() req: any,
   ) {
     return this.paymentsService.update(id, updatePaymentDto, req.user.id);
+  }
+
+  @Get(':id/receipt')
+  @Roles(
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.SUPER_ADMIN,
+    UserRole.CUSTOMER,
+  )
+  @ApiOperation({ summary: 'Get payment receipt URL' })
+  @ApiResponse({ status: 200, description: 'Receipt URL retrieved' })
+  @ApiResponse({ status: 404, description: 'Payment or receipt not found' })
+  async getPaymentReceipt(@Param('id') id: string) {
+    const payment = await this.paymentsService.findOne(id);
+
+    if (!payment.receiptKey) {
+      // If no receipt exists, try to generate one
+      try {
+        const receiptResult =
+          await this.paymentsService.generatePaymentReceipt(id);
+        return { url: receiptResult.url, key: receiptResult.key };
+      } catch (error) {
+        throw new NotFoundException(
+          'Receipt not found and could not be generated',
+        );
+      }
+    }
+
+    // Get the signed URL for the receipt
+    const url = await this.paymentsService.getPaymentReceiptUrl(
+      payment.receiptKey,
+    );
+    return { url, key: payment.receiptKey };
   }
 }
