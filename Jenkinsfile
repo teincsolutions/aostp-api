@@ -22,8 +22,6 @@ pipeline {
         SMS_ONLINE_GH_SENDER_ID = 'Willfind8'
 
         EMAIL_PROVIDER = 'nodemailer'
-        SMTP_USER = credentials('smtp-user')
-        SMTP_PASS = credentials('smtp-pass')
         SMTP_SECURE = true
         EMAIL_FROM = 'support@teincsolutions.com'
     }
@@ -165,7 +163,10 @@ pipeline {
                                             string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY'),
                                             string(credentialsId: 'hubtel-api-id-prod', variable: 'HUBTEL_API_ID'),
                                             string(credentialsId: 'hubtel-api-key-prod', variable: 'HUBTEL_API_KEY'),
-                                            string(credentialsId: 'hubtel-pos-sales-id-prod', variable: 'HUBTEL_POS_SALES_ID')]) {
+                                            string(credentialsId: 'sms-online-gh-api-key', variable: 'SMS_ONLINE_GH_API_KEY'),
+                                            string(credentialsId: 'sms-online-gh-sender-id', variable: 'SMS_ONLINE_GH_SENDER_ID'),
+                                            string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
+                                            string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
                     sh '''
                         if [ -f .env.example ]; then
                               envsubst < .env.example > .env.production
