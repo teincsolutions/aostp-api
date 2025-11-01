@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { GetNotificationsDto } from './dto/notifications.filter.dto';
@@ -10,6 +10,8 @@ import {
   Invoice,
   Payment,
 } from '@prisma/client';
+import type { SmsProvider } from '../../interfaces/sms-provider.interface';
+import type { EmailProvider } from '../../interfaces/email-provider.interface';
 
 interface NotificationChannelContent {
   channel: NotificationChannel;
@@ -32,6 +34,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    @Inject('SMS_PROVIDER') private readonly smsProvider: SmsProvider,
+    @Inject('EMAIL_PROVIDER') private readonly emailProvider: EmailProvider,
   ) {}
 
   async sendNotification(data: NotificationData): Promise<any[]> {
@@ -130,21 +134,51 @@ export class NotificationsService {
   }
 
   private async sendEmail(notification: any) {
-    // TODO: Implement email provider integration
-    this.logger.debug(
-      `Email would be sent to ${notification.recipient}: ${notification.content}`,
-    );
-    // For now, just log the email
-    return Promise.resolve();
+    try {
+      const result = await this.emailProvider.sendEmail(
+        notification.recipient,
+        notification.subject || 'AOSTP Logistics Notification',
+        notification.content,
+        { html: true }, // Most notification content is HTML
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Email sending failed');
+      }
+
+      this.logger.debug(
+        `Email sent successfully to ${notification.recipient} with messageId: ${result.messageId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send email to ${notification.recipient}:`,
+        error,
+      );
+      throw error; // Re-throw to be caught by processNotification
+    }
   }
 
   private async sendSMS(notification: any) {
-    // TODO: Implement SMS provider integration (Twilio, etc.)
-    this.logger.debug(
-      `SMS would be sent to ${notification.recipient}: ${notification.content}`,
-    );
-    // For now, just log the SMS
-    return Promise.resolve();
+    try {
+      const result = await this.smsProvider.sendSms(
+        notification.recipient,
+        notification.content,
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'SMS sending failed');
+      }
+
+      this.logger.debug(
+        `SMS sent successfully to ${notification.recipient} with messageId: ${result.messageId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send SMS to ${notification.recipient}:`,
+        error,
+      );
+      throw error; // Re-throw to be caught by processNotification
+    }
   }
 
   private async sendWhatsApp(notification: any) {

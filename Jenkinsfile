@@ -8,13 +8,24 @@ pipeline {
     environment {
         // Customize these credentials and variables for your project
         SLACK_WEBHOOK_URL = credentials('aostp-slack-webhook')
-        DOCKER_IMAGE_NAME = "teincsolutions/aostp-api"
+        DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
         CORS_ORIGIN = 'https://aostp.akomapacargo.com'
         CDN_DOMAIN = 'cdn.akomapacargo.com'
         JWT_EXPIRATION = '15m'
         JWT_REFRESH_EXPIRATION = '7d'
+        SMS_PROVIDER = 'sms-online-gh'
+
+        // SMS Online GH Provider
+        SMS_ONLINE_GH_API_KEY = credentials('sms-online-gh-api-key')
+        SMS_ONLINE_GH_SENDER_ID = 'Willfind8'
+
+        EMAIL_PROVIDER = 'nodemailer'
+        SMTP_USER = credentials('smtp-user')
+        SMTP_PASS = credentials('smtp-pass')
+        SMTP_SECURE = true
+        EMAIL_FROM = 'support@teincsolutions.com'
     }
 
     stages {
@@ -131,9 +142,9 @@ pipeline {
                         ./scripts/setup-s3-policy.sh
 
                     '''
-                    }
-                }
+                                                }
             }
+        }
 
         stage('Deploy to Production Environment') {
             when {
@@ -183,7 +194,7 @@ pipeline {
                                             }
             }
         }
-        }
+    }
 
     post {
         always {
@@ -226,4 +237,4 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 30, unit: 'MINUTES')
     }
-    }
+}

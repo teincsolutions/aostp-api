@@ -5,6 +5,7 @@ import { ConsoleSmsProvider } from './console.provider';
 import { ArkeselSmsProvider } from './arkesel.provider';
 import { AwsSnsProvider } from './aws-sns.provider';
 import { SmsOnlineGHProvider } from './sms-online-gh.provider';
+import { HubtelSmsProvider } from './hubtel.provider';
 import { SmsProvider } from '../../interfaces/sms-provider.interface';
 
 @Module({
@@ -14,6 +15,7 @@ import { SmsProvider } from '../../interfaces/sms-provider.interface';
     ArkeselSmsProvider,
     AwsSnsProvider,
     SmsOnlineGHProvider,
+    HubtelSmsProvider,
     {
       provide: 'SMS_PROVIDER',
       useFactory: (
@@ -22,6 +24,7 @@ import { SmsProvider } from '../../interfaces/sms-provider.interface';
         arkeselProvider: ArkeselSmsProvider,
         awsSnsProvider: AwsSnsProvider,
         smsOnlineProvider: SmsOnlineGHProvider,
+        hubtelProvider: HubtelSmsProvider,
       ): SmsProvider => {
         const provider = configService.get<string>('SMS_PROVIDER', 'console');
 
@@ -32,6 +35,8 @@ import { SmsProvider } from '../../interfaces/sms-provider.interface';
             return awsSnsProvider;
           case 'sms-online-gh':
             return smsOnlineProvider;
+          case 'hubtel':
+            return hubtelProvider;
           case 'console':
           default:
             return consoleProvider;
@@ -43,6 +48,7 @@ import { SmsProvider } from '../../interfaces/sms-provider.interface';
         ArkeselSmsProvider,
         AwsSnsProvider,
         SmsOnlineGHProvider,
+        HubtelSmsProvider,
       ],
     },
   ],
