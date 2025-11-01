@@ -18,7 +18,6 @@ pipeline {
         SMS_PROVIDER = 'sms-online-gh'
 
         // SMS Online GH Provider
-        SMS_ONLINE_GH_API_KEY = credentials('sms-online-gh-api-key')
         SMS_ONLINE_GH_SENDER_ID = 'Willfind8'
 
         EMAIL_PROVIDER = 'nodemailer'
@@ -156,15 +155,14 @@ pipeline {
                                             string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
                                             string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
                                             string(credentialsId: 's3-packages-bucket-prod', variable: 'AWS_PACKAGES_BUCKET_NAME'),
-                                              string(credentialsId: 's3-users-bucket-prod', variable: 'AWS_USERS_BUCKET_NAME'),
-                                                string(credentialsId: 's3-logs-bucket-prod', variable: 'AWS_LOGS_BUCKET_NAME'),
+                                            string(credentialsId: 's3-users-bucket-prod', variable: 'AWS_USERS_BUCKET_NAME'),
+                                            string(credentialsId: 's3-logs-bucket-prod', variable: 'AWS_LOGS_BUCKET_NAME'),
                                             string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
                                             string(credentialsId: 'jwt-refresh-secret-prod', variable: 'JWT_REFRESH_SECRET'),
                                             string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY'),
                                             string(credentialsId: 'hubtel-api-id-prod', variable: 'HUBTEL_API_ID'),
                                             string(credentialsId: 'hubtel-api-key-prod', variable: 'HUBTEL_API_KEY'),
                                             string(credentialsId: 'sms-online-gh-api-key', variable: 'SMS_ONLINE_GH_API_KEY'),
-                                            string(credentialsId: 'sms-online-gh-sender-id', variable: 'SMS_ONLINE_GH_SENDER_ID'),
                                             string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
                                             string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
                     sh '''
