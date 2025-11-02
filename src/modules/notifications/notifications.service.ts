@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import type { SmsProvider } from '../../interfaces/sms-provider.interface';
 import type { EmailProvider } from '../../interfaces/email-provider.interface';
+import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
 
 interface NotificationChannelContent {
   channel: NotificationChannel;
@@ -36,6 +37,8 @@ export class NotificationsService {
     private readonly configService: ConfigService,
     @Inject('SMS_PROVIDER') private readonly smsProvider: SmsProvider,
     @Inject('EMAIL_PROVIDER') private readonly emailProvider: EmailProvider,
+    @Inject('WHATSAPP_PROVIDER')
+    private readonly whatsAppProvider: WhatsAppProvider,
   ) {}
 
   async sendNotification(data: NotificationData): Promise<any[]> {
@@ -182,12 +185,26 @@ export class NotificationsService {
   }
 
   private async sendWhatsApp(notification: any) {
-    // TODO: Implement WhatsApp provider integration
-    this.logger.debug(
-      `WhatsApp message would be sent to ${notification.recipient}: ${notification.content}`,
-    );
-    // For now, just log the WhatsApp message
-    return Promise.resolve();
+    try {
+      const result = await this.whatsAppProvider.sendMessage(
+        notification.recipient,
+        notification.content,
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'WhatsApp sending failed');
+      }
+
+      this.logger.debug(
+        `WhatsApp message sent successfully to ${notification.recipient} with messageId: ${result.messageId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send WhatsApp message to ${notification.recipient}:`,
+        error,
+      );
+      throw error; // Re-throw to be caught by processNotification
+    }
   }
 
   private getDefaultSubject(type: NotificationType): string {

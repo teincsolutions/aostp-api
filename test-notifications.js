@@ -17,9 +17,29 @@ async function testNotificationsSetup() {
         file: 'src/interfaces/email-provider.interface.ts',
       },
       {
+        name: 'SMS provider interface',
+        pattern: /export interface SmsProvider/,
+        file: 'src/interfaces/sms-provider.interface.ts',
+      },
+      {
+        name: 'WhatsApp provider interface',
+        pattern: /export interface WhatsAppProvider/,
+        file: 'src/interfaces/whatsapp-provider.interface.ts',
+      },
+      {
         name: 'Email module',
         pattern: /export class EmailModule/,
         file: 'src/providers/email/email.module.ts',
+      },
+      {
+        name: 'SMS module',
+        pattern: /export class SmsModule/,
+        file: 'src/providers/sms/sms.module.ts',
+      },
+      {
+        name: 'WhatsApp module',
+        pattern: /export class WhatsAppModule/,
+        file: 'src/providers/whatsapp/whatsapp.module.ts',
       },
       {
         name: 'Console email provider',
@@ -32,18 +52,28 @@ async function testNotificationsSetup() {
         file: 'src/providers/email/nodemailer.provider.ts',
       },
       {
+        name: 'Console WhatsApp provider',
+        pattern: /export class ConsoleWhatsAppProvider/,
+        file: 'src/providers/whatsapp/console.provider.ts',
+      },
+      {
+        name: 'Meta WhatsApp provider',
+        pattern: /export class MetaWhatsAppProvider/,
+        file: 'src/providers/whatsapp/meta.provider.ts',
+      },
+      {
         name: 'Notifications module imports',
-        pattern: /SmsModule.*EmailModule/,
+        pattern: /SmsModule.*EmailModule.*WhatsAppModule/,
         file: 'src/modules/notifications/notifications.module.ts',
       },
       {
         name: 'Notifications service imports',
-        pattern: /import type.*SmsProvider/,
+        pattern: /import type.*WhatsAppProvider/,
         file: 'src/modules/notifications/notifications.service.ts',
       },
       {
         name: 'Notifications service constructor',
-        pattern: /@Inject.*SMS_PROVIDER/,
+        pattern: /@Inject.*WHATSAPP_PROVIDER/,
         file: 'src/modules/notifications/notifications.service.ts',
       },
       {
@@ -54,6 +84,11 @@ async function testNotificationsSetup() {
       {
         name: 'sendSMS method implementation',
         pattern: /this\.smsProvider\.sendSms/,
+        file: 'src/modules/notifications/notifications.service.ts',
+      },
+      {
+        name: 'sendWhatsApp method implementation',
+        pattern: /this\.whatsAppProvider\.sendMessage/,
         file: 'src/modules/notifications/notifications.service.ts',
       },
     ];
@@ -89,10 +124,17 @@ async function testNotificationsSetup() {
       console.log(
         '2. Set SMS_PROVIDER=hubtel (or console) in your environment',
       );
-      console.log('3. Configure email/SMS provider credentials as needed');
       console.log(
-        '4. Use the notification methods like notifyPackageIntake(), notifyInvoiceIssued(), etc.',
+        '3. Set WHATSAPP_PROVIDER=console (or meta) in your environment',
       );
+      console.log('4. Configure provider credentials as needed:');
+      console.log(
+        '   - Meta WhatsApp: META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID',
+      );
+      console.log(
+        '5. Use the notification methods like notifyPackageIntake(), notifyInvoiceIssued(), etc.',
+      );
+      console.log('\nWhatsApp notifications are now fully integrated! 🚀');
     } else {
       console.log(
         '❌ Some setup checks failed. Please review the implementation.',
