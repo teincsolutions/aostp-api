@@ -211,4 +211,61 @@ export class PaymentsController {
     );
     return { url, key: payment.receiptKey };
   }
+
+  // TEMPORARY TEST ENDPOINT - Remove after debugging
+  @Post('test-receipt/:paymentId')
+  @Public()
+  @ApiOperation({ summary: 'Test receipt generation for debugging' })
+  async testReceiptGeneration(@Param('paymentId') paymentId: string) {
+    try {
+      this.logger.log(`Testing receipt generation for payment: ${paymentId}`);
+
+      // Get payment details first (using service method that includes invoices)
+      const payment = await this.paymentsService.findOne(paymentId);
+
+      this.logger.log(`Payment found:`, {
+        id: payment.id,
+        paymentCode: payment.paymentCode,
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount,
+        currency: payment.currency,
+        receiptKey: payment.receiptKey,
+        processedAt: payment.processedAt,
+        invoiceCount: (payment as any).invoices?.length || 0,
+      });
+
+      // Try to generate receipt
+      this.logger.log('Attempting to generate receipt...');
+      const receiptResult =
+        await this.paymentsService.generatePaymentReceipt(paymentId);
+
+      this.logger.log(`Receipt generated successfully: ${receiptResult.key}`);
+
+      return {
+        success: true,
+        payment: {
+          id: payment.id,
+          paymentCode: payment.paymentCode,
+          paymentMethod: payment.paymentMethod,
+          receiptKey: payment.receiptKey,
+        },
+        receipt: {
+          url: receiptResult.url,
+          key: receiptResult.key,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Receipt generation test failed: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        error: error.message,
+        paymentId,
+        stack: error.stack,
+      };
+    }
+  }
 }

@@ -202,6 +202,9 @@ export class PaymentsService {
           paymentMethod,
           reference,
           notes: paymentNotes,
+          gatewayStatus: isGatewayPayment
+            ? GatewayPaymentStatus.PENDING
+            : undefined,
           processedBy: {
             connect: { id: userId },
           },
@@ -223,9 +226,8 @@ export class PaymentsService {
         },
       });
 
-      // Link invoices to payment immediately for both gateway and non-gateway payments
-      // This ensures invoices show up on payment records right away
-      if (invoiceIds && invoiceIds.length > 0) {
+      // For non-gateway payments, apply payment to invoices immediately
+      if (invoiceIds && invoiceIds.length > 0 && !isGatewayPayment) {
         // Apply payment to invoices - create relationship and update amounts
         await this.applyPaymentToInvoices(
           tx,
@@ -235,18 +237,6 @@ export class PaymentsService {
           invoicesToPay,
           currency,
         );
-
-        // For gateway payments, store additional notes for tracking
-        if (isGatewayPayment) {
-          const updatedNotes = payment.notes
-            ? `${payment.notes}\nGATEWAY PAYMENT - Pending settlement`
-            : `GATEWAY PAYMENT - Pending settlement`;
-
-          await tx.payment.update({
-            where: { id: payment.id },
-            data: { notes: updatedNotes },
-          });
-        }
       }
 
       // Log the action
@@ -334,7 +324,23 @@ export class PaymentsService {
         where,
         skip,
         take: limit,
-        include: {
+        select: {
+          id: true,
+          paymentCode: true,
+          customerId: true,
+          amount: true,
+          currency: true,
+          exchangeRateId: true,
+          localAmount: true,
+          paymentMethod: true,
+          reference: true,
+          notes: true,
+          processedById: true,
+          processedAt: true,
+          createdAt: true,
+          gatewayTransactionId: true,
+          gatewayStatus: true,
+          receiptKey: true,
           customer: true,
           exchangeRate: {
             select: {
@@ -357,6 +363,9 @@ export class PaymentsService {
               invoiceNumber: true,
               totalAmount: true,
               currency: true,
+              balance: true,
+              localAmount: true,
+              status: true,
             },
           },
         },
@@ -397,6 +406,8 @@ export class PaymentsService {
             totalAmount: true,
             paidAmount: true,
             balance: true,
+            localAmount: true,
+            status: true,
           },
         },
       },
@@ -412,7 +423,23 @@ export class PaymentsService {
   async findByCode(paymentCode: string): Promise<Payment> {
     const payment = await this.prisma.payment.findUnique({
       where: { paymentCode },
-      include: {
+      select: {
+        id: true,
+        paymentCode: true,
+        customerId: true,
+        amount: true,
+        currency: true,
+        exchangeRateId: true,
+        localAmount: true,
+        paymentMethod: true,
+        reference: true,
+        notes: true,
+        processedById: true,
+        processedAt: true,
+        createdAt: true,
+        gatewayTransactionId: true,
+        gatewayStatus: true,
+        receiptKey: true,
         customer: true,
         exchangeRate: true,
         processedBy: {
@@ -430,6 +457,8 @@ export class PaymentsService {
             totalAmount: true,
             paidAmount: true,
             balance: true,
+            localAmount: true,
+            status: true,
           },
         },
       },
@@ -510,6 +539,9 @@ export class PaymentsService {
               invoiceNumber: true,
               totalAmount: true,
               currency: true,
+              balance: true,
+              localAmount: true,
+              status: true,
             },
           },
         },
@@ -989,7 +1021,7 @@ export class PaymentsService {
       `${paymentMethod} payment succeeded - ID: ${payment.paymentCode}, Gateway TXN: ${payment.gatewayTransactionId}, Amount: ${data.amount}`,
     );
 
-    // Since invoices are already linked when payment is created, we just need to update the gateway status
+    // Apply payment to invoices and update gateway status
     await this.prisma.$transaction(async (tx) => {
       // Prepare update data
       const updateData: any = {};
@@ -1032,6 +1064,19 @@ export class PaymentsService {
           where: { id: payment.id },
           data: updateData,
         });
+      }
+
+      // Apply payment to invoices now that payment is confirmed
+      if (payment.invoices && payment.invoices.length > 0) {
+        const invoiceIds = payment.invoices.map((inv: any) => inv.id);
+        await this.applyPaymentToInvoices(
+          tx,
+          payment.id,
+          invoiceIds,
+          payment.amount,
+          payment.invoices,
+          payment.currency,
+        );
       }
     });
 
@@ -1144,6 +1189,15 @@ export class PaymentsService {
 
     if (!payment) {
       throw new NotFoundException(`Payment with ID ${paymentId} not found`);
+    }
+
+    // Validate that payment has required data
+    if (!payment.customer) {
+      throw new BadRequestException('Payment must have associated customer');
+    }
+
+    if (!payment.invoices || payment.invoices.length === 0) {
+      throw new BadRequestException('Payment must have associated invoices');
     }
 
     // Prepare receipt data with payment information

@@ -879,7 +879,7 @@ export class PDFService {
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
     writeLineClamped(
       doc,
-      safe(data.company.name),
+      safe(this.companyInfo.name),
       L,
       LAYOUT.topY,
       contentW,
@@ -888,7 +888,7 @@ export class PDFService {
     doc.fontSize(11).font('Helvetica');
     writeLineClamped(
       doc,
-      safe(data.company.address),
+      safe(this.companyInfo.address),
       L,
       LAYOUT.topY + 16,
       contentW,
@@ -896,7 +896,7 @@ export class PDFService {
     );
     writeLineClamped(
       doc,
-      `${safe(data.company.phone)} | ${safe(data.company.email)}`,
+      `${safe(this.companyInfo.phone)} | ${safe(this.companyInfo.email)}`,
       L,
       LAYOUT.topY + 30,
       contentW,
@@ -1040,7 +1040,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by ${this.companyInfo.name}`,
       L,
-      H - 26,
+      H - 20,
       contentW,
       'center',
     );
@@ -1050,6 +1050,20 @@ export class PDFService {
   // RECEIPT (A6, monochrome, PACKAGE summary) — single-page fit
   // =====================
   private generateReceiptContent(doc: PDFDocument, data: ReceiptData): void {
+    // Validate required data
+    if (!data.customer) {
+      throw new Error('Customer data is missing from receipt data');
+    }
+    if (!data.payment) {
+      throw new Error('Payment data is missing from receipt data');
+    }
+    if (!data.receipt) {
+      throw new Error('Receipt data is missing from receipt data');
+    }
+    if (!data.invoices) {
+      throw new Error('Invoices data is missing from receipt data');
+    }
+
     const W = doc.page.width;
     const H = doc.page.height;
     const L = doc.page.margins.left;
@@ -1062,7 +1076,7 @@ export class PDFService {
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
     writeLineClamped(
       doc,
-      safe(data.company.name),
+      safe(this.companyInfo.name),
       L,
       LAYOUT.topY,
       contentW,
@@ -1071,7 +1085,7 @@ export class PDFService {
     doc.fontSize(11).font('Helvetica');
     writeLineClamped(
       doc,
-      safe(data.company.address),
+      safe(this.companyInfo.address),
       L,
       LAYOUT.topY + 16,
       contentW,
@@ -1079,7 +1093,7 @@ export class PDFService {
     );
     writeLineClamped(
       doc,
-      `${safe(data.company.phone)} | ${safe(data.company.email)}`,
+      `${safe(this.companyInfo.phone)} | ${safe(this.companyInfo.email)}`,
       L,
       LAYOUT.topY + 30,
       contentW,
@@ -1211,24 +1225,24 @@ export class PDFService {
     doc.font('Helvetica').fontSize(8);
 
     if (data.invoices?.length) {
-      doc.font('Helvetica-Bold').fontSize(9);
-      writeLineClamped(doc, 'Applied To:', L, y, 120, 'left');
-      y += 12;
+      doc.font('Helvetica-Bold').fontSize(10);
+      writeLineClamped(doc, 'Applied to Invoices:', L, y, 140, 'left');
+      y += 14;
 
       const spaceRows = Math.max(0, Math.floor((maxY - y) / rowH));
       const showCount = Math.min(spaceRows, data.invoices.length);
       const overflow = data.invoices.length - showCount;
 
-      doc.font('Helvetica').fontSize(8);
+      doc.font('Helvetica').fontSize(9);
       for (let i = 0; i < showCount; i++) {
         const inv = data.invoices[i];
-        const line = `Invoice ${safe(inv.number)}  •  Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)}  •  Paid: ${fmt(inv.paid)}  •  Balance: ${fmt(inv.balance)}`;
+        const line = `Invoice ${safe(inv.number)} | Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)} | Paid: ${fmt(inv.paid)} | Balance: ${fmt(inv.balance)}`;
         writeLineClamped(doc, line, L, y, contentW, 'left');
         y += rowH;
       }
 
       if (overflow > 0 && y <= maxY) {
-        doc.font('Helvetica-Oblique').fontSize(8);
+        doc.font('Helvetica-Oblique').fontSize(9);
         writeLineClamped(
           doc,
           `(+${overflow} more invoices)`,
@@ -1261,7 +1275,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
       L,
-      H - 14,
+      H - 20,
       contentW,
       'center',
     );
