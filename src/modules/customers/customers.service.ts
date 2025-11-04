@@ -342,7 +342,33 @@ export class CustomersService {
   }
 
   async getCustomerStats(id: string) {
-    const customer = await this.findOne(id);
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      include: {
+        packages: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+        },
+        invoices: true,
+        payments: {
+          include: {
+            exchangeRate: true,
+          },
+        },
+        _count: {
+          select: {
+            packages: true,
+            invoices: true,
+            payments: true,
+            notifications: true,
+          },
+        },
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
 
     const [
       totalPackages,
