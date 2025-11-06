@@ -146,12 +146,8 @@ export class ContainersService {
         skip,
         take: limit,
         include: {
-          packingLists: {
-            include: {
-              _count: {
-                select: { packages: true },
-              },
-            },
+          _count: {
+            select: { packingLists: true },
           },
         },
         orderBy: { loadingDate: 'desc' },
