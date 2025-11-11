@@ -120,6 +120,7 @@ model User {
   firstName        String
   lastName         String
   role             UserRole
+  warehouseId      String?
   isActive         Boolean   @default(true)
   twoFactorEnabled Boolean   @default(false)
   twoFactorSecret  String?
@@ -128,6 +129,7 @@ model User {
   lastLogin        DateTime?
 
   // Relations
+  warehouse         Warehouse?        @relation(fields: [warehouseId], references: [id])
   refreshTokens     RefreshToken[]
   auditLogs         AuditLog[]
   activityLogs      ActivityLog[]
@@ -139,6 +141,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([warehouseId])
 }
 
 model RefreshToken {
@@ -168,6 +171,7 @@ model Warehouse {
   packageItems PackageItem[]
   packages     Package[]
   packingLists PackingList[]
+  users        User[]
 
   @@index([warehouseId])
   @@index([isActive])

@@ -18,7 +18,7 @@ export class UsersService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createUserDto: CreateUserDto, creatorId: string): Promise<User> {
+  async create(createUserDto: CreateUserDto, creatorId: string): Promise<any> {
     const {
       email,
       username,
@@ -26,6 +26,7 @@ export class UsersService {
       firstName,
       lastName,
       role,
+      warehouseId,
       isActive = true,
       twoFactorEnabled = false,
     } = createUserDto;
@@ -59,6 +60,7 @@ export class UsersService {
           firstName,
           lastName,
           role,
+          warehouseId,
           isActive,
           twoFactorEnabled,
         },
@@ -69,6 +71,7 @@ export class UsersService {
           firstName: true,
           lastName: true,
           role: true,
+          warehouseId: true,
           isActive: true,
           twoFactorEnabled: true,
           createdAt: true,
@@ -95,7 +98,7 @@ export class UsersService {
     });
 
     this.logger.log(`User created: ${email} with role ${role}`);
-    return result as User;
+    return result;
   }
 
   async findAll(
@@ -147,6 +150,7 @@ export class UsersService {
           firstName: true,
           lastName: true,
           role: true,
+          warehouseId: true,
           isActive: true,
           twoFactorEnabled: true,
           createdAt: true,
@@ -179,6 +183,7 @@ export class UsersService {
         firstName: true,
         lastName: true,
         role: true,
+        warehouseId: true,
         isActive: true,
         twoFactorEnabled: true,
         createdAt: true,

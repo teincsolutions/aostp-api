@@ -40,6 +40,11 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   role: UserRole;
 
+  @ApiPropertyOptional({ description: 'Warehouse ID the user is assigned to' })
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
   @ApiPropertyOptional({
     description: 'Whether the user account is active',
     default: true,
