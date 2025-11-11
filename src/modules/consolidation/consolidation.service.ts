@@ -91,7 +91,7 @@ export class ConsolidationService {
     }
 
     // Calculate totals from package items
-    const newDescription = `Consolidated package - ${sourcePackages.map((pkg) => pkg.description).join(', ')}`;
+    const newDescription = `${sourcePackages.map((pkg) => pkg.description).join(', ')}`;
     const totalWeight = sourcePackages.reduce(
       (sum, item) => sum + (item.weight || 0),
       0,
