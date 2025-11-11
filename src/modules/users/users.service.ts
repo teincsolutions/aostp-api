@@ -72,6 +72,13 @@ export class UsersService {
           lastName: true,
           role: true,
           warehouseId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              location: true,
+            },
+          },
           isActive: true,
           twoFactorEnabled: true,
           createdAt: true,
@@ -151,6 +158,13 @@ export class UsersService {
           lastName: true,
           role: true,
           warehouseId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              location: true,
+            },
+          },
           isActive: true,
           twoFactorEnabled: true,
           createdAt: true,
@@ -184,6 +198,13 @@ export class UsersService {
         lastName: true,
         role: true,
         warehouseId: true,
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+          },
+        },
         isActive: true,
         twoFactorEnabled: true,
         createdAt: true,
@@ -275,6 +296,14 @@ export class UsersService {
           username: true,
           firstName: true,
           lastName: true,
+          warehouseId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              location: true,
+            },
+          },
           role: true,
           isActive: true,
           twoFactorEnabled: true,
@@ -334,7 +363,7 @@ export class UsersService {
     }
 
     this.logger.log(`User updated: ${result.email}`);
-    return result as User;
+    return result as any;
   }
 
   async deactivate(id: string, deactivatorId: string): Promise<User> {
@@ -426,6 +455,14 @@ export class UsersService {
           firstName: true,
           lastName: true,
           role: true,
+          warehouseId: true,
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              location: true,
+            },
+          },
           isActive: true,
           twoFactorEnabled: true,
           createdAt: true,
@@ -453,7 +490,7 @@ export class UsersService {
     });
 
     this.logger.log(`User activated: ${result.email}`);
-    return result as User;
+    return result as any;
   }
 
   async getUserStats() {
