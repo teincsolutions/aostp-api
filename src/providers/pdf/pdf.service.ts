@@ -1275,7 +1275,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
       L,
-      H - 20,
+      H - 26,
       contentW,
       'center',
     );
