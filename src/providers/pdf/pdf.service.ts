@@ -530,7 +530,7 @@ export class PDFService {
       writeLineClamped(
         doc,
         safe(this.companyInfo.address),
-        dateBoxX - 20,
+        dateBoxX - 150,
         dateBoxY + LAYOUT.dateBoxH + 4,
         130,
         'right',

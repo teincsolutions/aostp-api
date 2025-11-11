@@ -119,9 +119,9 @@ export class InvoicesService {
             customerId: pkg.customerId,
             packingListId,
             packageId: pkg.id,
-            totalAmount: pkg.shippingCurrency === 'USD' ? totalAmount : 0, // FX deferred to payment time
-            currency: pkg.shippingCurrency || 'USD', // Use package's shipping currency
-            localAmount: pkg.shippingCurrency === 'GHS' ? totalAmount : 0, // FX deferred to payment time
+            totalAmount, // Always set totalAmount in the shipping currency
+            currency: 'USD', // Use package's shipping currency
+            localAmount: 0, // FX deferred to payment time
             status: InvoiceStatus.UNPAID,
             dueDate,
             balance: totalAmount, // Initial balance equals total amount
@@ -176,7 +176,7 @@ export class InvoicesService {
       invoices.push(result);
 
       this.logger.log(
-        `Invoice ${invoiceNumber} generated for package ${pkg.trackingCode} - Amount: ${totalAmount} USD`,
+        `Invoice ${invoiceNumber} generated for package ${pkg.trackingCode} - Amount: ${totalAmount} ${pkg.shippingCurrency || 'USD'}`,
       );
     }
 
