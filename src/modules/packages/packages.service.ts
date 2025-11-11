@@ -255,6 +255,16 @@ export class PackagesService {
         { description: { contains: filters.search, mode: 'insensitive' } },
         { notes: { contains: filters.search, mode: 'insensitive' } },
         { pickupCode: { contains: filters.search, mode: 'insensitive' } },
+        {
+          items: {
+            some: {
+              intakeTrackingCode: {
+                contains: filters.search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
       ];
     }
 
@@ -337,8 +347,13 @@ export class PackagesService {
   }
 
   async findByTrackingCode(trackingCode: string) {
-    const packageRecord = await this.prisma.package.findUnique({
-      where: { trackingCode },
+    const packageRecord = await this.prisma.package.findFirst({
+      where: {
+        OR: [
+          { trackingCode },
+          { items: { some: { intakeTrackingCode: trackingCode } } },
+        ],
+      },
       include: {
         customer: true,
         warehouse: true,
@@ -352,6 +367,12 @@ export class PackagesService {
         invoice: {
           include: {
             payments: true,
+          },
+        },
+        items: {
+          include: {
+            intakePhotos: true,
+            warehouse: true,
           },
         },
       },
