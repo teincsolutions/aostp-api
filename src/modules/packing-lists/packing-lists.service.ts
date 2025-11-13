@@ -704,6 +704,19 @@ export class PackingListsService {
     if (packingList.status === 'FINALIZED') {
       throw new BadRequestException('Packing list is already finalized');
     }
+
+    // Check that all packages have valid shipping rates
+    const invalidPackages = packingList.packages.filter(
+      (pkg) => !pkg.shippingRate || pkg.shippingRate === 0,
+    );
+    if (invalidPackages.length > 0) {
+      throw new BadRequestException(
+        `Cannot finalize packing list. The following packages have invalid shipping rates: ${invalidPackages
+          .map((pkg) => pkg.trackingCode)
+          .join(', ')}`,
+      );
+    }
+
     // Generate invoices using the existing service
     const invoices = await this.generateInvoicesForPackingList(id, userId);
 
