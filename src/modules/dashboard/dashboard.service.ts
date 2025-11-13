@@ -240,7 +240,7 @@ export class DashboardService {
     total: number;
   }> {
     const whereClause: Prisma.PackageWhereInput = {
-      status: PackageStatus.IN_WAREHOUSE,
+      status: PackageStatus.RECEIVED,
       ...this.buildPackageWhereClause(filters),
     };
 

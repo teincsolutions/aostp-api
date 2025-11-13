@@ -20,7 +20,7 @@ export class DashboardFiltersDto {
 
   @ApiPropertyOptional({
     description: 'Filter by status',
-    example: 'IN_WAREHOUSE',
+    example: 'RECEIVED',
   })
   @IsOptional()
   @IsString()

@@ -386,7 +386,7 @@ export class CustomersService {
         where: {
           customerId: id,
           status: {
-            in: ['RECEIVED', 'IN_WAREHOUSE', 'ASSIGNED', 'SHIPPED'],
+            in: ['RECEIVED', 'ASSIGNED', 'SHIPPED'],
           },
         },
       }),

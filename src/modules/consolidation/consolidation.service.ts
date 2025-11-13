@@ -72,7 +72,7 @@ export class ConsolidationService {
         );
       }
 
-      if (!['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status)) {
+      if (pkg.status !== 'RECEIVED') {
         throw new BadRequestException(
           `Package ${pkg.trackingCode} has invalid status for consolidation`,
         );
@@ -123,7 +123,7 @@ export class ConsolidationService {
           shippingMode,
           airShippingType,
           isConsolidated: true,
-          status: 'IN_WAREHOUSE',
+          status: 'RECEIVED',
           warehouseId,
           notes: `Consolidation of packages: ${sourceTrackingCodes.join(', ')}`,
           receivedDate: new Date(),
@@ -223,7 +223,7 @@ export class ConsolidationService {
   ) {
     const where: Prisma.PackageWhereInput = {
       customerId,
-      status: { in: ['RECEIVED', 'IN_WAREHOUSE'] },
+      status: 'RECEIVED',
       isConsolidated: false,
     };
 

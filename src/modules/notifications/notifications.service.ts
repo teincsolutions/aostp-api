@@ -594,13 +594,11 @@ export class NotificationsService {
   private getStatusMessage(status: string): string {
     const messages: Record<string, string> = {
       RECEIVED: 'Your package has been received at our facility.',
-      IN_WAREHOUSE: 'Your package is stored in our warehouse.',
-      IN_PACKING_LIST:
-        'Your package has been added to a packing list for shipment.',
+      ASSIGNED:
+        'Your package has been assigned to a packing list for shipment.',
       SHIPPED: 'Your package has been shipped and is in transit.',
       ARRIVED: 'Your package has arrived at the destination.',
-      DELIVERED: 'Your package has been delivered successfully.',
-      CANCELLED: 'Your package shipment has been cancelled.',
+      RELEASED: 'Your package has been released for delivery.',
     };
     return messages[status] || 'Your package status has been updated.';
   }

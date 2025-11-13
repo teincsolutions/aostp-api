@@ -135,7 +135,7 @@ export class PackagesService {
           shippingCost: finalShippingCost,
           shippingMode: packageData.shippingMode,
           airShippingType: packageData.airShippingType,
-          status: PackageStatus.IN_WAREHOUSE,
+          status: PackageStatus.RECEIVED,
           notes: packageData.notes,
           pickupCode: packageData.pickupCode,
           isConsolidated: false,
@@ -671,7 +671,7 @@ export class PackagesService {
     if (filters?.status) {
       where.status = filters.status as any;
     } else {
-      where.status = PackageStatus.IN_WAREHOUSE;
+      where.status = PackageStatus.RECEIVED;
     }
 
     if (filters?.warehouseId) {
@@ -750,7 +750,7 @@ export class PackagesService {
     // This could be run as a cron job to update days in warehouse
     const packages = await this.prisma.package.findMany({
       where: {
-        status: 'IN_WAREHOUSE',
+        status: 'RECEIVED',
       },
     });
 

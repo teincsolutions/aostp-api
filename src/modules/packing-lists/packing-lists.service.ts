@@ -427,9 +427,9 @@ export class PackingListsService {
       );
     }
 
-    // Check package status - should be in warehouse or received
+    // Check package status - should be received
     const invalidStatusPackages = packages.filter(
-      (pkg) => !['RECEIVED', 'IN_WAREHOUSE'].includes(pkg.status),
+      (pkg) => pkg.status !== 'RECEIVED',
     );
 
     if (invalidStatusPackages.length > 0) {
@@ -505,7 +505,7 @@ export class PackingListsService {
         where: { id: { in: packageIds } },
         data: {
           packingListId: null,
-          status: PackageStatus.IN_WAREHOUSE,
+          status: PackageStatus.RECEIVED,
         },
       });
 
@@ -551,12 +551,12 @@ export class PackingListsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // Reset packages to warehouse status
+      // Reset packages to received status
       await tx.package.updateMany({
         where: { packingListId: id },
         data: {
           packingListId: null,
-          status: PackageStatus.IN_WAREHOUSE,
+          status: PackageStatus.RECEIVED,
         },
       });
 

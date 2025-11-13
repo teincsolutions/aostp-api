@@ -29,18 +29,9 @@ enum IdType {
 
 enum PackageStatus {
   RECEIVED
-  CONSOLIDATED
-  IN_WAREHOUSE
   ASSIGNED
   SHIPPED
   ARRIVED
-  RELEASED
-  CANCELLED
-}
-
-enum PackageItemStatus {
-  RECEIVED
-  CONSOLIDATED
   RELEASED
 }
 
@@ -211,22 +202,21 @@ model Customer {
 }
 
 model PackageItem {
-  id                 String            @id @default(uuid())
-  intakeTrackingCode String            @unique // Scanned/entered at intake
+  id                 String           @id @default(uuid())
+  intakeTrackingCode String           @unique // Scanned/entered at intake
   customerId         String
-  customer           Customer          @relation(fields: [customerId], references: [id])
+  customer           Customer         @relation(fields: [customerId], references: [id])
   warehouseId        String
-  warehouse          Warehouse         @relation(fields: [warehouseId], references: [id])
+  warehouse          Warehouse        @relation(fields: [warehouseId], references: [id])
   description        String
   notes              String?
-  quantity           Int               @default(1)
+  quantity           Int              @default(1)
   weight             Float? // in KG
   dimensions         String? // L x W x H
   cbm                Float? // Cubic meters
   shippingMode       ShippingMode
   airShippingType    AirShippingType?
-  status             PackageItemStatus @default(RECEIVED)
-  intakeDate         DateTime          @default(now())
+  intakeDate         DateTime         @default(now())
 
   // Relations
   packageId String?
@@ -239,7 +229,6 @@ model PackageItem {
   @@index([intakeTrackingCode])
   @@index([customerId])
   @@index([warehouseId])
-  @@index([status])
   @@index([packageId])
 }
 

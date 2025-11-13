@@ -124,22 +124,14 @@ export class PackageDeliveryService {
         },
       });
 
-      // Update package item status
-      await tx.packageItem.update({
-        where: { id: packageItem.id },
-        data: { status: 'RELEASED' },
-      });
-
-      // Update package status if all items are released
+      // Update package status if all items are released (check if all items have deliveries)
       if (packageItem.packageId) {
         const allItems = await tx.packageItem.findMany({
           where: { packageId: packageItem.packageId },
-          select: { status: true },
+          include: { delivery: true },
         });
 
-        const allReleased = allItems.every(
-          (item) => item.status === 'RELEASED',
-        );
+        const allReleased = allItems.every((item) => item.delivery !== null);
 
         if (allReleased) {
           await tx.package.update({

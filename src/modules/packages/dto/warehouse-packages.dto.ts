@@ -23,7 +23,7 @@ export class WarehousePackagesDto extends PaginationDto {
   @ApiPropertyOptional({
     description: 'Package status to filter by',
     enum: PackageStatus,
-    example: PackageStatus.IN_WAREHOUSE,
+    example: PackageStatus.RECEIVED,
   })
   @IsOptional()
   status?: string;
