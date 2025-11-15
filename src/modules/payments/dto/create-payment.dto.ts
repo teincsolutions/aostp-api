@@ -5,8 +5,37 @@ import {
   IsOptional,
   IsArray,
   Min,
+  ValidateIf,
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+// Custom validator for Direct Momo Transfer reference requirement
+function IsReferenceRequired(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isReferenceRequired',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const obj = args.object as any;
+          // If payment method is DIRECT_MOMO_TRANSFER, reference is required
+          if (obj.paymentMethod === 'DIRECT_MOMO_TRANSFER') {
+            return value !== undefined && value !== null && value !== '';
+          }
+          return true; // Allow optional for other methods
+        },
+        defaultMessage(args: ValidationArguments) {
+          return 'Reference is required for Direct Momo Transfer payments';
+        },
+      },
+    });
+  };
+}
 
 export class CreatePaymentDto {
   @ApiProperty({ description: 'Customer ID' })
@@ -28,13 +57,19 @@ export class CreatePaymentDto {
 
   @ApiProperty({
     description: 'Payment method',
-    examples: ['CASH', 'BANK_TRANSFER', 'MOBILE_MONEY', 'CREDIT_CARD'],
+    examples: [
+      'CASH',
+      'BANK_TRANSFER',
+      'MOBILE_MONEY',
+      'CREDIT_CARD',
+      'DIRECT_MOMO_TRANSFER',
+    ],
   })
   @IsString()
   paymentMethod: string;
 
   @ApiPropertyOptional({ description: 'Transaction reference number' })
-  @IsOptional()
+  @ValidateIf((object) => object.paymentMethod === 'DIRECT_MOMO_TRANSFER')
   @IsString()
   reference?: string;
 

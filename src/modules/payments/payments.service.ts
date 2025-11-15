@@ -106,7 +106,9 @@ export class PaymentsService {
     }
 
     // Calculate local amount using exchange rate
-    const localAmount = amount * exchangeRate.rate;
+    // Only convert if payment currency is different from GHS
+    const localAmount =
+      currency === 'GHS' ? amount : amount * exchangeRate.rate;
 
     // Check if this is a gateway payment method
     const isGatewayPayment =
