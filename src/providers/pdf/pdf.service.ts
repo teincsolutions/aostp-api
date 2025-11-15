@@ -62,6 +62,7 @@ export interface InvoiceData extends PDFTemplateData {
     cbm?: number;
     destinationCity?: string;
     warehouse?: string;
+    pickupCode?: string;
   };
 
   items?: InvoiceItem[];
@@ -158,6 +159,7 @@ export interface ReceiptData extends PDFTemplateData {
     cbm?: number;
     destinationCity?: string;
     warehouse?: string;
+    pickupCode?: string;
   };
 }
 
@@ -612,6 +614,7 @@ export class PDFService {
       if (pkg.shippingMode === 'AIR') {
         const t = pkg.airType || 'NORMAL_AIR';
         chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);
+        if (safe(pkg.pickupCode)) chips.push(`PCODE: ${pkg.pickupCode}`);
       } else if (pkg.shippingMode === 'SEA') {
         chips.push('MODE: SEA');
       }

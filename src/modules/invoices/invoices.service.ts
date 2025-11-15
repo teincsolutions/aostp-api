@@ -776,6 +776,7 @@ export class InvoicesService {
                 cbm: invoiceWithRelations.package.cbm,
                 destinationCity: invoiceWithRelations.package.destinationCity,
                 warehouse: invoiceWithRelations.package.warehouse?.name,
+                pickupCode: invoiceWithRelations.package.pickupCode,
               }
             : undefined,
           // Use package items with correct unit pricing based on shipping rate
