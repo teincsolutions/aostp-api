@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class InvoicesService {
@@ -26,6 +27,7 @@ export class InvoicesService {
     private readonly prisma: PrismaService,
     private readonly idGeneratorService: IdGeneratorService,
     private readonly pdfService: PDFService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async generateFromPackingList(
@@ -721,100 +723,8 @@ export class InvoicesService {
           `Generating PDF on-demand for invoice ${invoice.invoiceNumber}`,
         );
 
-        // Type assertion since findOne includes the relations
-        const invoiceWithRelations = invoice as any;
-
-        // Get company info from PDF service (which uses config)
-        const companyInfo = {
-          name: 'AOSTP Logistics',
-          address: 'Accra, Ghana',
-          phone: '+233 XX XXX XXXX',
-          email: 'info@aostp.com',
-        };
-
-        // Prepare invoice data for PDF generation similar to packing-lists service
-        const pdfData = {
-          company: companyInfo,
-          invoice: {
-            number: invoiceWithRelations.invoiceNumber,
-            date: invoiceWithRelations.createdAt.toISOString().split('T')[0],
-            dueDate: invoiceWithRelations.dueDate.toISOString().split('T')[0],
-            status: invoiceWithRelations.status,
-          },
-          customer: {
-            code: invoiceWithRelations.customer.customerCode,
-            name: `${invoiceWithRelations.customer.firstName} ${
-              invoiceWithRelations.customer.lastName
-            }`,
-            address: invoiceWithRelations.customer.address || '',
-            phone: invoiceWithRelations.customer.phoneNumber || '',
-            email: invoiceWithRelations.customer.email || '',
-          },
-          container: invoiceWithRelations.packingList?.container
-            ? {
-                number:
-                  invoiceWithRelations.packingList.container.containerNumber,
-                loadingDate: invoiceWithRelations.packingList.loadingDate
-                  .toISOString()
-                  .split('T')[0],
-                origin:
-                  invoiceWithRelations.packingList.container.departureCity
-                    ?.name || 'Unknown',
-                destination:
-                  invoiceWithRelations.packingList.container.destinationCity
-                    ?.name || 'Unknown',
-              }
-            : undefined,
-          package: invoiceWithRelations.package
-            ? {
-                trackingCode: invoiceWithRelations.package.trackingCode,
-                description: invoiceWithRelations.package.description,
-                shippingMode: invoiceWithRelations.package.shippingMode,
-                airType: invoiceWithRelations.package.airShippingType,
-                quantity: invoiceWithRelations.package.quantity,
-                weightKg: invoiceWithRelations.package.weight,
-                cbm: invoiceWithRelations.package.cbm,
-                destinationCity: invoiceWithRelations.package.destinationCity,
-                warehouse: invoiceWithRelations.package.warehouse?.name,
-                pickupCode: invoiceWithRelations.package.pickupCode,
-              }
-            : undefined,
-          // Use package items with correct unit pricing based on shipping rate
-          items:
-            invoiceWithRelations.package?.items?.map((item) => ({
-              description: item.description || '',
-              quantity: item.quantity,
-              unitPrice: invoiceWithRelations.package?.shippingRate || 0,
-              total:
-                item.quantity *
-                (invoiceWithRelations.package?.shippingRate || 0),
-            })) || [],
-          totals: {
-            total: invoiceWithRelations.totalAmount,
-            paid: invoiceWithRelations.paidAmount || 0,
-            balance: invoiceWithRelations.balance,
-            currency: invoiceWithRelations.currency,
-          },
-          currency: invoiceWithRelations.currency,
-          notes: `Generated for Packing List: ${
-            invoiceWithRelations.packingList?.name || 'N/A'
-          }`,
-        };
-
-        // Generate PDF
-        const pdfResult = await this.pdfService.generateInvoicePDF(pdfData);
-
-        // Update invoice with PDF key in transaction
-        await this.prisma.invoice.update({
-          where: { id: invoiceWithRelations.id },
-          data: { invoicePdfKey: pdfResult.key },
-        });
-
-        this.logger.log(
-          `PDF generated on-demand for invoice ${invoiceWithRelations.invoiceNumber} - Key: ${pdfResult.key}`,
-        );
-
-        return this.pdfService.generateSignedDownloadUrl(pdfResult.key);
+        const result = await this.generateInvoicePdfData(invoice);
+        return result.url;
       } catch (error) {
         this.logger.error(
           `Failed to generate PDF on-demand for invoice ${invoice.invoiceNumber}`,
@@ -827,5 +737,221 @@ export class InvoicesService {
     }
 
     return this.pdfService.generateSignedDownloadUrl(invoice.invoicePdfKey);
+  }
+
+  /**
+   * Force regeneration of invoice PDF
+   */
+  async regenerateInvoicePdf(
+    id: string,
+    userId: string,
+  ): Promise<{ url: string; key: string }> {
+    const invoice = await this.findOne(id);
+
+    try {
+      this.logger.log(`Regenerating PDF for invoice ${invoice.invoiceNumber}`);
+
+      const result = await this.generateInvoicePdfData(invoice);
+
+      // Log the action
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'UPDATE',
+          entity: 'Invoice',
+          entityId: id,
+          after: { invoicePdfKey: result.key },
+          metadata: {
+            action: 'REGENERATE_PDF',
+            invoiceNumber: invoice.invoiceNumber,
+          },
+        },
+      });
+
+      this.logger.log(
+        `PDF regenerated for invoice ${invoice.invoiceNumber} - Key: ${result.key}`,
+      );
+
+      // Send notification about PDF regeneration if customer has contact info
+      try {
+        await this.sendPdfRegenerationNotification(invoice, result.url);
+      } catch (notificationError) {
+        this.logger.error(
+          `Failed to send regeneration notification for invoice ${invoice.invoiceNumber}`,
+          notificationError,
+        );
+        // Don't fail the entire operation if notification fails
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Failed to regenerate PDF for invoice ${invoice.invoiceNumber}`,
+        error,
+      );
+      throw new NotFoundException(
+        `Couldn't regenerate PDF for invoice ${invoice.invoiceNumber}`,
+      );
+    }
+  }
+
+  /**
+   * Common method to generate PDF data for an invoice
+   */
+  private async generateInvoicePdfData(
+    invoice: any,
+  ): Promise<{ url: string; key: string }> {
+    // Get company info from PDF service (which uses config)
+    const companyInfo = {
+      name: 'AOSTP Logistics',
+      address: 'Accra, Ghana',
+      phone: '+233 XX XXX XXXX',
+      email: 'info@aostp.com',
+    };
+
+    // Prepare invoice data for PDF generation similar to packing-lists service
+    const pdfData = {
+      company: companyInfo,
+      invoice: {
+        number: invoice.invoiceNumber,
+        date: invoice.createdAt.toISOString().split('T')[0],
+        dueDate: invoice.dueDate.toISOString().split('T')[0],
+        status: invoice.status,
+      },
+      customer: {
+        code: invoice.customer.customerCode,
+        name: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+        address: invoice.customer.address || '',
+        phone: invoice.customer.phoneNumber || '',
+        email: invoice.customer.email || '',
+      },
+      container: invoice.packingList?.container
+        ? {
+            number: invoice.packingList.container.containerNumber,
+            loadingDate: invoice.packingList.loadingDate
+              .toISOString()
+              .split('T')[0],
+            origin:
+              invoice.packingList.container.departureCity?.name || 'Unknown',
+            destination:
+              invoice.packingList.container.destinationCity?.name || 'Unknown',
+          }
+        : undefined,
+      package: invoice.package
+        ? {
+            trackingCode: invoice.package.trackingCode,
+            description: invoice.package.description,
+            shippingMode: invoice.package.shippingMode,
+            airType: invoice.package.airShippingType,
+            quantity: invoice.package.quantity,
+            weightKg: invoice.package.weight,
+            cbm: invoice.package.cbm,
+            destinationCity: invoice.package.destinationCity,
+            warehouse: invoice.package.warehouse?.name,
+            pickupCode: invoice.package.pickupCode,
+          }
+        : undefined,
+      // Use package items with correct unit pricing based on shipping rate
+      items:
+        invoice.package?.items?.map((item) => ({
+          description: item.description || '',
+          quantity: item.quantity,
+          unitPrice: invoice.package?.shippingRate || 0,
+          total: item.quantity * (invoice.package?.shippingRate || 0),
+        })) || [],
+      totals: {
+        total: invoice.totalAmount,
+        paid: invoice.paidAmount || 0,
+        balance: invoice.balance,
+        currency: invoice.currency,
+      },
+      currency: invoice.currency,
+      notes: `Generated for Packing List: ${
+        invoice.packingList?.name || 'N/A'
+      }`,
+    };
+
+    // Generate PDF
+    const pdfResult = await this.pdfService.generateInvoicePDF(pdfData);
+
+    // Update invoice with PDF key in transaction
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { invoicePdfKey: pdfResult.key },
+    });
+
+    this.logger.log(
+      `PDF generated for invoice ${invoice.invoiceNumber} - Key: ${pdfResult.key}`,
+    );
+
+    return pdfResult;
+  }
+
+  /**
+   * Send notification about PDF regeneration
+   */
+  private async sendPdfRegenerationNotification(
+    invoice: any,
+    pdfUrl: string,
+  ): Promise<void> {
+    const channels: any[] = [];
+
+    // Email content (HTML)
+    if (invoice.customer.email) {
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Invoice PDF Updated - AOSTP Logistics</h2>
+          <p>Dear ${invoice.customer.firstName} ${invoice.customer.lastName},</p>
+          <p>Your invoice PDF has been updated with the latest information.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
+            <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
+            <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
+          </table>
+          <p>You can <a href="${pdfUrl}" target="_blank">download the latest invoice PDF</a> to view the updated details.</p>
+          <p>If you have any questions, please contact our support team.</p>
+          <p>Thank you for choosing AOSTP Logistics.</p>
+        </div>
+      `;
+      channels.push({
+        channel: 'EMAIL',
+        recipient: invoice.customer.email,
+        subject: 'Invoice PDF Updated - AOSTP Logistics',
+        content: emailContent,
+      });
+    }
+
+    // SMS/WhatsApp content (short, plain)
+    if (invoice.customer.phoneNumber) {
+      const channel =
+        invoice.customer.preferredChannel === 'WHATSAPP'
+          ? 'WHATSAPP'
+          : invoice.customer.preferredChannel === 'SMS'
+            ? 'SMS'
+            : null;
+
+      if (channel) {
+        const content = `Hi ${invoice.customer.firstName}, your invoice ${invoice.invoiceNumber} PDF has been updated. Download: ${pdfUrl}`;
+        channels.push({
+          channel,
+          recipient: invoice.customer.phoneNumber,
+          content,
+        });
+      }
+    }
+
+    if (channels.length > 0) {
+      await this.notificationsService.sendNotification({
+        customer: invoice.customer,
+        type: 'INVOICE_ISSUED', // Reuse existing type
+        channels,
+        metadata: {
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          action: 'PDF_REGENERATED',
+          pdfUrl,
+        },
+      });
+    }
   }
 }

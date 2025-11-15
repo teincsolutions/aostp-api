@@ -173,6 +173,24 @@ export class InvoicesController {
     return { url };
   }
 
+  @Post(':id/regenerate-pdf')
+  @Roles(
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.SUPER_ADMIN,
+  )
+  @ApiOperation({ summary: 'Regenerate invoice PDF' })
+  @ApiResponse({ status: 200, description: 'PDF regenerated successfully' })
+  @ApiResponse({ status: 404, description: 'Invoice not found' })
+  @HttpCode(HttpStatus.OK)
+  async regenerateInvoicePdf(@Param('id') id: string, @Request() req: any) {
+    const result = await this.invoicesService.regenerateInvoicePdf(
+      id,
+      req.user.sub,
+    );
+    return { message: 'Invoice PDF regenerated successfully', ...result };
+  }
+
   @Delete(':id')
   @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete an invoice' })
