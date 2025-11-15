@@ -147,16 +147,6 @@ export class InvoicesController {
     return this.invoicesService.update(id, updateInvoiceDto, req.user.sub);
   }
 
-  @Patch(':id/mark-paid')
-  @Roles(UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Mark an invoice as paid' })
-  @ApiResponse({ status: 200, description: 'Invoice marked as paid' })
-  @ApiResponse({ status: 404, description: 'Invoice not found' })
-  @ApiResponse({ status: 400, description: 'Invoice already paid' })
-  markAsPaid(@Param('id') id: string, @Request() req: any) {
-    return this.invoicesService.markAsPaid(id, req.user.sub);
-  }
-
   @Get(':id/download-pdf')
   @Roles(
     UserRole.OPERATIONS_CLERK,

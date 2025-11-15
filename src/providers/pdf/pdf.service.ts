@@ -707,7 +707,7 @@ export class PDFService {
           }))
         : [
             {
-              description: `${data.package?.description || ''}\n${data.package?.trackingCode ? ` ${data.package.trackingCode}` : ''}`,
+              description: `${data.package?.description || ''}\n${data.package?.pickupCode ? `Pickup Code: ${data.package.pickupCode}` : ''}`,
               quantity: data.package?.quantity ?? 1,
               unitPrice:
                 (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
