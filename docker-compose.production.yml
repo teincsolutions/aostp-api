@@ -1,4 +1,3 @@
-
 services:
   aostp-api:
     image: ${DOCKER_IMAGE_NAME:-teincsolutions/aostp-api}:${DOCKER_TAG:-latest}
@@ -10,7 +9,10 @@ services:
       - "3000:3000"
     networks:
       - aostp-internal-net
+      - aostp-internet
 
 networks:
   aostp-internal-net:
+    external: true
+  aostp-internet:
     external: true
