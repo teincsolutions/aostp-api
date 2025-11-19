@@ -169,7 +169,18 @@ export class NotificationsService {
       );
 
       if (!result.success) {
-        throw new Error(result.error || 'SMS sending failed');
+        // Create detailed failure information
+        const failureDetails = {
+          provider: this.smsProvider.getName(),
+          error: result.error || 'SMS sending failed',
+          recipient: notification.recipient,
+          contentLength: notification.content?.length || 0,
+          timestamp: new Date().toISOString(),
+        };
+
+        throw new Error(
+          `${failureDetails.provider} SMS failed: ${failureDetails.error} | Recipient: ${failureDetails.recipient} | Content Length: ${failureDetails.contentLength}`,
+        );
       }
 
       this.logger.debug(
@@ -180,6 +191,24 @@ export class NotificationsService {
         `Failed to send SMS to ${notification.recipient}:`,
         error,
       );
+
+      // Store detailed error information in metadata for better debugging
+      await this.prisma.notification.update({
+        where: { id: notification.id },
+        data: {
+          metadata: {
+            ...notification.metadata,
+            failureDetails: {
+              provider: this.smsProvider.getName(),
+              error: error.message,
+              recipient: notification.recipient,
+              contentLength: notification.content?.length || 0,
+              timestamp: new Date().toISOString(),
+            },
+          },
+        },
+      });
+
       throw error; // Re-throw to be caught by processNotification
     }
   }
@@ -701,5 +730,13 @@ export class NotificationsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  // Public method to send test SMS
+  async sendTestSms(phoneNumber: string, message?: string): Promise<any> {
+    return this.smsProvider.sendSms(
+      phoneNumber,
+      message || 'Test SMS from AOSTP Logistics',
+    );
   }
 }

@@ -164,6 +164,8 @@ pipeline {
                                             string(credentialsId: 'hubtel-api-key-prod', variable: 'HUBTEL_API_KEY'),
                                             string(credentialsId: 'hubtel-pos-sales-id-prod', variable: 'HUBTEL_POS_SALES_ID'),
                                             string(credentialsId: 'sms-online-gh-api-key', variable: 'SMS_ONLINE_GH_API_KEY'),
+                                            string(credentialsId: 'hubtel-client-id-prod', variable: 'HUBTEL_CLIENT_ID'),
+                                            string(credentialsId: 'hubtel-client-secret-prod', variable: 'HUBTEL_CLIENT_SECRET'),
                                             string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
                                             string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
                     sh '''

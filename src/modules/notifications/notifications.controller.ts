@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Query,
+  Body,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -71,5 +72,38 @@ export class NotificationsController {
   @ApiQuery({ name: 'limit', required: false, type: Number, default: 100 })
   async getFailedNotifications(@Query('limit') limit?: number) {
     return this.notificationsService.getFailedNotifications(limit);
+  }
+
+  @Post('test-sms')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Send test SMS - for testing SMS provider configuration',
+  })
+  @ApiResponse({ status: 200, description: 'Test SMS sent' })
+  @UseGuards() // Make this endpoint public - no authentication required
+  async testSms(@Body() body: { phoneNumber: string; message?: string }) {
+    const {
+      phoneNumber,
+      message = 'Test SMS from AOSTP Logistics - Hubtel integration test',
+    } = body;
+
+    try {
+      const result = await this.notificationsService.sendTestSms(
+        phoneNumber,
+        message,
+      );
+
+      return {
+        success: result.success,
+        messageId: result.messageId,
+        error: result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Error sending test SMS',
+        error: error.message,
+      };
+    }
   }
 }
