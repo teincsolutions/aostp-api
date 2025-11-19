@@ -265,7 +265,7 @@ export class NotificationsService {
             <tr><td><strong>Shipping Mode:</strong></td><td>${pkg.shippingMode}</td></tr>
             <tr><td><strong>Status:</strong></td><td>${pkg.status}</td></tr>
           </table>
-          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> using the tracking code provided.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/track/${pkg.trackingCode}" target="_blank">track your package</a> using the tracking code provided.</p>
           <p>Thank you for choosing AOSTP Logistics.</p>
         </div>
       `;
@@ -287,7 +287,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) has been received at AOSTP Logistics. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) has been received at AOSTP Logistics. Track: https://aostp.akomapacargo.com/track/${pkg.trackingCode}`;
         channels.push({
           channel,
           recipient: pkg.customer.phoneNumber,
@@ -329,7 +329,7 @@ export class NotificationsService {
             <tr><td><strong>Receiver:</strong></td><td>${delivery.receiverName || 'As indicated'}</td></tr>
           </table>
           <p>Please contact us if you need any assistance with collection.</p>
-          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for updates.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for updates.</p>
           <p>Thank you for choosing AOSTP Logistics.</p>
         </div>
       `;
@@ -351,7 +351,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${customer.firstName}, your package (${pkg.trackingCode}) is ready for collection. Delivery ID: ${delivery.deliveryId}. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        const content = `Hi ${customer.firstName}, your package (${pkg.trackingCode}) is ready for collection. Delivery ID: ${delivery.deliveryId}. Track: https://aostp.akomapacargo.com/track/${pkg.trackingCode}`;
         channels.push({
           channel,
           recipient: customer.phoneNumber,
@@ -388,7 +388,7 @@ export class NotificationsService {
             <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
           </table>
           <p>Please ensure payment is made before the due date.</p>
-          <p>You can <a href="https://app.aostp.com/invoices/${invoice.invoiceNumber}" target="_blank">view your invoice</a> for details.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/invoices/${invoice.invoiceNumber}" target="_blank">view your invoice</a> for details.</p>
           <p>Thank you for your business.</p>
         </div>
       `;
@@ -410,7 +410,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://app.aostp.com/invoices/${invoice.invoiceNumber}`;
+        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://aostp.akomapacargo.com/invoices/${invoice.invoiceNumber}`;
         channels.push({
           channel,
           recipient: invoice.customer.phoneNumber,
@@ -446,7 +446,7 @@ export class NotificationsService {
             <tr><td><strong>Payment Method:</strong></td><td>${payment.paymentMethod}</td></tr>
             <tr><td><strong>Date:</strong></td><td>${new Date(payment.processedAt).toLocaleDateString()}</td></tr>
           </table>
-          <p>You can <a href="https://app.aostp.com/receipts/${payment.paymentCode}" target="_blank">view your receipt</a> for details.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/receipts/${payment.paymentCode}" target="_blank">view your receipt</a> for details.</p>
         </div>
       `;
       channels.push({
@@ -467,7 +467,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${payment.customer.firstName}, payment ${payment.currency}${payment.amount} for ${payment.paymentCode} received. Thank you! Receipt: https://app.aostp.com/receipts/${payment.paymentCode}`;
+        const content = `Hi ${payment.customer.firstName}, payment ${payment.currency}${payment.amount} for ${payment.paymentCode} received. Thank you! Receipt: https://aostp.akomapacargo.com/receipts/${payment.paymentCode}`;
         channels.push({
           channel,
           recipient: payment.customer.phoneNumber,
@@ -506,7 +506,7 @@ export class NotificationsService {
             <tr><td><strong>New Status:</strong></td><td>${pkg.status}</td></tr>
           </table>
           <p>${this.getStatusMessage(pkg.status)}</p>
-          <p>You can <a href="https://app.aostp.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for real-time updates.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for real-time updates.</p>
           <p>Thank you for choosing AOSTP Logistics.</p>
         </div>
       `;
@@ -528,7 +528,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) status: ${oldStatus} → ${pkg.status}. Track: https://app.aostp.com/track/${pkg.trackingCode}`;
+        const content = `Hi ${pkg.customer.firstName}, your package (${pkg.trackingCode}) status: ${oldStatus} → ${pkg.status}. Track: https://aostp.akomapacargo.com/track/${pkg.trackingCode}`;
         channels.push({
           channel,
           recipient: pkg.customer.phoneNumber,
