@@ -8,6 +8,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { GetNotificationsDto } from './dto/notifications.filter.dto';
@@ -64,6 +66,31 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Retry initiated' })
   async retryFailedNotifications() {
     return this.notificationsService.retryFailedNotifications();
+  }
+
+  @Post(':id/retry')
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry a single failed notification' })
+  @ApiParam({ name: 'id', description: 'Notification ID' })
+  @ApiResponse({ status: 200, description: 'Retry initiated' })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Notification is not in failed status',
+  })
+  async retrySingleNotification(@Param('id') id: string) {
+    try {
+      return await this.notificationsService.retrySingleNotification(id);
+    } catch (error) {
+      if (error.message === 'Notification not found') {
+        throw new NotFoundException(error.message);
+      }
+      if (error.message === 'Notification is not in failed status') {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 
   @Get('failed')

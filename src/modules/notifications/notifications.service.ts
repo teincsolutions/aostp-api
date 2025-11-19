@@ -652,13 +652,103 @@ export class NotificationsService {
       },
     });
 
-    for (const notification of failedNotifications) {
-      await this.processNotification(notification);
+    if (failedNotifications.length === 0) {
+      return {
+        retried: 0,
+        message: 'No failed notifications found in the last 24 hours',
+      };
     }
+
+    // Process notifications in the background to avoid timeout
+    this.processFailedNotificationsInBackground(failedNotifications);
+
+    this.logger.log(
+      `Started background retry of ${failedNotifications.length} failed notifications`,
+    );
 
     return {
       retried: failedNotifications.length,
+      message: `Retry initiated for ${failedNotifications.length} notifications. They will be processed in the background.`,
     };
+  }
+
+  // Retry a single failed notification by ID
+  async retrySingleNotification(id: string) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    if (notification.status !== 'FAILED') {
+      throw new Error('Notification is not in failed status');
+    }
+
+    await this.processNotification(notification);
+
+    return {
+      success: true,
+      notificationId: id,
+      status: 'Retry initiated',
+    };
+  }
+
+  // Process failed notifications in background using concurrent batches
+  private processFailedNotificationsInBackground(notifications: any[]) {
+    // Fire and forget - don't block the response
+    setImmediate(() => {
+      // Execute the async processing function
+      this.doBackgroundProcessing(notifications);
+    });
+  }
+
+  private async doBackgroundProcessing(notifications: any[]) {
+    const batchSize = 10; // Process 10 notifications at a time
+    let processed = 0;
+    let success = 0;
+    let failed = 0;
+
+    this.logger.log(
+      `Starting background retry processing of ${notifications.length} notifications in batches of ${batchSize}`,
+    );
+
+    for (let i = 0; i < notifications.length; i += batchSize) {
+      const batch = notifications.slice(i, i + batchSize);
+
+      // Process batch concurrently
+      const batchPromises = batch.map(async (notification) => {
+        try {
+          await this.processNotification(notification);
+          return { success: true };
+        } catch (error) {
+          this.logger.error(
+            `Failed to retry notification ${notification.id}:`,
+            error.message,
+          );
+          return { error: true };
+        }
+      });
+
+      const results = await Promise.all(batchPromises);
+      processed += batch.length;
+      success += results.filter((r) => !r.error).length;
+      failed += results.filter((r) => r.error).length;
+
+      this.logger.log(
+        `Processed ${processed}/${notifications.length} notifications. Success: ${success}, Failed: ${failed}`,
+      );
+
+      // Small delay between batches to prevent overwhelming the providers
+      if (i + batchSize < notifications.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+
+    this.logger.log(
+      `Background retry processing completed. Total: ${processed}, Success: ${success}, Failed: ${failed}`,
+    );
   }
 
   // Get all failed notifications
