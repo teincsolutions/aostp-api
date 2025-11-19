@@ -15,7 +15,7 @@ pipeline {
         CDN_DOMAIN = 'cdn.akomapacargo.com'
         JWT_EXPIRATION = '15m'
         JWT_REFRESH_EXPIRATION = '7d'
-        SMS_PROVIDER = 'sms-online-gh'
+        SMS_PROVIDER = 'hubtel'
 
         // SMS Online GH Provider
         SMS_ONLINE_GH_SENDER_ID = 'Willfind8'
