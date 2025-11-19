@@ -27,7 +27,8 @@ export class NodemailerProvider implements EmailProvider {
     );
 
     if (smtpHost && smtpUser && smtpPass) {
-      this.transporter = nodemailer.createTransport({
+      // Configure transport with better connection settings
+      const transportOptions: any = {
         host: smtpHost,
         port: smtpPort,
         secure: smtpSecure,
@@ -35,7 +36,25 @@ export class NodemailerProvider implements EmailProvider {
           user: smtpUser,
           pass: smtpPass,
         },
-      });
+        // Add connection timeout and retry settings
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 5000,
+        socketTimeout: 10000,
+        // Enable debugging in development
+        debug: process.env.NODE_ENV === 'development',
+        logger: process.env.NODE_ENV === 'development',
+      };
+
+      // Gmail-specific settings
+      if (smtpHost === 'smtp.gmail.com') {
+        transportOptions.service = 'Gmail';
+        // Gmail requires secure connection on port 465
+        if (smtpPort === 465) {
+          transportOptions.secure = true;
+        }
+      }
+
+      this.transporter = nodemailer.createTransport(transportOptions);
 
       this.isConfigured = true;
       this.logger.log('Nodemailer email provider initialized');
