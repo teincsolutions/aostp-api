@@ -30,7 +30,7 @@ RUN npm run build
 FROM node:20-alpine AS production
 
 # Install msmtp for email delivery
-RUN apk add --no-cache msmtp msmtp-mta ca-certificates gettext
+RUN apk add --no-cache msmtp ca-certificates gettext
 
 # Set working directory
 WORKDIR /app
