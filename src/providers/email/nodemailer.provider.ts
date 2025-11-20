@@ -11,24 +11,43 @@ import {
 export class NodemailerProvider implements EmailProvider {
   private readonly logger = new Logger(NodemailerProvider.name);
   private readonly transporter: nodemailer.Transporter;
-  private readonly isConfigured: boolean;
+  private readonly isConfigured = true; // always true in sendmail mode
   private readonly defaultFrom: string;
 
   constructor(private configService: ConfigService) {
-    const smtpHost = this.configService.get<string>('SMTP_HOST');
-    const smtpPort = this.configService.get<number>('SMTP_PORT', 587);
-    const smtpUser = this.configService.get<string>('SMTP_USER');
-    const smtpPass = this.configService.get<string>('SMTP_PASS');
-    const smtpSecure = this.configService.get<boolean>('SMTP_SECURE', false);
-
     this.defaultFrom = this.configService.get<string>(
       'EMAIL_FROM',
       'noreply@aostp.com',
     );
 
-    if (smtpHost && smtpUser && smtpPass) {
-      // Configure transport with better connection settings
-      const transportOptions: any = {
+    const transportMode = this.configService.get<string>(
+      'EMAIL_TRANSPORT',
+      'sendmail',
+    );
+
+    if (transportMode === 'sendmail') {
+      /** ─────────────────────────────────────────
+       *  ✔ DIRECTUS-STYLE SENDMAIL MODE
+       *  ✔ No SMTP login
+       *  ✔ No App Password
+       *  ✔ Works from Docker/Hetzner instantly
+       *  ───────────────────────────────────────── */
+      this.transporter = nodemailer.createTransport({
+        sendmail: true,
+        newline: 'unix',
+        path: '/usr/sbin/sendmail',
+      });
+
+      this.logger.log('Using sendmail transport (Directus mode)');
+    } else {
+      /** Optional: Keep SMTP fallback if needed */
+      const smtpHost = this.configService.get<string>('SMTP_HOST');
+      const smtpPort = this.configService.get<number>('SMTP_PORT', 587);
+      const smtpUser = this.configService.get<string>('SMTP_USER');
+      const smtpPass = this.configService.get<string>('SMTP_PASS');
+      const smtpSecure = this.configService.get<boolean>('SMTP_SECURE', false);
+
+      this.transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
         secure: smtpSecure,
@@ -36,33 +55,9 @@ export class NodemailerProvider implements EmailProvider {
           user: smtpUser,
           pass: smtpPass,
         },
-        // Add connection timeout and retry settings
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 5000,
-        socketTimeout: 10000,
-        // Enable debugging in development
-        debug: process.env.NODE_ENV === 'development',
-        logger: process.env.NODE_ENV === 'development',
-      };
+      });
 
-      // Gmail-specific settings
-      if (smtpHost === 'smtp.gmail.com') {
-        transportOptions.service = 'Gmail';
-        // Gmail requires secure connection on port 465
-        if (smtpPort === 465) {
-          transportOptions.secure = true;
-        }
-      }
-
-      this.transporter = nodemailer.createTransport(transportOptions);
-
-      this.isConfigured = true;
-      this.logger.log('Nodemailer email provider initialized');
-    } else {
-      this.isConfigured = false;
-      this.logger.warn(
-        'Nodemailer email provider is not configured. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS in environment variables.',
-      );
+      this.logger.log('Using SMTP transport');
     }
   }
 
@@ -76,18 +71,7 @@ export class NodemailerProvider implements EmailProvider {
     content: string,
     options: EmailOptions = {},
   ): Promise<EmailResponse> {
-    if (!this.isConfigured) {
-      this.logger.error('Nodemailer email provider is not configured');
-      return {
-        success: false,
-        error:
-          'Nodemailer email provider is not configured. Please configure SMTP settings.',
-      };
-    }
-
     try {
-      this.logger.debug(`Sending email to ${to} with subject: ${subject}`);
-
       const mailOptions: nodemailer.SendMailOptions = {
         from: options.from || this.defaultFrom,
         to,
@@ -96,85 +80,37 @@ export class NodemailerProvider implements EmailProvider {
         text: !options.html ? content : undefined,
       };
 
-      if (options.cc && options.cc.length > 0) {
-        mailOptions.cc = options.cc;
-      }
-
-      if (options.bcc && options.bcc.length > 0) {
-        mailOptions.bcc = options.bcc;
-      }
-
-      if (options.attachments && options.attachments.length > 0) {
-        mailOptions.attachments = options.attachments.map((attachment) => ({
-          filename: attachment.filename,
-          content: attachment.content,
-          contentType: attachment.contentType,
-          encoding: attachment.encoding,
+      if (options.cc?.length) mailOptions.cc = options.cc;
+      if (options.bcc?.length) mailOptions.bcc = options.bcc;
+      if (options.attachments?.length) {
+        mailOptions.attachments = options.attachments.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+          encoding: a.encoding,
         }));
       }
 
       const info = await this.transporter.sendMail(mailOptions);
 
-      this.logger.debug('Email sent successfully', {
-        messageId: info.messageId,
-        response: info.response,
-      });
+      this.logger.debug('Email sent', { messageId: info.messageId });
 
-      return {
-        success: true,
-        messageId: info.messageId,
-      };
+      return { success: true, messageId: info.messageId };
     } catch (error) {
-      this.logger.error('Error sending email via Nodemailer:', error);
-
-      let errorMessage = 'Failed to send email via Nodemailer';
-      if (error.response) {
-        errorMessage = error.response || errorMessage;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      this.logger.error('Sendmail/Nodemailer Error:', error);
 
       return {
         success: false,
-        error: errorMessage,
+        error: error.message || 'Error sending email',
       };
     }
   }
 
-  /**
-   * Verify SMTP connection
-   */
-  async verifyConnection(): Promise<{ success: boolean; error?: string }> {
-    if (!this.isConfigured) {
-      return {
-        success: false,
-        error: 'Nodemailer email provider is not configured',
-      };
-    }
-
-    try {
-      await this.transporter.verify();
-      return { success: true };
-    } catch (error) {
-      this.logger.error('SMTP connection verification failed:', error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Get provider configuration status
-   */
-  isProviderConfigured(): boolean {
-    return this.isConfigured;
-  }
-
-  /**
-   * Get default from address
-   */
   getDefaultFrom(): string {
     return this.defaultFrom;
+  }
+
+  isProviderConfigured(): boolean {
+    return this.isConfigured;
   }
 }
