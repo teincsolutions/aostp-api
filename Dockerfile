@@ -29,6 +29,9 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine AS production
 
+# Install msmtp for email delivery
+RUN apk add --no-cache msmtp msmtp-mta ca-certificates gettext
+
 # Set working directory
 WORKDIR /app
 
@@ -45,8 +48,13 @@ COPY --from=build /app/prisma ./prisma
 RUN npx prisma generate
 COPY --from=build /app/scripts ./scripts
 
+# Copy msmtp template and startup script
+COPY --from=build /app/msmtprc /etc/msmtprc.template
+COPY --from=build /app/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Expose port (can be overridden by PORT env var)
 EXPOSE 3000
 
-# Start the production server
-CMD ["npm", "run", "start:prod"]
+# Start the production server with msmtp setup
+CMD ["/app/start.sh"]
