@@ -35,7 +35,7 @@ export class NodemailerProvider implements EmailProvider {
       this.transporter = nodemailer.createTransport({
         sendmail: true,
         newline: 'unix',
-        path: '/usr/sbin/sendmail',
+        path: '/usr/bin/msmtp',
       });
 
       this.logger.log('Using sendmail transport (Directus mode)');
