@@ -18,7 +18,6 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
-import { EnableTwoFactorDto } from './dto/enable-two-factor.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
@@ -368,12 +367,11 @@ export class AuthController {
   async verifyAndEnableTwoFactor(
     @Request() req: AuthenticatedRequest,
     @Body() verifyDto: VerifyTwoFactorDto,
-    @Body() enableDto?: EnableTwoFactorDto,
   ) {
     return this.authService.verifyAndEnableTwoFactor(
       req.user.id,
       verifyDto,
-      enableDto?.phoneNumber,
+      verifyDto.phoneNumber,
     );
   }
 

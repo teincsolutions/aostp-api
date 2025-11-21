@@ -10,6 +10,7 @@ export function Match(property: string, validationOptions?: ValidationOptions) {
       name: 'Match',
       target: object.constructor,
       propertyName,
+      constraints: [property],
       options: validationOptions,
       validator: {
         validate(value: any, args: ValidationArguments) {

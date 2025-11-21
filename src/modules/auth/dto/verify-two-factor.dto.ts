@@ -1,5 +1,10 @@
-import { IsString, IsNotEmpty } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsPhoneNumber,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class VerifyTwoFactorDto {
   @ApiProperty({
@@ -9,4 +14,12 @@ export class VerifyTwoFactorDto {
   @IsString()
   @IsNotEmpty()
   token: string;
+
+  @ApiPropertyOptional({
+    description: 'Phone number for SMS backup codes',
+    example: '+233501234567',
+  })
+  @IsOptional()
+  @IsPhoneNumber()
+  phoneNumber?: string;
 }

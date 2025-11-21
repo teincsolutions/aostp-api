@@ -24,17 +24,4 @@ export class ChangePasswordDto {
   @MinLength(8)
   @MaxLength(128)
   newPassword: string;
-
-  @ApiProperty({
-    description: 'Confirm new password (must match new password)',
-    example: 'newSecurePassword123',
-    minLength: 8,
-    maxLength: 128,
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(8)
-  @MaxLength(128)
-  @Match('newPassword')
-  confirmPassword: string;
 }
