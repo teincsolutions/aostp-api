@@ -19,6 +19,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { EnableTwoFactorDto } from './dto/enable-two-factor.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../shared/interfaces';
@@ -239,6 +240,80 @@ export class AuthController {
   })
   async logoutAll(@Request() req: AuthenticatedRequest) {
     return this.authService.logout(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Change password',
+    description: 'Change user password using current password verification',
+  })
+  @ApiBody({
+    type: ChangePasswordDto,
+    description: 'Password change request with current and new passwords',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password changed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Password changed successfully',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or password requirements not met',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'string',
+          example: 'Current password is incorrect',
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing token',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 422,
+    description: 'Validation failed',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 422 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['newPassword must be longer than or equal to 8 characters'],
+        },
+        error: { type: 'string', example: 'Unprocessable Entity' },
+      },
+    },
+  })
+  async changePassword(
+    @Request() req: AuthenticatedRequest,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(req.user.id, changePasswordDto);
   }
 
   // Two-Factor Authentication endpoints
