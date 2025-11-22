@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   UseGuards,
@@ -153,6 +154,55 @@ export class AuthController {
   })
   async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refreshToken(refreshTokenDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get current user',
+    description: 'Get information about the currently authenticated user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User information retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          example: '550e8400-e29b-41d4-a716-446655440000',
+        },
+        email: { type: 'string', example: 'user@example.com' },
+        username: { type: 'string', example: 'john_doe' },
+        firstName: { type: 'string', example: 'John' },
+        lastName: { type: 'string', example: 'Doe' },
+        role: {
+          type: 'string',
+          enum: [
+            'SUPER_ADMIN',
+            'FINANCE_MANAGER',
+            'OPERATIONS_CLERK',
+            'PAYMENT_CLERK',
+            'CUSTOMER',
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing token',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  getMe(@Request() req: AuthenticatedRequest) {
+    return req.user;
   }
 
   @UseGuards(JwtAuthGuard)
