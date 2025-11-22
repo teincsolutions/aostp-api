@@ -163,6 +163,48 @@ export class WarehousesController {
     return this.warehousesService.findAll(paginationDto, { status, search });
   }
 
+  @Get(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @ApiOperation({
+    summary: 'Get warehouse by ID',
+    description: 'Retrieves detailed information about a specific warehouse',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Warehouse UUID',
+    example: 'uuid-warehouse-123',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Warehouse found and returned successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', example: 'uuid-warehouse-123' },
+        warehouseId: { type: 'string', example: 'WH001' },
+        name: { type: 'string', example: 'China Main' },
+        location: { type: 'string', example: 'Shenzhen, China' },
+        contactInfo: {
+          type: 'string',
+          nullable: true,
+          example: '+86 123 456 7890',
+        },
+        isActive: { type: 'boolean', example: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Warehouse not found' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized access' })
+  @ApiForbiddenResponse({
+    description:
+      'Insufficient permissions (requires SUPER_ADMIN or OPERATIONS_CLERK role)',
+  })
+  async findOne(@Param('id') id: string) {
+    return this.warehousesService.findOne(id);
+  }
+
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
   @ApiOperation({
