@@ -20,9 +20,11 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Public } from '../../shared/decorators/public.decorator';
 import { UserRole } from '@prisma/client';
 import { GetUserDto } from './dto/get-user.dto';
 
@@ -106,5 +108,64 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'User deleted successfully' })
   remove(@Param('id') id: string, @Request() req: any) {
     return this.usersService.remove(id, req.user.sub);
+  }
+
+  @Post(':id/reset-password')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Request password reset for a user',
+    description:
+      'Admin can trigger a password reset email for any user. The user will receive an email with a reset link.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset email sent successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: {
+          type: 'string',
+          example: 'Password reset link has been sent to your email',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  requestPasswordReset(@Param('id') id: string) {
+    return this.usersService.requestPasswordReset(id);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @ApiOperation({
+    summary: 'Reset password using token',
+    description:
+      'User resets their password using the token received via email. Token expires after 1 hour.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: {
+          type: 'string',
+          example:
+            'Password has been reset successfully. Please login with your new password.',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid, expired, or already used reset token',
+  })
+  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.usersService.resetPassword(
+      resetPasswordDto.token,
+      resetPasswordDto.newPassword,
+    );
   }
 }

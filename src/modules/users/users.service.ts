@@ -653,4 +653,151 @@ export class UsersService {
     this.logger.log(`User deleted: ${result.email}`);
     return result;
   }
+
+  async requestPasswordReset(
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.isActive) {
+      throw new BadRequestException('Account is deactivated');
+    }
+
+    if (!user.email) {
+      throw new BadRequestException('User has no email address');
+    }
+
+    // Generate unique reset token
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+
+    // Set expiration to 1 hour from now
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    // Save reset token to database
+    await this.prisma.passwordResetToken.create({
+      data: {
+        token: resetToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    // Send password reset email (async, don't block)
+    this.notificationsService
+      .notifyPasswordReset({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        resetToken,
+      })
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send password reset email to ${user.email}:`,
+          error,
+        );
+      });
+
+    this.logger.log(`Password reset requested for user: ${user.email}`);
+
+    return {
+      success: true,
+      message: 'Password reset link has been sent to your email',
+    };
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; message: string }> {
+    // Find the reset token
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Check if token has been used
+    if (resetToken.usedAt) {
+      throw new BadRequestException('This reset token has already been used');
+    }
+
+    // Check if token is expired
+    if (new Date() > resetToken.expiresAt) {
+      throw new BadRequestException('This reset token has expired');
+    }
+
+    // Check if user is active
+    if (!resetToken.user.isActive) {
+      throw new BadRequestException('Account is deactivated');
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await hash(newPassword, saltRounds);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Update password and clear mustChangePassword flag
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: {
+          password: hashedPassword,
+          mustChangePassword: false,
+        },
+      });
+
+      // Mark token as used
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      });
+
+      // Revoke all refresh tokens
+      await tx.refreshToken.updateMany({
+        where: { userId: resetToken.userId },
+        data: { revokedAt: new Date() },
+      });
+
+      // Log the action
+      await tx.auditLog.create({
+        data: {
+          userId: resetToken.userId,
+          action: 'PASSWORD_RESET',
+          entity: 'User',
+          entityId: resetToken.userId,
+          metadata: {
+            action: 'PASSWORD_RESET_VIA_TOKEN',
+            tokenUsed: true,
+          },
+        },
+      });
+    });
+
+    this.logger.log(
+      `Password reset successful for user: ${resetToken.user.email}`,
+    );
+
+    return {
+      success: true,
+      message:
+        'Password has been reset successfully. Please login with your new password.',
+    };
+  }
 }

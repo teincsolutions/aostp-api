@@ -918,4 +918,83 @@ export class NotificationsService {
       return null;
     }
   }
+
+  // Send password reset email
+  async notifyPasswordReset(user: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    resetToken: string;
+  }): Promise<any> {
+    if (!user.email) {
+      this.logger.warn('Cannot send password reset email - no email provided');
+      return null;
+    }
+
+    // Read email template
+    let templatePath = path.join(
+      process.cwd(),
+      'dist',
+      'templates',
+      'emails',
+      'password-reset.html',
+    );
+
+    if (!fs.existsSync(templatePath)) {
+      templatePath = path.join(
+        process.cwd(),
+        'src',
+        'templates',
+        'emails',
+        'password-reset.html',
+      );
+    }
+
+    let emailContent = fs.readFileSync(templatePath, 'utf-8');
+
+    // Build reset URL
+    const frontendUrl =
+      this.configService.get('FRONTEND_URL') ||
+      'https://aostp.akomapacargo.com';
+    const resetUrl = `${frontendUrl}/reset-password?token=${user.resetToken}`;
+
+    // Replace placeholders
+    emailContent = emailContent
+      .replace(/{{firstName}}/g, user.firstName)
+      .replace(/{{lastName}}/g, user.lastName)
+      .replace(/{{resetUrl}}/g, resetUrl);
+
+    try {
+      const result = await this.emailProvider.sendEmail(
+        user.email,
+        'Reset Your Password - AOSTP Logistics',
+        emailContent,
+        { html: true },
+      );
+
+      if (!result.success) {
+        this.logger.error(
+          `Failed to send password reset email to ${user.email}:`,
+          result.error,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `Password reset email sent successfully to ${user.email}`,
+      );
+
+      return {
+        success: true,
+        messageId: result.messageId,
+        recipient: user.email,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send password reset email to ${user.email}:`,
+        error,
+      );
+      return null;
+    }
+  }
 }
