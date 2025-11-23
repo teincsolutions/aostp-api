@@ -70,7 +70,7 @@ export class UsersService {
           firstName,
           lastName,
           role,
-          warehouseId,
+          ...(warehouseId && { warehouseId }), // Only include if provided
           isActive,
           twoFactorEnabled,
           mustChangePassword: true, // Force password change on first login
