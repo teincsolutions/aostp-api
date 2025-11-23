@@ -48,6 +48,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if 2FA is enabled
+    if (user.twoFactorEnabled) {
+      return {
+        requiresTwoFactor: true,
+        message: 'Two-factor authentication required',
+        userId: user.id, // Optional: can be used for subsequent 2FA verification
+      };
+    }
+
     // Generate tokens
     const tokens = await this.generateTokens(user);
 

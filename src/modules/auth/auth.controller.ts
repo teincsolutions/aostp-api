@@ -42,42 +42,62 @@ export class AuthController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Login successful',
+    description: 'Login successful or 2FA required',
     schema: {
-      type: 'object',
-      properties: {
-        user: {
+      oneOf: [
+        {
           type: 'object',
+          description: 'Successful login (2FA not enabled)',
           properties: {
-            id: {
-              type: 'string',
-              example: '550e8400-e29b-41d4-a716-446655440000',
+            user: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  example: '550e8400-e29b-41d4-a716-446655440000',
+                },
+                email: { type: 'string', example: 'user@example.com' },
+                username: { type: 'string', example: 'john_doe' },
+                firstName: { type: 'string', example: 'John' },
+                lastName: { type: 'string', example: 'Doe' },
+                role: {
+                  type: 'string',
+                  enum: [
+                    'SUPER_ADMIN',
+                    'FINANCE_MANAGER',
+                    'OPERATIONS_CLERK',
+                    'PAYMENT_CLERK',
+                    'CUSTOMER',
+                  ],
+                },
+              },
             },
-            email: { type: 'string', example: 'user@example.com' },
-            username: { type: 'string', example: 'john_doe' },
-            firstName: { type: 'string', example: 'John' },
-            lastName: { type: 'string', example: 'Doe' },
-            role: {
+            accessToken: {
               type: 'string',
-              enum: [
-                'SUPER_ADMIN',
-                'FINANCE_MANAGER',
-                'OPERATIONS_CLERK',
-                'PAYMENT_CLERK',
-                'CUSTOMER',
-              ],
+              example: 'REDACTED_JWT...',
+            },
+            refreshToken: {
+              type: 'string',
+              example: 'REDACTED_JWT...',
             },
           },
         },
-        accessToken: {
-          type: 'string',
-          example: 'REDACTED_JWT...',
+        {
+          type: 'object',
+          description: '2FA required (user has 2FA enabled)',
+          properties: {
+            requiresTwoFactor: { type: 'boolean', example: true },
+            message: {
+              type: 'string',
+              example: 'Two-factor authentication required',
+            },
+            userId: {
+              type: 'string',
+              example: '550e8400-e29b-41d4-a716-446655440000',
+            },
+          },
         },
-        refreshToken: {
-          type: 'string',
-          example: 'REDACTED_JWT...',
-        },
-      },
+      ],
     },
   })
   @ApiResponse({
