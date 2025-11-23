@@ -4,6 +4,8 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -11,12 +13,17 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, User, UserRole } from '@prisma/client';
 import { hash, compare } from 'bcrypt';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(createUserDto: CreateUserDto, creatorId: string): Promise<any> {
     const {
@@ -51,6 +58,9 @@ export class UsersService {
     const saltRounds = 12;
     const hashedPassword = await hash(password, saltRounds);
 
+    // Store plain password temporarily to send via email
+    const tempPassword = password;
+
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -63,6 +73,7 @@ export class UsersService {
           warehouseId,
           isActive,
           twoFactorEnabled,
+          mustChangePassword: true, // Force password change on first login
         },
         select: {
           id: true,
@@ -81,6 +92,7 @@ export class UsersService {
           },
           isActive: true,
           twoFactorEnabled: true,
+          mustChangePassword: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -103,6 +115,26 @@ export class UsersService {
 
       return user;
     });
+
+    // Send welcome email with credentials (async, don't block)
+    if (result.email) {
+      this.notificationsService
+        .notifyUserCreated({
+          id: result.id,
+          email: result.email,
+          username: result.username,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          role: result.role,
+          tempPassword,
+        })
+        .catch((error) => {
+          this.logger.error(
+            `Failed to send welcome email to ${result.email}:`,
+            error,
+          );
+        });
+    }
 
     this.logger.log(`User created: ${email} with role ${role}`);
     return result;

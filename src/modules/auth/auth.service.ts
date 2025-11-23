@@ -195,11 +195,12 @@ export class AuthService {
     const saltRounds = 12;
     const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
 
-    // Update password
+    // Update password and clear mustChangePassword flag
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         password: hashedNewPassword,
+        mustChangePassword: false,
         updatedAt: new Date(),
       },
     });
@@ -233,6 +234,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      mustChangePassword: user.mustChangePassword || false,
     };
 
     const [accessToken, refreshToken] = await Promise.all([

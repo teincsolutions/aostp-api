@@ -21,8 +21,10 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../../shared/decorators/public.decorator';
+import { AllowPasswordChange } from '../../shared/decorators/allow-password-change.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../shared/interfaces';
+import { TwoFactorLoginDto } from './dto/two-factor-login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -177,6 +179,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChange()
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({
@@ -312,6 +315,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChange()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
@@ -537,10 +541,7 @@ export class AuthController {
       },
     },
   })
-  async loginWithTwoFactor(
-    @Body() loginDto: LoginDto,
-    @Body('twoFactorToken') twoFactorToken: string,
-  ) {
-    return this.authService.loginWithTwoFactor(loginDto, twoFactorToken);
+  async loginWithTwoFactor(@Body() loginDto: TwoFactorLoginDto) {
+    return this.authService.loginWithTwoFactor(loginDto, loginDto.token);
   }
 }

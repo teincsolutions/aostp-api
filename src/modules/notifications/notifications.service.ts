@@ -13,6 +13,8 @@ import {
 import type { SmsProvider } from '../../interfaces/sms-provider.interface';
 import type { EmailProvider } from '../../interfaces/email-provider.interface';
 import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface NotificationChannelContent {
   channel: NotificationChannel;
@@ -700,7 +702,7 @@ export class NotificationsService {
     // Fire and forget - don't block the response
     setImmediate(() => {
       // Execute the async processing function
-      this.doBackgroundProcessing(notifications);
+      void this.doBackgroundProcessing(notifications);
     });
   }
 
@@ -828,5 +830,81 @@ export class NotificationsService {
       phoneNumber,
       message || 'Test SMS from AOSTP Logistics',
     );
+  }
+
+  // Send welcome email to newly created user
+  async notifyUserCreated(user: {
+    id: string;
+    email: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    tempPassword: string;
+  }): Promise<any> {
+    if (!user.email) {
+      this.logger.warn(
+        `Cannot send welcome email to user ${user.username} - no email address provided`,
+      );
+      return null;
+    }
+
+    // Read email template
+    const templatePath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'templates',
+      'emails',
+      'user-created.html',
+    );
+    let emailContent = fs.readFileSync(templatePath, 'utf-8');
+
+    // Replace placeholders
+    const loginUrl =
+      this.configService.get('FRONTEND_URL') ||
+      'https://aostp.akomapacargo.com';
+
+    emailContent = emailContent
+      .replace(/{{firstName}}/g, user.firstName)
+      .replace(/{{lastName}}/g, user.lastName)
+      .replace(/{{email}}/g, user.email)
+      .replace(/{{username}}/g, user.username)
+      .replace(/{{password}}/g, user.tempPassword)
+      .replace(/{{role}}/g, user.role)
+      .replace(/{{loginUrl}}/g, loginUrl);
+
+    try {
+      const result = await this.emailProvider.sendEmail(
+        user.email,
+        'Welcome to AOSTP Logistics - Your Account is Ready',
+        emailContent,
+        { html: true },
+      );
+
+      if (!result.success) {
+        this.logger.error(
+          `Failed to send welcome email to ${user.email}:`,
+          result.error,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `Welcome email sent successfully to ${user.email} (${user.username})`,
+      );
+
+      return {
+        success: true,
+        messageId: result.messageId,
+        recipient: user.email,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send welcome email to ${user.email}:`,
+        error,
+      );
+      return null;
+    }
   }
 }

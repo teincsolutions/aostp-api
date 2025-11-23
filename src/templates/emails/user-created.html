@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to AOSTP Logistics</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 0;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); padding: 40px 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Welcome to AOSTP Logistics</h1>
+            <p style="color: #e3f2fd; margin: 10px 0 0 0; font-size: 16px;">Your account has been created</p>
+        </div>
+        
+        <!-- Content -->
+        <div style="padding: 40px 30px;">
+            <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 10px;">
+                Hi {{firstName}} {{lastName}},
+            </p>
+            
+            <p style="color: #666666; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                Welcome to AOSTP Logistics! Your account has been successfully created by the administrator. You can now access the system using the credentials below.
+            </p>
+            
+            <!-- Credentials Box -->
+            <div style="background-color: #f8f9fa; border: 2px solid #007bff; border-radius: 8px; padding: 25px; margin-bottom: 30px;">
+                <h3 style="color: #007bff; margin: 0 0 20px 0; font-size: 18px;">Your Login Credentials</h3>
+                
+                <div style="margin-bottom: 15px;">
+                    <p style="color: #666666; font-size: 14px; margin: 0 0 5px 0;">Email:</p>
+                    <p style="color: #333333; font-size: 16px; font-weight: bold; margin: 0;">{{email}}</p>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <p style="color: #666666; font-size: 14px; margin: 0 0 5px 0;">Username:</p>
+                    <p style="color: #333333; font-size: 16px; font-weight: bold; margin: 0;">{{username}}</p>
+                </div>
+                
+                <div style="margin-bottom: 0;">
+                    <p style="color: #666666; font-size: 14px; margin: 0 0 5px 0;">Temporary Password:</p>
+                    <p style="color: #333333; font-size: 16px; font-weight: bold; margin: 0; background-color: #ffffff; padding: 10px; border-radius: 4px; border: 1px solid #dee2e6;">{{password}}</p>
+                </div>
+            </div>
+
+            <!-- Role Info -->
+            <div style="background-color: #e7f3ff; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 30px; border-radius: 4px;">
+                <p style="color: #004085; font-size: 14px; margin: 0;">
+                    <strong>Your Role:</strong> {{role}}
+                </p>
+            </div>
+            
+            <!-- Important Notice -->
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 20px; margin-bottom: 30px;">
+                <p style="color: #856404; font-size: 14px; margin: 0 0 10px 0;">
+                    <strong>🔒 Important Security Notice:</strong>
+                </p>
+                <p style="color: #856404; font-size: 14px; margin: 0; line-height: 1.6;">
+                    For security reasons, <strong>you will be required to change your password</strong> after your first login. You will not be able to access other system features until you change your password.
+                </p>
+            </div>
+            
+            <!-- Login Instructions -->
+            <div style="margin-bottom: 30px;">
+                <h3 style="color: #333333; font-size: 18px; margin: 0 0 15px 0;">Getting Started:</h3>
+                <ol style="color: #666666; font-size: 14px; line-height: 1.8; padding-left: 20px;">
+                    <li>Visit the AOSTP Logistics portal</li>
+                    <li>Enter your email or username</li>
+                    <li>Enter the temporary password provided above</li>
+                    <li>You will be prompted to change your password immediately</li>
+                    <li>Create a strong, secure password</li>
+                    <li>Start using the system with full access</li>
+                </ol>
+            </div>
+            
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 40px 0;">
+                <a href="{{loginUrl}}" 
+                   style="display: inline-block; background-color: #007bff; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);">
+                    Login to Your Account
+                </a>
+            </div>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-bottom: 10px;">
+                If the button doesn't work, copy and paste this link into your browser:
+            </p>
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; margin-bottom: 30px;">
+                <p style="color: #007bff; font-size: 14px; word-break: break-all; margin: 0;">
+                    {{loginUrl}}
+                </p>
+            </div>
+            
+            <!-- Security Tips -->
+            <div style="background-color: #f8f9fa; border-radius: 6px; padding: 20px; margin-bottom: 30px;">
+                <h4 style="color: #333333; font-size: 16px; margin: 0 0 15px 0;">🛡️ Security Best Practices:</h4>
+                <ul style="color: #666666; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px;">
+                    <li>Choose a strong password with at least 8 characters</li>
+                    <li>Use a combination of uppercase, lowercase, numbers, and special characters</li>
+                    <li>Never share your password with anyone</li>
+                    <li>Log out when you're finished using the system</li>
+                    <li>Enable two-factor authentication for added security</li>
+                </ul>
+            </div>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6;">
+                If you have any questions or need assistance, please don't hesitate to contact our support team.
+            </p>
+            
+            <p style="color: #666666; font-size: 14px; line-height: 1.6; margin-bottom: 0;">
+                Best regards,<br>
+                <strong>The AOSTP Logistics Team</strong>
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #dee2e6;">
+            <p style="color: #999999; font-size: 12px; line-height: 1.6; margin: 0 0 10px 0;">
+                This email was sent to {{email}} because an account was created for you.
+            </p>
+            <p style="color: #999999; font-size: 12px; line-height: 1.6; margin: 0;">
+                © 2025 AOSTP Logistics. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
