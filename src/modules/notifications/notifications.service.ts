@@ -850,14 +850,25 @@ export class NotificationsService {
     }
 
     // Read email template
-    const templatePath = path.join(
-      __dirname,
-      '..',
-      '..',
+    // Try production path first (dist/templates), then fallback to source (src/templates)
+    let templatePath = path.join(
+      process.cwd(),
+      'dist',
       'templates',
       'emails',
       'user-created.html',
     );
+
+    if (!fs.existsSync(templatePath)) {
+      templatePath = path.join(
+        process.cwd(),
+        'src',
+        'templates',
+        'emails',
+        'user-created.html',
+      );
+    }
+
     let emailContent = fs.readFileSync(templatePath, 'utf-8');
 
     // Replace placeholders

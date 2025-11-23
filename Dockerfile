@@ -47,6 +47,8 @@ COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/prisma ./prisma
 RUN npx prisma generate
 COPY --from=build /app/scripts ./scripts
+# Copy email templates for notifications
+COPY --from=build /app/src/templates ./src/templates
 
 # Copy msmtp template and startup script
 COPY --from=build /app/msmtprc /etc/msmtprc.template
