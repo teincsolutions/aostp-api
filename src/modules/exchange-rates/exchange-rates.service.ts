@@ -9,6 +9,7 @@ import { CreateExchangeRateDto } from './dto/create-exchange-rate.dto';
 import { UpdateExchangeRateDto } from './dto/update-exchange-rate.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, ExchangeRate } from '@prisma/client';
+import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
 
 @Injectable()
 export class ExchangeRatesService {
@@ -22,6 +23,9 @@ export class ExchangeRatesService {
   ): Promise<ExchangeRate> {
     const { fromCurrency, toCurrency, rate, effectiveFrom, effectiveTo } =
       createExchangeRateDto;
+
+    // Round rate to 2 decimal places to ensure consistency
+    const roundedRate = roundToTwoDecimals(rate);
 
     // Check if there's already an active rate for this currency pair
     const existingActiveRate = await this.prisma.exchangeRate.findFirst({
@@ -50,7 +54,7 @@ export class ExchangeRatesService {
         data: {
           fromCurrency,
           toCurrency,
-          rate,
+          rate: roundedRate,
           effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
           effectiveTo: effectiveTo ? new Date(effectiveTo) : null,
           isActive: true,
@@ -87,7 +91,7 @@ export class ExchangeRatesService {
     });
 
     this.logger.log(
-      `Exchange rate created: ${fromCurrency}/${toCurrency} = ${rate}`,
+      `Exchange rate created: ${fromCurrency}/${toCurrency} = ${roundedRate}`,
     );
     return result;
   }
@@ -390,10 +394,12 @@ export class ExchangeRatesService {
     fromCurrency: string,
     toCurrency: string,
   ) {
+    const roundedAmount = roundToTwoDecimals(amount);
+
     if (fromCurrency === toCurrency) {
       return {
-        originalAmount: amount,
-        convertedAmount: amount,
+        originalAmount: roundedAmount,
+        convertedAmount: roundedAmount,
         rate: 1,
         fromCurrency,
         toCurrency,
@@ -401,10 +407,13 @@ export class ExchangeRatesService {
     }
 
     const exchangeRate = await this.getCurrentRate(fromCurrency, toCurrency);
+    const convertedAmount = roundToTwoDecimals(
+      roundedAmount * exchangeRate.rate,
+    );
 
     return {
-      originalAmount: amount,
-      convertedAmount: amount * exchangeRate.rate,
+      originalAmount: roundedAmount,
+      convertedAmount,
       rate: exchangeRate.rate,
       fromCurrency,
       toCurrency,

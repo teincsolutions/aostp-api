@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ShippingMode, AirShippingType, PackageStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
+import { IsDecimalPlaces } from '../../../shared/validators/decimal.validator';
 
 export class CreatePackagePhotoDto {
   @ApiProperty({ description: 'S3 URL of the photo' })
@@ -63,6 +64,9 @@ export class CreatePackageDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @IsDecimalPlaces(2, {
+    message: 'Shipping rate must have at most 2 decimal places',
+  })
   shippingRate?: number;
 
   @ApiPropertyOptional({
@@ -80,6 +84,9 @@ export class CreatePackageDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @IsDecimalPlaces(2, {
+    message: 'Shipping cost must have at most 2 decimal places',
+  })
   shippingCost?: number;
 
   @ApiProperty({ enum: ShippingMode, description: 'Shipping mode' })

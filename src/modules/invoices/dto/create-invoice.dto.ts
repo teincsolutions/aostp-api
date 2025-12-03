@@ -7,6 +7,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDecimalPlaces } from '../../../shared/validators/decimal.validator';
 
 export class CreateInvoiceDto {
   @ApiProperty({ description: 'Customer ID' })
@@ -39,5 +40,8 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsNumber()
   @Min(0.01)
+  @IsDecimalPlaces(2, {
+    message: 'Exchange rate must have at most 2 decimal places',
+  })
   exchangeRate?: number;
 }

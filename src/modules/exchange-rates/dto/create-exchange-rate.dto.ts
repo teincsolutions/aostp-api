@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDecimalPlaces } from '../../../shared/validators/decimal.validator';
 
 export class CreateExchangeRateDto {
   @ApiProperty({
@@ -33,6 +34,9 @@ export class CreateExchangeRateDto {
   })
   @IsNumber()
   @Min(0)
+  @IsDecimalPlaces(2, {
+    message: 'Exchange rate must have at most 2 decimal places',
+  })
   rate: number;
 
   @ApiPropertyOptional({

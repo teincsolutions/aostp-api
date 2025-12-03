@@ -11,6 +11,7 @@ import {
   ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDecimalPlaces } from '../../../shared/validators/decimal.validator';
 
 // Custom validator for Direct Momo Transfer reference requirement
 function IsReferenceRequired(validationOptions?: ValidationOptions) {
@@ -45,6 +46,9 @@ export class CreatePaymentDto {
   @ApiProperty({ description: 'Payment amount', minimum: 0.01 })
   @IsNumber()
   @Min(0.01)
+  @IsDecimalPlaces(2, {
+    message: 'Payment amount must have at most 2 decimal places',
+  })
   amount: number;
 
   @ApiProperty({ description: 'Currency code', default: 'USD' })

@@ -20,6 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { ConfigService } from '@nestjs/config';
+import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
 
 @Injectable()
 export class PackagesService {
@@ -96,12 +97,14 @@ export class PackagesService {
     }
 
     // Auto-calculate shippingCost if shippingRate is provided but no shippingCost
-    let finalShippingCost = packageData.shippingCost;
+    let finalShippingCost = packageData.shippingCost
+      ? roundToTwoDecimals(packageData.shippingCost)
+      : undefined;
     if (
       packageData.shippingRate !== undefined &&
       finalShippingCost === undefined
     ) {
-      const shippingRate = packageData.shippingRate;
+      const shippingRate = roundToTwoDecimals(packageData.shippingRate);
       let units = 0;
 
       if (packageData.shippingMode === ShippingMode.SEA) {
@@ -110,7 +113,9 @@ export class PackagesService {
         units = packageData.weight || 0;
       }
 
-      finalShippingCost = shippingRate * units * packageData.quantity;
+      finalShippingCost = roundToTwoDecimals(
+        shippingRate * units * packageData.quantity,
+      );
     }
 
     // Check if provided tracking code is unique
@@ -137,7 +142,9 @@ export class PackagesService {
           cbm: packageData.cbm,
           quantity: packageData.quantity,
           destinationCityId: packageData.destinationCityId,
-          shippingRate: packageData.shippingRate,
+          shippingRate: packageData.shippingRate
+            ? roundToTwoDecimals(packageData.shippingRate)
+            : undefined,
           shippingCurrency: packageData.shippingCurrency || 'USD',
           shippingCost: finalShippingCost,
           shippingMode: packageData.shippingMode,
@@ -414,22 +421,47 @@ export class PackagesService {
     }
 
     // Auto-calculate shippingCost if shippingRate is provided and we have the necessary data
-    let calculatedShippingCost = updatePackageDto.shippingCost;
+    let calculatedShippingCost = updatePackageDto.shippingCost
+      ? roundToTwoDecimals(updatePackageDto.shippingCost)
+      : undefined;
     if (
       updatePackageDto.shippingRate !== undefined &&
       !calculatedShippingCost
     ) {
       const pkg = existingPackage;
-      const shippingRate = updatePackageDto.shippingRate;
+      const shippingRate = roundToTwoDecimals(updatePackageDto.shippingRate);
+
+      // Determine shipping mode - use updated value if provided, otherwise use existing
+      const shippingMode =
+        updatePackageDto.shippingMode !== undefined
+          ? updatePackageDto.shippingMode
+          : pkg.shippingMode;
+
+      // Determine quantity - use updated value if provided, otherwise use existing
+      const quantity =
+        updatePackageDto.quantity !== undefined
+          ? updatePackageDto.quantity
+          : pkg.quantity;
+
       let units = 0;
 
-      if (pkg.shippingMode === ShippingMode.SEA) {
-        units = pkg.cbm || 0;
+      if (shippingMode === ShippingMode.SEA) {
+        // Use updated CBM if provided, otherwise use existing
+        units =
+          updatePackageDto.cbm !== undefined
+            ? updatePackageDto.cbm
+            : pkg.cbm || 0;
       } else {
-        units = pkg.weight || 0;
+        // Use updated weight if provided, otherwise use existing
+        units =
+          updatePackageDto.weight !== undefined
+            ? updatePackageDto.weight
+            : pkg.weight || 0;
       }
 
-      calculatedShippingCost = shippingRate * units * pkg.quantity;
+      calculatedShippingCost = roundToTwoDecimals(
+        shippingRate * units * quantity,
+      );
     }
 
     const result = await this.prisma.$transaction(async (tx) => {

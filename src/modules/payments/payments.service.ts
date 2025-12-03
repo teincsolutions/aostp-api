@@ -19,6 +19,7 @@ import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
+import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
 import { HubtelCallbackData } from 'src/providers/payment-gateway/providers/hubtel.provider';
 
 @Injectable()
@@ -105,10 +106,14 @@ export class PaymentsService {
       }
     }
 
+    // Round amount to 2 decimal places to ensure consistency
+    const roundedAmount = roundToTwoDecimals(amount);
+
     // Calculate local amount using exchange rate
     // Only convert if payment currency is different from GHS
-    const localAmount =
-      currency === 'GHS' ? amount : amount * exchangeRate.rate;
+    const localAmount = roundToTwoDecimals(
+      currency === 'GHS' ? roundedAmount : roundedAmount * exchangeRate.rate,
+    );
 
     // Check if this is a gateway payment method
     const isGatewayPayment =
@@ -195,7 +200,7 @@ export class PaymentsService {
           customer: {
             connect: { id: customerId },
           },
-          amount,
+          amount: roundedAmount,
           currency,
           exchangeRate: {
             connect: { id: exchangeRateId },
@@ -235,7 +240,7 @@ export class PaymentsService {
           tx,
           payment.id,
           invoiceIds,
-          amount,
+          roundedAmount,
           invoicesToPay,
           currency,
         );
@@ -278,7 +283,7 @@ export class PaymentsService {
     }
 
     this.logger.log(
-      `Payment ${paymentCode} processed for customer ${customer.customerCode} - Amount: ${amount} ${currency}`,
+      `Payment ${paymentCode} processed for customer ${customer.customerCode} - Amount: ${roundedAmount} ${currency}`,
     );
 
     return result;
@@ -734,7 +739,7 @@ export class PaymentsService {
     // Note: Payment-invoice relationships are already created via the connect in payment creation
     // Update invoice paid amounts and status
     // remainingAmount is tracked in payment currency
-    let remainingAmount = paymentAmount;
+    let remainingAmount = roundToTwoDecimals(paymentAmount);
 
     for (const invoice of invoicesToPay) {
       // Convert outstanding invoice amount to payment currency for comparison
@@ -746,9 +751,8 @@ export class PaymentsService {
       );
 
       // Calculate how much to apply in payment currency
-      const amountToApplyInPaymentCurrency = Math.min(
-        remainingAmount,
-        outstandingAmountInPaymentCurrency,
+      const amountToApplyInPaymentCurrency = roundToTwoDecimals(
+        Math.min(remainingAmount, outstandingAmountInPaymentCurrency),
       );
 
       // Convert the amount to apply back to invoice currency
@@ -759,8 +763,12 @@ export class PaymentsService {
         payment.exchangeRate,
       );
 
-      const newPaidAmount = invoice.paidAmount + amountToApplyInInvoiceCurrency;
-      const newBalance = invoice.totalAmount - newPaidAmount;
+      const newPaidAmount = roundToTwoDecimals(
+        invoice.paidAmount + amountToApplyInInvoiceCurrency,
+      );
+      const newBalance = roundToTwoDecimals(
+        invoice.totalAmount - newPaidAmount,
+      );
       const newStatus =
         newPaidAmount >= invoice.totalAmount
           ? InvoiceStatus.PAID
@@ -798,6 +806,7 @@ export class PaymentsService {
 
   /**
    * Helper method to convert amount between currencies using exchange rate
+   * All conversions are rounded to 2 decimal places for consistency
    */
   private convertAmountToCurrency(
     amount: number,
@@ -807,7 +816,7 @@ export class PaymentsService {
   ): number {
     // If currencies are the same, no conversion needed
     if (fromCurrency === toCurrency) {
-      return amount;
+      return roundToTwoDecimals(amount);
     }
 
     // Use the exchange rate to convert
@@ -816,12 +825,12 @@ export class PaymentsService {
       exchangeRate.fromCurrency === fromCurrency &&
       exchangeRate.toCurrency === toCurrency
     ) {
-      return amount * exchangeRate.rate;
+      return roundToTwoDecimals(amount * exchangeRate.rate);
     } else if (
       exchangeRate.fromCurrency === toCurrency &&
       exchangeRate.toCurrency === fromCurrency
     ) {
-      return amount / exchangeRate.rate;
+      return roundToTwoDecimals(amount / exchangeRate.rate);
     } else {
       // If the exchange rate doesn't match the conversion direction, we need to handle it
       // For now, assume the rate is stored as fromCurrency to toCurrency
@@ -829,7 +838,7 @@ export class PaymentsService {
       this.logger.warn(
         `Exchange rate direction mismatch: trying to convert ${fromCurrency} to ${toCurrency} but rate is ${exchangeRate.fromCurrency} to ${exchangeRate.toCurrency}`,
       );
-      return amount * exchangeRate.rate;
+      return roundToTwoDecimals(amount * exchangeRate.rate);
     }
   }
 
