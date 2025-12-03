@@ -83,7 +83,12 @@ export class WarehousesController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
+  )
   @ApiOperation({
     summary: 'List warehouses with filtering and pagination',
     description:
@@ -164,7 +169,12 @@ export class WarehousesController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
+  )
   @ApiOperation({
     summary: 'Get warehouse by ID',
     description: 'Retrieves detailed information about a specific warehouse',

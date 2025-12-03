@@ -17,7 +17,7 @@ export class NodemailerProvider implements EmailProvider {
   constructor(private configService: ConfigService) {
     this.defaultFrom = this.configService.get<string>(
       'EMAIL_FROM',
-      'noreply@aostp.com',
+      'noreply@akomapacargo.com',
     );
 
     const transportMode = this.configService.get<string>(

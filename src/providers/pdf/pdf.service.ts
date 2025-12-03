@@ -4,6 +4,8 @@ import { S3Service } from '../storage/s3.service';
 import PDFDocument from 'pdfkit';
 import { PassThrough } from 'stream';
 import { City } from '@prisma/client';
+import axios from 'axios';
+import { format } from 'date-fns';
 
 // =====================
 // Base interfaces
@@ -118,6 +120,7 @@ export interface PackageIntakeData extends PDFTemplateData {
     destinationCity?: City;
   };
   notes?: string;
+  photos?: Array<{ url: string; key: string }>;
 }
 
 // =====================
@@ -271,6 +274,21 @@ function safe(v?: string | number | null) {
   return (v ?? '').toString().trim();
 }
 
+// ---- Format date as "22nd Jul, 2024" using date-fns ----
+function formatDate(dateString: string): string {
+  if (!dateString) return '';
+
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+
+    // Use date-fns format with 'do' for ordinal day (1st, 2nd, 3rd, etc.)
+    return format(date, 'do MMM, yyyy');
+  } catch (error) {
+    return dateString;
+  }
+}
+
 // ---- Single-line, no-wrap, width-clamped with ellipsis ----
 function writeLineClamped(
   doc: PDFDocument,
@@ -296,6 +314,21 @@ function writeLineClamped(
   doc.text(s, x, y, { width, align, lineBreak: false });
 }
 
+// ---- Multi-line text with wrapping and center alignment ----
+function writeTextWrapped(
+  doc: PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  align: 'left' | 'center' | 'right' = 'left',
+): number {
+  const s = text ?? '';
+  doc.text(s, x, y, { width, align, lineBreak: true });
+  // Return the height of the rendered text
+  return doc.heightOfString(s, { width, align, lineBreak: true });
+}
+
 // =====================
 // LAYOUT CONSTANTS (tightened)
 // =====================
@@ -310,7 +343,7 @@ const LAYOUT = {
   addressFont: 8,
   dateBoxW: 80,
   dateBoxH: 14,
-  dateFont: 12,
+  dateFont: 11,
 
   // colored band
   bandHeight: 16, // was 20
@@ -347,10 +380,12 @@ export class PDFService {
   private readonly bucket: string;
   private readonly companyInfo: {
     name: string;
-    address: string;
     phone: string;
+    branches: string;
     email: string;
+    logoPath?: string;
   };
+  private companyLogo: Buffer | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -362,14 +397,42 @@ export class PDFService {
 
     // Set company info with environment variables or defaults
     this.companyInfo = {
-      name: this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics',
-      address:
-        this.configService.get<string>('COMPANY_ADDRESS') || 'Accra, Ghana',
-      phone:
-        this.configService.get<string>('COMPANY_PHONE') || '+233 XX XXX XXXX',
+      name:
+        this.configService.get<string>('COMPANY_NAME') ||
+        'AKOMAPA ONE STOP TRADE PROVIDER LTD (AOSTP)',
+      phone: this.configService.get<string>('COMPANY_PHONE') || '053777 6709',
+      branches:
+        this.configService.get<string>('COMPANY_BRANCHES') ||
+        'ACCRA, KUMASI, HO, TAKORADI',
       email:
-        this.configService.get<string>('COMPANY_EMAIL') || 'info@aostp.com',
+        this.configService.get<string>('COMPANY_EMAIL') ||
+        'info@akomapacargo.com',
+      logoPath: this.configService.get<string>('COMPANY_LOGO_PATH'),
     };
+
+    // Load company logo if path is provided (fire and forget)
+    void this.loadCompanyLogo();
+  }
+
+  /**
+   * Load company logo from file system
+   */
+  private async loadCompanyLogo(): Promise<void> {
+    if (!this.companyInfo.logoPath) {
+      this.logger.warn('No company logo path configured');
+      return;
+    }
+
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const logoPath = path.resolve(process.cwd(), this.companyInfo.logoPath);
+      this.companyLogo = await fs.readFile(logoPath);
+      this.logger.log(`Company logo loaded from ${logoPath}`);
+    } catch (error) {
+      this.logger.error('Failed to load company logo', error);
+      this.companyLogo = null;
+    }
   }
 
   // --------- Public API ---------
@@ -440,32 +503,44 @@ export class PDFService {
   // Core create PDF
   // =====================
   private async createPDF(config: PDFConfig): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      const doc = new PDFDocument({
-        size: 'A6',
-        layout: 'landscape',
-        margin: LAYOUT.margin,
-        bufferPages: false, // do not buffer
-      });
+    const chunks: Buffer[] = [];
 
-      const stream = new PassThrough();
+    // Use A4 for package intake receipts, A6 landscape for invoices/receipts
+    const pageSize = config.template === 'package-intake' ? 'A4' : 'A6';
+    const pageLayout =
+      config.template === 'package-intake' ? 'portrait' : 'landscape';
+
+    const doc = new PDFDocument({
+      size: pageSize,
+      layout: pageLayout,
+      margin: LAYOUT.margin,
+      bufferPages: false, // do not buffer
+    });
+
+    const stream = new PassThrough();
+
+    // Create promise to wait for stream completion
+    const bufferPromise = new Promise<Buffer>((resolve, reject) => {
       stream.on('data', (chunk) => chunks.push(chunk));
       stream.on('end', () => resolve(Buffer.concat(chunks)));
       stream.on('error', reject);
-
-      doc.pipe(stream);
-
-      try {
-        this.generateContent(doc, config);
-        doc.end();
-      } catch (error: any) {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
     });
-  }
 
-  private generateContent(doc: PDFDocument, config: PDFConfig): void {
+    doc.pipe(stream);
+
+    try {
+      await this.generateContent(doc, config);
+      doc.end();
+      return await bufferPromise;
+    } catch (error: any) {
+      doc.end();
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  private async generateContent(
+    doc: PDFDocument,
+    config: PDFConfig,
+  ): Promise<void> {
     switch (config.template) {
       case 'invoice':
         this.generateInvoiceContent(doc, config.data as InvoiceData);
@@ -474,7 +549,7 @@ export class PDFService {
         this.generateReceiptContent(doc, config.data as ReceiptData);
         break;
       case 'package-intake':
-        this.generatePackageIntakeContent(
+        await this.generatePackageIntakeContent(
           doc,
           config.data as PackageIntakeData,
         );
@@ -498,17 +573,34 @@ export class PDFService {
     const dateBoxX = R - LAYOUT.dateBoxW;
     const dateBoxY = LAYOUT.topY;
 
-    // QR code placeholder (left)
-    doc.rect(L, LAYOUT.topY, 44, 44).stroke();
+    // Company logo (top-left)
+    const logoWidth = 60;
+    const logoHeight = 40;
+    if (this.companyLogo) {
+      try {
+        doc.image(this.companyLogo, L, LAYOUT.topY, {
+          fit: [logoWidth, logoHeight],
+          align: 'left',
+        });
+      } catch (error) {
+        this.logger.warn('Failed to embed logo in invoice header', error);
+        // Draw placeholder box if logo fails
+        doc.rect(L, LAYOUT.topY, logoWidth, logoHeight).stroke();
+      }
+    } else {
+      // Draw placeholder box if no logo available
+      doc.rect(L, LAYOUT.topY, logoWidth, logoHeight).stroke();
+    }
 
-    // Company name + logo (center)
+    // Company name (center) - allow wrapping
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont).fillColor('#000');
-    writeLineClamped(
+    const nameWidth = contentW - 60 - LAYOUT.dateBoxW - 6;
+    const nameHeight = writeTextWrapped(
       doc,
       safe(this.companyInfo.name),
       L + 40,
       LAYOUT.topY,
-      contentW - 60 - LAYOUT.dateBoxW - 6,
+      nameWidth,
       'center',
     );
 
@@ -519,27 +611,33 @@ export class PDFService {
     doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
     writeLineClamped(
       doc,
-      safe(data.invoice.date),
+      formatDate(data.invoice.date),
       dateBoxX,
       dateBoxY + 3,
       LAYOUT.dateBoxW,
       'center',
     );
 
-    // Address small (below date box)
-    if (safe(this.companyInfo.address)) {
+    // Branches (below date box) - allow wrapping
+    let branchesHeight = 0;
+    if (safe(this.companyInfo.branches)) {
       doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
-      writeLineClamped(
+      branchesHeight = writeTextWrapped(
         doc,
-        safe(this.companyInfo.address),
-        dateBoxX - 150,
+        `Branches: ${safe(this.companyInfo.branches)}`,
+        dateBoxX - 50,
         dateBoxY + LAYOUT.dateBoxH + 4,
         130,
         'right',
       );
     }
 
-    return dateBoxY + LAYOUT.dateBoxH + 32; // Return next Y position
+    // Return next Y position based on max height of name or branches
+    const maxHeight = Math.max(
+      nameHeight + LAYOUT.topY,
+      dateBoxY + LAYOUT.dateBoxH + 4 + branchesHeight,
+    );
+    return maxHeight + 12; // Return next Y position
   }
 
   private drawBand(
@@ -595,44 +693,6 @@ export class PDFService {
     );
 
     return customerY + 28; // Return next Y position
-  }
-
-  private drawTitle(
-    doc: PDFDocument,
-    data: InvoiceData,
-    contentW: number,
-    L: number,
-    titleY: number,
-  ): number {
-    // Package strip
-    const pkg = data.package;
-    if (pkg) {
-      doc.rect(L, titleY, contentW, LAYOUT.pkgSlabH).fill('#F6F6F6');
-      const chips: string[] = [];
-      if (safe(pkg.trackingCode))
-        chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
-      if (pkg.shippingMode === 'AIR') {
-        const t = pkg.airType || 'NORMAL_AIR';
-        chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);
-        if (safe(pkg.pickupCode)) chips.push(`PCODE: ${pkg.pickupCode}`);
-      } else if (pkg.shippingMode === 'SEA') {
-        chips.push('MODE: SEA');
-      }
-      if (safe(pkg.destinationCity)) chips.push(`DEST: ${pkg.destinationCity}`);
-      if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
-
-      doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.pkgFont);
-      writeLineClamped(
-        doc,
-        chips.join(' • '),
-        L + 5,
-        titleY + 4,
-        contentW - 10,
-        'left',
-      );
-      return titleY + LAYOUT.pkgSlabH + 4; // Return next Y position
-    }
-    return titleY; // Return same Y if no package
   }
 
   private drawTableWithTotals(
@@ -820,7 +880,7 @@ export class PDFService {
       .font('Helvetica-Bold')
       .fontSize(LAYOUT.bottomInfoFont)
       .fillColor('#000');
-    const phone = safe(data.company.phone);
+    const phone = safe(this.companyInfo.phone);
     writeLineClamped(
       doc,
       phone ? `MOMO: ${phone}` : `MOMO:`,
@@ -837,7 +897,7 @@ export class PDFService {
         : 'ARRIVAL:';
     writeLineClamped(
       doc,
-      `${label} ${safe(data.invoice?.dueDate)}`,
+      `${label} ${formatDate(data.invoice?.dueDate || '')}`,
       L + contentW * 0.5,
       bottomY,
       contentW * 0.5,
@@ -864,12 +924,12 @@ export class PDFService {
   }
 
   // =====================
-  // PACKAGE INTAKE (A6, monochrome) — single-page fit
+  // PACKAGE INTAKE (A4, monochrome) — single-page fit
   // =====================
-  private generatePackageIntakeContent(
+  private async generatePackageIntakeContent(
     doc: PDFDocument,
     data: PackageIntakeData,
-  ): void {
+  ): Promise<void> {
     const W = doc.page.width;
     const H = doc.page.height;
     const L = doc.page.margins.left;
@@ -878,42 +938,78 @@ export class PDFService {
 
     doc.fillColor('#000');
 
-    // Header
+    // Header with logo
+    let headerY = LAYOUT.topY;
+
+    // Embed logo at top-left
+    const intakeLogoWidth = 80;
+    const intakeLogoHeight = 50;
+    if (this.companyLogo) {
+      try {
+        doc.image(this.companyLogo, L, headerY, {
+          fit: [intakeLogoWidth, intakeLogoHeight],
+          align: 'left',
+        });
+      } catch (error) {
+        this.logger.warn('Failed to embed logo in package intake PDF', error);
+      }
+    }
+
+    // Company name - allow wrapping (positioned to the right of logo)
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    writeLineClamped(
+    const nameHeight = writeTextWrapped(
       doc,
       safe(this.companyInfo.name),
-      L,
-      LAYOUT.topY,
-      contentW,
-      'center',
+      L + intakeLogoWidth + 10,
+      headerY,
+      contentW - intakeLogoWidth - 10,
+      'left',
     );
-    doc.fontSize(11).font('Helvetica');
-    writeLineClamped(
+    headerY += Math.max(intakeLogoHeight, nameHeight) + 4;
+
+    // Branches - allow wrapping
+    doc.fontSize(9).font('Helvetica');
+    const branchesHeight = writeTextWrapped(
       doc,
-      safe(this.companyInfo.address),
+      `Branches: ${safe(this.companyInfo.branches)}`,
       L,
-      LAYOUT.topY + 16,
+      headerY,
       contentW,
       'center',
     );
-    writeLineClamped(
+    headerY += branchesHeight + 4;
+
+    // Contact info - allow wrapping
+    const contactHeight = writeTextWrapped(
       doc,
-      `${safe(this.companyInfo.phone)} | ${safe(this.companyInfo.email)}`,
+      `Contact: ${safe(this.companyInfo.phone)} | Email: ${safe(this.companyInfo.email)}`,
       L,
-      LAYOUT.topY + 30,
+      headerY,
       contentW,
       'center',
     );
+    headerY += contactHeight;
 
     // Title rule + title
-    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    const titleY = headerY + 10;
+    doc.moveTo(L, titleY).lineTo(R, titleY).lineWidth(LAYOUT.line).stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    writeLineClamped(doc, 'PACKAGE INTAKE RECEIPT', L, 60, contentW, 'center');
-    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+    writeLineClamped(
+      doc,
+      'PACKAGE INTAKE RECEIPT',
+      L,
+      titleY + 4,
+      contentW,
+      'center',
+    );
+    doc
+      .moveTo(L, titleY + 20)
+      .lineTo(R, titleY + 20)
+      .lineWidth(LAYOUT.line)
+      .stroke();
 
     // Two columns meta
-    const metaY = 82;
+    const metaY = titleY + 28;
     const midX = L + contentW * 0.52;
 
     doc.font('Helvetica-Bold').fontSize(9);
@@ -932,7 +1028,7 @@ export class PDFService {
     );
     writeLineClamped(
       doc,
-      safe(data.intake.date),
+      formatDate(data.intake.date),
       L + 60,
       metaY + 12,
       140,
@@ -1032,6 +1128,86 @@ export class PDFService {
       );
     }
 
+    // Package Photos Section
+    let photoSectionEndY = notesY + 14;
+    if (data.photos && data.photos.length > 0) {
+      const photoY = notesY + 20;
+      doc.font('Helvetica-Bold').fontSize(10);
+      writeLineClamped(doc, 'PACKAGE PHOTOS', L, photoY, contentW, 'left');
+
+      // Draw a horizontal line under the header
+      doc
+        .moveTo(L, photoY + 14)
+        .lineTo(R, photoY + 14)
+        .lineWidth(0.5)
+        .stroke();
+
+      // Embed photos in a grid (max 3 per row on A4)
+      const photoStartY = photoY + 20;
+      const photoWidth = 150;
+      const photoHeight = 120;
+      const photoSpacing = 15;
+      const photosPerRow = 3;
+
+      let currentX = L;
+      let currentY = photoStartY;
+      let photoCount = 0;
+
+      // Limit to first 6 photos to keep it on one page
+      const photosToDisplay = data.photos.slice(0, 6);
+
+      for (const photo of photosToDisplay) {
+        try {
+          const imageBuffer = await this.fetchImageFromUrl(photo.url);
+
+          // Draw border around photo
+          doc.rect(currentX, currentY, photoWidth, photoHeight).stroke();
+
+          // Embed image with fit and center
+          doc.image(imageBuffer, currentX + 5, currentY + 5, {
+            fit: [photoWidth - 10, photoHeight - 10],
+            align: 'center',
+            valign: 'center',
+          });
+
+          photoCount++;
+
+          // Move to next position
+          if (photoCount % photosPerRow === 0) {
+            // Move to next row
+            currentX = L;
+            currentY += photoHeight + photoSpacing;
+          } else {
+            // Move to next column
+            currentX += photoWidth + photoSpacing;
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to embed photo ${photo.key}`, error);
+          // Draw placeholder on error
+          doc
+            .rect(currentX, currentY, photoWidth, photoHeight)
+            .stroke()
+            .fontSize(8)
+            .text('Photo unavailable', currentX, currentY + photoHeight / 2, {
+              width: photoWidth,
+              align: 'center',
+            });
+
+          photoCount++;
+          if (photoCount % photosPerRow === 0) {
+            currentX = L;
+            currentY += photoHeight + photoSpacing;
+          } else {
+            currentX += photoWidth + photoSpacing;
+          }
+        }
+      }
+
+      // Calculate the end Y position of photo section
+      const rows = Math.ceil(photosToDisplay.length / photosPerRow);
+      photoSectionEndY = photoStartY + rows * (photoHeight + photoSpacing) + 10;
+    }
+
     // Footer rule + footer
     doc
       .moveTo(L, H - 22)
@@ -1043,7 +1219,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by ${this.companyInfo.name}`,
       L,
-      H - 20,
+      H - 22,
       contentW,
       'center',
     );
@@ -1076,42 +1252,82 @@ export class PDFService {
     doc.fillColor('#000');
 
     // Header
+    let receiptHeaderY = LAYOUT.topY;
+
+    // Company logo (top-left)
+    const receiptLogoWidth = 60;
+    const receiptLogoHeight = 40;
+    if (this.companyLogo) {
+      try {
+        doc.image(this.companyLogo, L, receiptHeaderY, {
+          fit: [receiptLogoWidth, receiptLogoHeight],
+          align: 'left',
+        });
+      } catch (error) {
+        this.logger.warn('Failed to embed logo in receipt header', error);
+      }
+    }
+
+    // Company name - allow wrapping (positioned to the right of logo)
     doc.font('Helvetica-Bold').fontSize(LAYOUT.companyFont);
-    writeLineClamped(
+    const receiptNameHeight = writeTextWrapped(
       doc,
       safe(this.companyInfo.name),
-      L,
-      LAYOUT.topY,
-      contentW,
-      'center',
+      L + receiptLogoWidth + 6,
+      receiptHeaderY,
+      contentW - receiptLogoWidth - 6,
+      'left',
     );
-    doc.fontSize(11).font('Helvetica');
-    writeLineClamped(
+    receiptHeaderY += Math.max(receiptLogoHeight, receiptNameHeight) + 2;
+
+    // Branches - allow wrapping
+    doc.fontSize(9).font('Helvetica');
+    const receiptBranchesHeight = writeTextWrapped(
       doc,
-      safe(this.companyInfo.address),
+      `Branches: ${safe(this.companyInfo.branches)}`,
       L,
-      LAYOUT.topY + 16,
+      receiptHeaderY,
       contentW,
       'center',
     );
-    writeLineClamped(
+    receiptHeaderY += receiptBranchesHeight + 2;
+
+    // Contact info - allow wrapping
+    const receiptContactHeight = writeTextWrapped(
       doc,
-      `${safe(this.companyInfo.phone)} | ${safe(this.companyInfo.email)}`,
+      `Contact: ${safe(this.companyInfo.phone)} | Email: ${safe(this.companyInfo.email)}`,
       L,
-      LAYOUT.topY + 30,
+      receiptHeaderY,
       contentW,
       'center',
     );
+    receiptHeaderY += receiptContactHeight;
 
     // Title rule + title
-    doc.moveTo(L, 56).lineTo(R, 56).lineWidth(LAYOUT.line).stroke();
+    const titleRuleY = receiptHeaderY + 8;
+    doc
+      .moveTo(L, titleRuleY)
+      .lineTo(R, titleRuleY)
+      .lineWidth(LAYOUT.line)
+      .stroke();
     doc.font('Helvetica-Bold').fontSize(12);
-    writeLineClamped(doc, 'PAYMENT RECEIPT', L, 60, contentW, 'center');
-    doc.moveTo(L, 76).lineTo(R, 76).lineWidth(LAYOUT.line).stroke();
+    writeLineClamped(
+      doc,
+      'PAYMENT RECEIPT',
+      L,
+      titleRuleY + 4,
+      contentW,
+      'center',
+    );
+    doc
+      .moveTo(L, titleRuleY + 20)
+      .lineTo(R, titleRuleY + 20)
+      .lineWidth(LAYOUT.line)
+      .stroke();
 
     // PACKAGE summary slab
     const pkg = data.package;
-    let y = 82;
+    let y = titleRuleY + 26;
     if (pkg) {
       const slabH = 18;
       doc
@@ -1169,7 +1385,7 @@ export class PDFService {
     );
     writeLineClamped(
       doc,
-      safe(data.receipt.date),
+      formatDate(data.receipt.date),
       L + 66,
       metaY + 12,
       140,
@@ -1278,7 +1494,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
       L,
-      H - 26,
+      H - 22,
       contentW,
       'center',
     );
@@ -1293,5 +1509,21 @@ export class PDFService {
 
   async generateSignedDownloadUrl(key: string): Promise<string> {
     return this.s3Service.generatePresignedDownloadUrl(key);
+  }
+
+  /**
+   * Fetch image from URL and return as buffer
+   */
+  private async fetchImageFromUrl(url: string): Promise<Buffer> {
+    try {
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 10000, // 10 second timeout
+      });
+      return Buffer.from(response.data);
+    } catch (error) {
+      this.logger.error(`Failed to fetch image from ${url}`, error);
+      throw error;
+    }
   }
 }

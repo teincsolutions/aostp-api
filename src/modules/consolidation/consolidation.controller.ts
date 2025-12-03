@@ -36,12 +36,12 @@ export class ConsolidationController {
   @ApiOperation({
     summary: 'Consolidate multiple packages into one parent package',
     description:
-      'Combines 2+ packages from the same customer and shipping mode into a single consolidated parent package. All source packages must be in RECEIVED status and not already consolidated.',
+      'Combines 2+ packages from the same customer and shipping mode into a single consolidated parent package. All source packages must be in RECEIVED status and not already consolidated. If targetTrackingCode is not provided, it will be auto-generated.',
   })
   @ApiBody({
     type: ConsolidatePackagesDto,
     description:
-      'Source tracking codes and target tracking code for consolidation',
+      'Source tracking codes and optional target tracking code for consolidation',
   })
   @ApiResponse({
     status: 201,

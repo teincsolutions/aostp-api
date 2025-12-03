@@ -34,7 +34,12 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
   @ApiOperation({
     summary: 'Create a new customer',
     description:
@@ -73,6 +78,7 @@ export class CustomersController {
     UserRole.SUPER_ADMIN,
     UserRole.OPERATIONS_CLERK,
     UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
   )
   @ApiOperation({
     summary: 'Get all customers with pagination',
@@ -130,6 +136,7 @@ export class CustomersController {
     UserRole.SUPER_ADMIN,
     UserRole.OPERATIONS_CLERK,
     UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
   )
   @ApiOperation({
     summary: 'Get customer by ID',
@@ -182,6 +189,7 @@ export class CustomersController {
     UserRole.SUPER_ADMIN,
     UserRole.OPERATIONS_CLERK,
     UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
   )
   @ApiOperation({
     summary: 'Get customer by code',

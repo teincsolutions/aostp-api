@@ -1,4 +1,10 @@
-import { IsArray, IsString, IsNotEmpty, ArrayMinSize } from 'class-validator';
+import {
+  IsArray,
+  IsString,
+  IsNotEmpty,
+  ArrayMinSize,
+  IsOptional,
+} from 'class-validator';
 
 export class ConsolidatePackagesDto {
   @IsArray()
@@ -6,6 +12,6 @@ export class ConsolidatePackagesDto {
   sourceTrackingCodes: string[];
 
   @IsString()
-  @IsNotEmpty()
-  targetTrackingCode: string;
+  @IsOptional()
+  targetTrackingCode?: string;
 }

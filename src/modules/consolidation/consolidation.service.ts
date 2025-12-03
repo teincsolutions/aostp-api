@@ -14,7 +14,7 @@ export class ConsolidationService {
 
   async consolidatePackages(
     sourceTrackingCodes: string[],
-    targetTrackingCode: string,
+    targetTrackingCode: string | undefined,
     userId: string,
   ) {
     // Validate all source packages exist and are eligible
@@ -31,6 +31,15 @@ export class ConsolidationService {
 
     if (sourcePackages.length !== sourceTrackingCodes.length) {
       throw new BadRequestException('Some source packages not found');
+    }
+
+    // Auto-generate tracking code if not provided
+    if (!targetTrackingCode) {
+      targetTrackingCode =
+        this.idGeneratorService.generateConsolidatedPackageTrackingCode();
+      this.logger.log(
+        `Auto-generated consolidated tracking code: ${targetTrackingCode}`,
+      );
     }
 
     // Check eligibility - must be the same customer, not already consolidated, not shipped

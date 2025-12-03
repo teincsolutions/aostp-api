@@ -18,12 +18,9 @@ pipeline {
         JWT_REFRESH_EXPIRATION = '7d'
         SMS_PROVIDER = 'hubtel'
 
-        // SMS Online GH Provider
-        SMS_ONLINE_GH_SENDER_ID = 'Willfind8'
-
         EMAIL_PROVIDER = 'nodemailer'
         SMTP_SECURE = true
-        EMAIL_FROM = 'support@teincsolutions.com'
+        EMAIL_FROM = 'info@akomapacargo.com'
     }
 
     stages {

@@ -109,9 +109,14 @@ export class InvoicesService {
       const invoiceNumber =
         await this.idGeneratorService.generateInvoiceNumber();
 
-      // Calculate due date (30 days from now)
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 30);
+      // Use container's ETA as due date, fallback to 30 days from now
+      const dueDate = packingList.container?.eta
+        ? new Date(packingList.container.eta)
+        : (() => {
+            const fallbackDate = new Date();
+            fallbackDate.setDate(fallbackDate.getDate() + 30);
+            return fallbackDate;
+          })();
 
       const result = await this.prisma.$transaction(async (tx) => {
         // Create invoice - one invoice per package

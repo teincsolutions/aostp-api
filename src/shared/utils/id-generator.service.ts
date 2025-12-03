@@ -173,6 +173,19 @@ export class IdGeneratorService {
   }
 
   /**
+   * Generate consolidated package tracking code: AOSTP-YYMM-UNIQUECODE
+   * Format: AOSTP-2512-A1B2C3
+   */
+  generateConsolidatedPackageTrackingCode(): string {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2); // Last 2 digits of year
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const dateStr = `${year}${month}`;
+    const uniqueCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `AOSTP-${dateStr}-${uniqueCode}`;
+  }
+
+  /**
    * Generate barcode for package tracking
    * This is a simple barcode generation - in production you might want to use a more sophisticated library
    */
@@ -191,10 +204,17 @@ export class IdGeneratorService {
       return false;
     }
 
-    // Check if it matches the auto-generated format (PKG-YYYYMMDD-XXXX)
-    const autoGenPattern = /^PKG-\d{8}-\d{4}$/;
+    // Check if it matches the auto-generated formats:
+    // PKG-YYYYMMDD-XXXX (old format)
+    const pkgPattern = /^PKG-\d{8}-\d{4}$/;
+    // AOSTP-YYMM-XXXXXX (new consolidated/auto-gen format)
+    const aostpPattern = /^AOSTP-\d{4}-[A-Z0-9]{6}$/;
 
-    // Allow either auto-generated format or any manual format (3+ characters)
-    return autoGenPattern.test(trackingCode) || trackingCode.trim().length >= 3;
+    // Allow either auto-generated formats or any manual format (3+ characters)
+    return (
+      pkgPattern.test(trackingCode) ||
+      aostpPattern.test(trackingCode) ||
+      trackingCode.trim().length >= 3
+    );
   }
 }

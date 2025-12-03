@@ -78,14 +78,21 @@ export class PackagesService {
       );
     }
 
-    // Validate provided tracking code format
-    const packageTrackingCode = packageData.trackingCode;
-    if (
-      !this.idGeneratorService.validateTrackingCodeFormat(packageTrackingCode)
-    ) {
-      throw new BadRequestException(
-        'Invalid tracking code format. Tracking code must be at least 3 characters long.',
-      );
+    // Auto-generate tracking code if not provided
+    let packageTrackingCode = packageData.trackingCode;
+    if (!packageTrackingCode) {
+      packageTrackingCode =
+        this.idGeneratorService.generateConsolidatedPackageTrackingCode();
+      this.logger.log(`Auto-generated tracking code: ${packageTrackingCode}`);
+    } else {
+      // Validate provided tracking code format
+      if (
+        !this.idGeneratorService.validateTrackingCodeFormat(packageTrackingCode)
+      ) {
+        throw new BadRequestException(
+          'Invalid tracking code format. Tracking code must be at least 3 characters long.',
+        );
+      }
     }
 
     // Auto-calculate shippingCost if shippingRate is provided but no shippingCost
@@ -855,6 +862,7 @@ export class PackagesService {
           destinationCity: pkg.destinationCity,
         },
         notes: pkg.notes,
+        photos: pkg.photos || [],
       };
 
       const result = await this.pdfService.generatePackageIntakePDF(intakeData);

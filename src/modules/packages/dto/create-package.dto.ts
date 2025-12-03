@@ -142,11 +142,12 @@ export class CreatePackageDto {
   @IsString()
   pickupCode?: string;
 
-  @ApiProperty({
-    description: 'Tracking code for the package',
-    example: 'PKG-123456789',
+  @ApiPropertyOptional({
+    description:
+      'Tracking code for the package (auto-generated if not provided)',
+    example: 'AOSTP-20251202-X9K2M1',
   })
   @IsString()
-  @IsNotEmpty()
-  trackingCode: string;
+  @IsOptional()
+  trackingCode?: string;
 }

@@ -263,7 +263,6 @@ export class NotificationsService {
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
             <tr><td><strong>Description:</strong></td><td>${pkg.description}</td></tr>
-            <tr><td><strong>Weight:</strong></td><td>${pkg.weight} KG</td></tr>
             <tr><td><strong>Shipping Mode:</strong></td><td>${pkg.shippingMode}</td></tr>
             <tr><td><strong>Status:</strong></td><td>${pkg.status}</td></tr>
           </table>
