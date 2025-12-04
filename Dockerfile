@@ -50,7 +50,7 @@ COPY --from=build /app/scripts ./scripts
 # Copy email templates for notifications
 COPY --from=build /app/src/templates ./src/templates
 # Copy assets directory (logo, static files)
-COPY --from=build /app/assets ./assets
+COPY --from=build /app/src/assets ./src/assets
 
 # Copy msmtp template and startup script
 COPY --from=build /app/msmtprc /etc/msmtprc.template
