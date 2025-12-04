@@ -19,20 +19,4 @@ export class CustomerFilterDto extends PaginationDto {
   @IsOptional()
   @IsIn(['true', 'false'])
   isActive?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter by city',
-    example: 'Accra',
-  })
-  @IsOptional()
-  @IsString()
-  city?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter by country',
-    example: 'Ghana',
-  })
-  @IsOptional()
-  @IsString()
-  country?: string;
 }

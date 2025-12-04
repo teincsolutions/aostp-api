@@ -120,13 +120,11 @@ export class CustomersController {
     description: 'Forbidden - insufficient permissions',
   })
   findAll(@Query() filterDto: CustomerFilterDto) {
-    const { search, isActive, city, country, ...paginationDto } = filterDto;
+    const { search, isActive, ...paginationDto } = filterDto;
     const filters = {
       search,
       isActive:
         isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-      city,
-      country,
     };
     return this.customersService.findAll(paginationDto, filters);
   }

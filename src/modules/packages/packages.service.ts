@@ -15,6 +15,7 @@ import {
   PackageStatus,
   ShippingMode,
   AirShippingType,
+  InvoiceStatus,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
@@ -495,6 +496,55 @@ export class PackagesService {
           after: updatedPackage as any,
         },
       });
+
+      // If this package is linked to an invoice, update invoice totals and related fields
+      if (updatedPackage.invoice && updatedPackage.invoice.id) {
+        // Fetch current invoice within the transaction to get paidAmount
+        const invoiceRecord = await tx.invoice.findUnique({
+          where: { id: updatedPackage.invoice.id },
+          select: {
+            id: true,
+            paidAmount: true,
+            totalAmount: true,
+            currency: true,
+          },
+        });
+
+        if (invoiceRecord) {
+          const paidAmount = invoiceRecord.paidAmount || 0;
+
+          // Determine new total amount from package's shippingCost (if present)
+          const newTotal =
+            updatedPackage.shippingCost !== null &&
+            updatedPackage.shippingCost !== undefined
+              ? roundToTwoDecimals(updatedPackage.shippingCost)
+              : invoiceRecord.totalAmount;
+
+          const newBalance = roundToTwoDecimals(newTotal - paidAmount);
+
+          // Determine new status
+          let newStatus: InvoiceStatus = InvoiceStatus.UNPAID;
+          if (paidAmount >= newTotal) {
+            newStatus = InvoiceStatus.PAID;
+          } else if (paidAmount > 0) {
+            newStatus = InvoiceStatus.PARTIALLY_PAID;
+          }
+
+          await tx.invoice.update({
+            where: { id: invoiceRecord.id },
+            data: {
+              totalAmount: newTotal,
+              balance: newBalance,
+              status: newStatus,
+              currency:
+                updatedPackage.shippingCurrency || invoiceRecord.currency,
+              notes: updatedPackage.trackingCode
+                ? `Updated due to package ${updatedPackage.trackingCode} update`
+                : undefined,
+            },
+          });
+        }
+      }
 
       return updatedPackage;
     });

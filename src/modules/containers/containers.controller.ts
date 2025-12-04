@@ -15,6 +15,7 @@ import {
 import { ContainersService } from './containers.service';
 import { CreateContainerDto } from './dto/create-container.dto';
 import { UpdateContainerDto } from './dto/update-container.dto';
+import { UpdateContainerStatusDto } from './dto/update-container-status.dto';
 import { ContainerFilterDto } from './dto/container-filter.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -141,13 +142,22 @@ export class ContainersController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
   @ApiOperation({ summary: 'Update container status' })
   @ApiParam({ name: 'id', description: 'Container ID' })
-  @ApiQuery({ name: 'status', enum: ContainerStatus, required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Container status updated successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid status transition' })
+  @ApiResponse({ status: 404, description: 'Container not found' })
   updateStatus(
     @Param('id') id: string,
-    @Query('status') status: ContainerStatus,
+    @Body() updateStatusDto: UpdateContainerStatusDto,
     @Request() req,
   ) {
-    return this.containersService.updateStatus(id, status, req.user.id);
+    return this.containersService.updateStatus(
+      id,
+      updateStatusDto.status,
+      req.user.id,
+    );
   }
 
   @Delete(':id')

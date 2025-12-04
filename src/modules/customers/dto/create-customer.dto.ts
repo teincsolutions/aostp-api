@@ -72,24 +72,20 @@ export class CreateCustomerDto {
   address: string;
 
   @ApiPropertyOptional({
-    description: 'City',
-    example: 'Accra',
-    maxLength: 50,
+    description: 'Warehouse ID',
+    example: 'uuid',
   })
   @IsString()
   @IsOptional()
-  @MaxLength(50)
-  city?: string;
+  warehouseId?: string;
 
   @ApiPropertyOptional({
-    description: 'Country',
-    example: 'Ghana',
-    maxLength: 50,
+    description: 'City ID from cities table',
+    example: 'uuid',
   })
   @IsString()
   @IsOptional()
-  @MaxLength(50)
-  country?: string;
+  cityId?: string;
 
   @ApiPropertyOptional({
     description: 'Type of ID document',

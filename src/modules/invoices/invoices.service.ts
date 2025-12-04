@@ -360,6 +360,7 @@ export class InvoicesService {
       packingListId?: string;
       dateFrom?: string;
       dateTo?: string;
+      search?: string;
     },
   ) {
     const { page = 1, limit = 20 } = paginationDto;
@@ -387,6 +388,52 @@ export class InvoicesService {
       if (filters.dateTo) {
         where.createdAt.lte = new Date(filters.dateTo);
       }
+    }
+
+    // Search across multiple fields (invoice number, package tracking code, pickup code, packing list name, container number)
+    if (filters?.search) {
+      where.OR = [
+        {
+          invoiceNumber: {
+            contains: filters.search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          package: {
+            trackingCode: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          package: {
+            pickupCode: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          packingList: {
+            name: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          packingList: {
+            container: {
+              containerNumber: {
+                contains: filters.search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+      ];
     }
 
     const [data, total] = await Promise.all([

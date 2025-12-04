@@ -22,6 +22,7 @@ import {
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { InvoiceFilterDto } from './dto/invoice-filter.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -63,28 +64,10 @@ export class InvoicesController {
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({ summary: 'Get all invoices with filters and pagination' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'customerId', required: false, type: String })
-  @ApiQuery({ name: 'status', required: false, enum: InvoiceStatus })
-  @ApiQuery({ name: 'packingListId', required: false, type: String })
-  @ApiQuery({ name: 'dateFrom', required: false, type: String })
-  @ApiQuery({ name: 'dateTo', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('customerId') customerId?: string,
-    @Query('status') status?: InvoiceStatus,
-    @Query('packingListId') packingListId?: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-  ) {
-    const filters = {
-      customerId,
-      status,
-      packingListId,
-      dateFrom,
-      dateTo,
-    };
+  findAll(@Query() filterDto: InvoiceFilterDto) {
+    const { page, limit, sortBy, sortOrder, ...filters } = filterDto;
+
+    const paginationDto = { page, limit, sortBy, sortOrder };
 
     return this.invoicesService.findAll(paginationDto, filters);
   }
@@ -168,6 +151,7 @@ export class InvoicesController {
     UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
+    UserRole.PAYMENT_CLERK,
   )
   @ApiOperation({ summary: 'Regenerate invoice PDF' })
   @ApiResponse({ status: 200, description: 'PDF regenerated successfully' })

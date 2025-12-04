@@ -90,8 +90,6 @@ export class CustomersService {
     filters?: {
       search?: string;
       isActive?: boolean;
-      city?: string;
-      country?: string;
     },
   ): Promise<PaginatedResult<Customer>> {
     const {
@@ -104,12 +102,6 @@ export class CustomersService {
 
     const where: Prisma.CustomerWhereInput = {
       ...(filters?.isActive !== undefined && { isActive: filters.isActive }),
-      ...(filters?.city && {
-        city: { contains: filters.city, mode: 'insensitive' },
-      }),
-      ...(filters?.country && {
-        country: { contains: filters.country, mode: 'insensitive' },
-      }),
       ...(filters?.search && {
         OR: [
           { firstName: { contains: filters.search, mode: 'insensitive' } },
@@ -128,6 +120,20 @@ export class CustomersService {
         take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              location: true,
+            },
+          },
+          cityRef: {
+            select: {
+              id: true,
+              name: true,
+              country: true,
+            },
+          },
           _count: {
             select: {
               packages: true,
@@ -159,6 +165,20 @@ export class CustomersService {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+          },
+        },
+        cityRef: {
+          select: {
+            id: true,
+            name: true,
+            country: true,
+          },
+        },
         packages: {
           take: 10,
           orderBy: { createdAt: 'desc' },
@@ -193,6 +213,20 @@ export class CustomersService {
     const customer = await this.prisma.customer.findUnique({
       where: { customerCode },
       include: {
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+          },
+        },
+        cityRef: {
+          select: {
+            id: true,
+            name: true,
+            country: true,
+          },
+        },
         packages: {
           take: 10,
           orderBy: { createdAt: 'desc' },

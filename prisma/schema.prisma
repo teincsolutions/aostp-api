@@ -179,6 +179,7 @@ model Warehouse {
   packages     Package[]
   packingLists PackingList[]
   users        User[]
+  customers    Customer[]    @relation("CustomerWarehouse")
 
   @@index([warehouseId])
   @@index([isActive])
@@ -193,8 +194,10 @@ model Customer {
   phoneNumber      String // Mandatory
   alternatePhone   String?
   address          String?
-  city             String?
-  country          String?
+  warehouseId      String? // Optional warehouse reference
+  warehouse        Warehouse?          @relation("CustomerWarehouse", fields: [warehouseId], references: [id])
+  cityId           String? // Optional city reference
+  cityRef          City?               @relation("CustomerCity", fields: [cityId], references: [id])
   idType           IdType?
   idNumber         String?
   preferredChannel NotificationChannel @default(EMAIL)
@@ -215,6 +218,8 @@ model Customer {
   @@index([email])
   @@index([phoneNumber])
   @@index([idNumber])
+  @@index([warehouseId])
+  @@index([cityId])
 }
 
 model PackageItem {
@@ -366,6 +371,7 @@ model City {
   departureContainers   Container[]    @relation("ContainerDepartureCity")
   destinationContainers Container[]    @relation("ContainerDestinationCity")
   destinationPackages   Package[]
+  customers             Customer[]     @relation("CustomerCity")
 
   @@unique([name, country])
   @@index([country])
