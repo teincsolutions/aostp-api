@@ -80,6 +80,35 @@ export class InvoicesController {
     return this.invoicesService.getPendingInvoices(customerId);
   }
 
+  @Get('pending-delivery')
+  @Roles(
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
+    UserRole.SUPER_ADMIN,
+  )
+  @ApiOperation({
+    summary: 'Get invoices pending delivery',
+    description:
+      'Retrieves invoices whose packages have not been delivered yet',
+  })
+  @ApiQuery({ name: 'customerId', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoices pending delivery retrieved successfully',
+  })
+  findPendingDelivery(
+    @Query('customerId') customerId?: string,
+    @Query() paginationDto?: PaginationDto,
+  ) {
+    return this.invoicesService.getPendingDeliveryInvoices(
+      customerId,
+      paginationDto,
+    );
+  }
+
   @Get('customer/:customerId')
   @Roles(
     UserRole.OPERATIONS_CLERK,

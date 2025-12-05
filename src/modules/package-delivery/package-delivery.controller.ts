@@ -34,7 +34,7 @@ export class PackageDeliveryController {
   ) {}
 
   @Post()
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Create package delivery record',
     description:
@@ -43,7 +43,7 @@ export class PackageDeliveryController {
   @ApiBody({
     type: CreatePackageDeliveryDto,
     description:
-      'Delivery details including invoice ID, package tracking code, and optional receiver info',
+      'Delivery details including invoice ID and package tracking code. Creates one delivery record for the package',
   })
   @ApiResponse({
     status: 201,
@@ -55,24 +55,24 @@ export class PackageDeliveryController {
         deliveryId: { type: 'string', example: 'DEL001-2025001' },
         customerId: { type: 'string' },
         invoiceId: { type: 'string' },
-        packageItemId: { type: 'string' },
+        packageId: { type: 'string' },
         receiverName: { type: 'string', nullable: true },
         quantity: { type: 'number', example: 1 },
         releaseDate: { type: 'string', format: 'date-time' },
         photos: { type: 'array', items: { type: 'string' } },
-        packageItem: {
+        package: {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            intakeTrackingCode: { type: 'string', example: 'IT001-2025001' },
-            package: {
+            trackingCode: {
+              type: 'string',
+              example: 'TR-2025-001',
+            },
+            warehouse: {
               type: 'object',
               properties: {
                 id: { type: 'string' },
-                trackingCode: {
-                  type: 'string',
-                  example: 'AOSTP-123456789-001',
-                },
+                name: { type: 'string' },
               },
             },
           },
@@ -99,11 +99,11 @@ export class PackageDeliveryController {
   }
 
   @Get('by-invoice/:invoiceId')
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get all deliveries for an invoice',
     description:
-      'Retrieves all package item deliveries associated with a specific invoice',
+      'Retrieves all package deliveries associated with a specific invoice',
   })
   @ApiParam({
     name: 'invoiceId',
@@ -124,25 +124,16 @@ export class PackageDeliveryController {
           quantity: { type: 'number' },
           receiverName: { type: 'string', nullable: true },
           photos: { type: 'array', items: { type: 'string' } },
-          packageItem: {
+          package: {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              intakeTrackingCode: { type: 'string' },
-              description: { type: 'string' },
-              package: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  trackingCode: { type: 'string' },
-                },
-              },
+              trackingCode: { type: 'string' },
               warehouse: {
                 type: 'object',
                 properties: {
                   id: { type: 'string' },
                   name: { type: 'string' },
-                  location: { type: 'string' },
                 },
               },
             },
@@ -161,7 +152,7 @@ export class PackageDeliveryController {
   }
 
   @Get('by-customer/:customerId')
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get all deliveries for a customer',
     description:
@@ -218,7 +209,7 @@ export class PackageDeliveryController {
   }
 
   @Get('by-id/:deliveryId')
-  @Roles(UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get delivery details by delivery ID',
     description:

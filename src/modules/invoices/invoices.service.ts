@@ -656,6 +656,58 @@ export class InvoicesService {
     });
   }
 
+  async getPendingDeliveryInvoices(
+    customerId?: string,
+    paginationDto?: PaginationDto,
+  ) {
+    const { page = 1, limit = 20 } = paginationDto || {};
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.InvoiceWhereInput = {
+      package: {
+        delivery: null, // Package has no delivery record
+      },
+    };
+
+    if (customerId) {
+      where.customerId = customerId;
+    }
+
+    const [invoices, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        include: {
+          customer: true,
+          package: {
+            include: {
+              warehouse: true,
+              delivery: true,
+            },
+          },
+          packingList: {
+            include: {
+              container: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+
+    return {
+      data: invoices,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async markAsPaid(id: string, userId: string): Promise<Invoice> {
     const invoice = await this.findOne(id);
 

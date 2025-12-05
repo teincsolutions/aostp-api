@@ -18,12 +18,13 @@ export class CreatePackageDeliveryDto {
   invoiceId: string;
 
   @ApiProperty({
-    description: 'Package item intake tracking code',
-    example: 'PKG2025001001',
+    description:
+      'Package tracking code. The delivery will be created for the package on the invoice',
+    example: 'TR-2025-001',
   })
   @IsString()
   @IsNotEmpty()
-  packageItemIntakeTrackingCode: string;
+  trackingCode: string;
 
   @ApiProperty({
     description: 'Receiver name (optional)',

@@ -241,8 +241,7 @@ model PackageItem {
 
   // Relations
   packageId String?
-  package   Package?         @relation(fields: [packageId], references: [id])
-  delivery  PackageDelivery?
+  package   Package? @relation(fields: [packageId], references: [id])
 
   // Photos
   intakePhotos PackageItemPhoto[]
@@ -298,6 +297,9 @@ model Package {
   // Two-table structure
   items PackageItem[]
 
+  // Delivery
+  delivery PackageDelivery? @relation("PackageDelivery")
+
   // Payment status
   paymentStatus PaymentStatus @default(PENDING)
 
@@ -323,29 +325,30 @@ model Package {
 }
 
 model PackageDelivery {
-  id            String      @id @default(uuid())
-  deliveryId    String      @unique // Auto-generated
-  customerId    String
-  customer      Customer    @relation(fields: [customerId], references: [id])
-  invoiceId     String
-  invoice       Invoice     @relation(fields: [invoiceId], references: [id])
-  packageItemId String
-  packageItem   PackageItem @relation(fields: [packageItemId], references: [id])
-  receiverName  String? // Optional receiver name
-  quantity      Int         @default(1)
-  warehouseId   String
-  releaseDate   DateTime    @default(now())
-  notes         String?
-  photos        String[] // URLs for delivery photos
+  id           String   @id @default(uuid())
+  deliveryId   String   @unique // Auto-generated
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id])
+  packageId    String
+  package      Package  @relation("PackageDelivery", fields: [packageId], references: [id])
+  receiverName String? // Optional receiver name
+  quantity     Int      @default(1)
+  warehouseId  String
+  releaseDate  DateTime @default(now())
+  notes        String?
+  photos       String[] // URLs for delivery photos
 
   // Relations
   createdById String
   createdBy   User   @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
 
-  @@unique([packageItemId], map: "PackageDelivery_packageItemId_unique")
+  @@unique([packageId], map: "PackageDelivery_packageId_unique")
   @@index([deliveryId])
   @@index([customerId])
   @@index([invoiceId])
+  @@index([packageId])
 }
 
 model PackagePhoto {

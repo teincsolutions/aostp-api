@@ -23,20 +23,19 @@ export class PackageDeliveryService {
     createDeliveryDto: CreatePackageDeliveryDto,
     userId: string,
   ) {
-    const {
-      invoiceId,
-      packageItemIntakeTrackingCode,
-      receiverName,
-      quantity,
-      notes,
-      photos,
-    } = createDeliveryDto;
+    const { invoiceId, trackingCode, receiverName, quantity, notes, photos } =
+      createDeliveryDto;
 
-    // Find the invoice
+    // Find the invoice with its package
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
         customer: true,
+        package: {
+          include: {
+            warehouse: true,
+          },
+        },
         packingList: {
           include: {
             container: true,
@@ -49,49 +48,28 @@ export class PackageDeliveryService {
       throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
     }
 
-    // Find the package item by intake tracking code
-    const packageItem = await this.prisma.packageItem.findFirst({
-      where: {
-        intakeTrackingCode: packageItemIntakeTrackingCode,
-      },
-      include: {
-        package: true,
-        warehouse: true,
-      },
-    });
-
-    if (!packageItem) {
-      throw new NotFoundException(
-        `Package item with intake tracking code ${packageItemIntakeTrackingCode} not found`,
-      );
-    }
-
-    // Validate that the package item belongs to this invoice
-    if (packageItem.packageId) {
-      const packageInvoiceCheck = await this.prisma.package.findUnique({
-        where: { id: packageItem.packageId },
-        include: { invoice: true },
-      });
-
-      if (packageInvoiceCheck?.invoice?.id !== invoiceId) {
-        throw new BadRequestException(
-          'Package item does not belong to the specified invoice',
-        );
-      }
-    } else {
+    if (!invoice.package) {
       throw new BadRequestException(
-        'Package item is not associated with any package',
+        'Invoice does not have an associated package',
       );
     }
 
-    // Check if delivery already exists for this item
+    const pkg = invoice.package;
+
+    if (pkg.trackingCode !== trackingCode) {
+      throw new NotFoundException(
+        `Package with tracking code ${trackingCode} not found for the provided invoice`,
+      );
+    }
+
+    // Check if delivery already exists for this package
     const existingDelivery = await this.prisma.packageDelivery.findUnique({
-      where: { packageItemId: packageItem.id },
+      where: { packageId: pkg.id },
     });
 
     if (existingDelivery) {
       throw new BadRequestException(
-        'Delivery record already exists for this package item',
+        `Package with tracking code ${trackingCode} already delivered`,
       );
     }
 
@@ -99,47 +77,36 @@ export class PackageDeliveryService {
     const deliveryId =
       await this.idGeneratorService.generatePackageDeliveryId();
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const delivery = await this.prisma.$transaction(async (tx) => {
       // Create delivery record
-      const delivery = await tx.packageDelivery.create({
+      const created = await tx.packageDelivery.create({
         data: {
           deliveryId,
           customerId: invoice.customerId,
           invoiceId,
-          packageItemId: packageItem.id,
+          packageId: pkg.id,
           receiverName,
-          quantity: quantity || packageItem.quantity,
-          warehouseId: packageItem.warehouseId,
+          quantity: quantity || pkg.quantity,
+          warehouseId: pkg.warehouseId || '',
           notes,
           photos,
           createdById: userId,
         },
         include: {
           customer: true,
-          packageItem: {
+          package: {
             include: {
-              package: true,
+              warehouse: true,
             },
           },
         },
       });
 
-      // Update package status if all items are released (check if all items have deliveries)
-      if (packageItem.packageId) {
-        const allItems = await tx.packageItem.findMany({
-          where: { packageId: packageItem.packageId },
-          include: { delivery: true },
-        });
-
-        const allReleased = allItems.every((item) => item.delivery !== null);
-
-        if (allReleased) {
-          await tx.package.update({
-            where: { id: packageItem.packageId },
-            data: { status: 'RELEASED' },
-          });
-        }
-      }
+      // Update package status to RELEASED
+      await tx.package.update({
+        where: { id: pkg.id },
+        data: { status: 'RELEASED' },
+      });
 
       // Log the delivery action
       await tx.auditLog.create({
@@ -147,51 +114,49 @@ export class PackageDeliveryService {
           userId,
           action: 'CREATE',
           entity: 'PackageDelivery',
-          entityId: delivery.id,
+          entityId: created.id,
           after: {
-            deliveryId,
+            deliveryId: created.deliveryId,
             customerCode: invoice.customer.customerCode,
-            packageItemIntakeTrackingCode,
-            quantity: delivery.quantity,
+            packageTrackingCode: trackingCode,
+            quantity: created.quantity,
           },
           metadata: {
             invoiceId,
             receiverName,
-            warehouseId: packageItem.warehouseId,
+            warehouseId: pkg.warehouseId,
+            trackingCode,
           },
         },
       });
 
-      return delivery;
+      return created;
     });
 
     // Send delivery notification
-    if (result.packageItem.package) {
-      try {
-        await this.notificationsService.notifyDeliveryReleased(
-          invoice.customer,
-          result.packageItem.package,
-          result,
-        );
-      } catch (error) {
-        this.logger.error('Failed to send delivery notification', error);
-      }
+    try {
+      await this.notificationsService.notifyDeliveryReleased(
+        invoice.customer,
+        delivery.package,
+        delivery,
+      );
+    } catch (error) {
+      this.logger.error('Failed to send delivery notification', error);
     }
 
     this.logger.log(
-      `Delivery record created: ${deliveryId} for package item ${packageItemIntakeTrackingCode}`,
+      `Delivery record created: ${deliveryId} for package ${trackingCode}`,
     );
 
-    return result;
+    return delivery;
   }
 
   async getDeliveriesByInvoice(invoiceId: string) {
     return this.prisma.packageDelivery.findMany({
       where: { invoiceId },
       include: {
-        packageItem: {
+        package: {
           include: {
-            package: true,
             warehouse: true,
           },
         },
@@ -212,9 +177,8 @@ export class PackageDeliveryService {
     return this.prisma.packageDelivery.findMany({
       where: { customerId },
       include: {
-        packageItem: {
+        package: {
           include: {
-            package: true,
             warehouse: true,
           },
         },
@@ -253,9 +217,8 @@ export class PackageDeliveryService {
             },
           },
         },
-        packageItem: {
+        package: {
           include: {
-            package: true,
             warehouse: true,
           },
         },
