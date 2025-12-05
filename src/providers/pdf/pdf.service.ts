@@ -1304,7 +1304,7 @@ export class PDFService {
     receiptHeaderY += receiptContactHeight;
 
     // Title rule + title
-    const titleRuleY = receiptHeaderY + 8;
+    const titleRuleY = receiptHeaderY + 10;
     doc
       .moveTo(L, titleRuleY)
       .lineTo(R, titleRuleY)
@@ -1327,7 +1327,7 @@ export class PDFService {
 
     // PACKAGE summary slab
     const pkg = data.package;
-    let y = titleRuleY + 26;
+    let y = titleRuleY + 30;
     if (pkg) {
       const slabH = 18;
       doc
@@ -1360,9 +1360,10 @@ export class PDFService {
         contentW - 10,
         'left',
       );
-      y += slabH + 6;
+      y += slabH + 8;
     } else {
-      y = 84;
+      // No package, still give adequate spacing after title
+      y += 6;
     }
 
     // Meta left / right
