@@ -411,12 +411,19 @@ When a delivery is created:
 
 ## Notifications
 
-Upon successful delivery creation, the system sends a notification to the customer via the `NotificationsService`. The notification includes:
+Upon successful delivery creation, the system sends a notification to the customer via the `NotificationsService` confirming the package has been delivered. The notification includes:
 
 - Package tracking code
 - Delivery ID
-- Release date
+- Delivery date and time
 - Receiver name (if provided)
+- Delivered quantity
+
+**Notification Messages:**
+
+- **Email Subject**: "Package Delivered - AOSTP Logistics"
+- **Email Content**: Confirms successful delivery with full details including receiver name and delivery date
+- **SMS/WhatsApp**: Short confirmation message with receiver name (if available): "Hi [Customer], your package ([Tracking Code]) has been delivered. Received by: [Receiver Name]. Delivery ID: [ID]"
 
 ---
 
