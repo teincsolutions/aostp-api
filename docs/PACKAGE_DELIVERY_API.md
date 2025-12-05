@@ -44,14 +44,16 @@ Creates a delivery record when a package is delivered to a customer.
 
 #### Request Fields
 
-| Field          | Type     | Required | Description                                                      |
-| -------------- | -------- | -------- | ---------------------------------------------------------------- |
-| `invoiceId`    | string   | Yes      | UUID of the invoice where the delivery belongs                   |
-| `trackingCode` | string   | Yes      | Package tracking code (e.g., TR-2025-001)                        |
-| `receiverName` | string   | No       | Name of the person who received the package                      |
-| `quantity`     | number   | No       | Quantity released (defaults to package quantity if not provided) |
-| `notes`        | string   | No       | Optional delivery notes                                          |
-| `photos`       | string[] | No       | Array of delivery photo URLs                                     |
+| Field          | Type     | Required | Description                                                                          |
+| -------------- | -------- | -------- | ------------------------------------------------------------------------------------ |
+| `invoiceId`    | string   | Yes      | UUID of the invoice where the delivery belongs                                       |
+| `trackingCode` | string   | Yes      | Package tracking code (e.g., TR-2025-001)                                            |
+| `receiverName` | string   | No       | Name of the person who received the package                                          |
+| `quantity`     | number   | No       | Quantity released (defaults to package quantity if not provided)                     |
+| `notes`        | string   | No       | Optional delivery notes                                                              |
+| `photos`       | string[] | No       | Array of photo URLs (must be uploaded first via `/api/v1/uploads/packages` endpoint) |
+
+**Important**: Photos must be uploaded separately using the uploads endpoint **before** creating the delivery record. See the "Photo Upload Process" section below.
 
 #### Business Logic
 
@@ -347,6 +349,93 @@ Authorization: Bearer {token}
 
 ---
 
+## Photo Upload Process
+
+Delivery photos must be uploaded **separately** before creating the delivery record. Follow this two-step process:
+
+### Step 1: Upload Photos
+
+Use the general uploads endpoint to upload delivery photos:
+
+**Endpoint:** `POST /api/v1/uploads/packages`
+
+**Request:**
+
+- Content-Type: `multipart/form-data`
+- Method: Upload up to 3 files at once
+
+**Form Data:**
+
+```
+files: [File1, File2, File3]  // Multiple files (max 3)
+folder: "pictures"             // Required: 'pictures' or 'videos'
+packageId: "uuid-package-101"  // Required: Package UUID
+fileName: "delivery-photo.jpg" // Optional: Original filename
+```
+
+**Example using cURL:**
+
+```bash
+curl -X POST https://api.aostp.com/api/v1/uploads/packages \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "files=@photo1.jpg" \
+  -F "files=@photo2.jpg" \
+  -F "folder=pictures" \
+  -F "packageId=uuid-package-101"
+```
+
+**Success Response (201):**
+
+```json
+[
+  {
+    "url": "https://s3.amazonaws.com/aostp-packages/pictures/uuid-package-101/photo1-timestamp.jpg",
+    "key": "pictures/uuid-package-101/photo1-timestamp.jpg",
+    "bucket": "aostp-packages"
+  },
+  {
+    "url": "https://s3.amazonaws.com/aostp-packages/pictures/uuid-package-101/photo2-timestamp.jpg",
+    "key": "pictures/uuid-package-101/photo2-timestamp.jpg",
+    "bucket": "aostp-packages"
+  }
+]
+```
+
+### Step 2: Create Delivery with Photo URLs
+
+Use the returned URLs in the delivery creation request:
+
+```json
+{
+  "invoiceId": "60f1b2b5c1d9e2f4e6b4f1a2",
+  "trackingCode": "TR-2025-001",
+  "receiverName": "John Doe",
+  "quantity": 5,
+  "notes": "Delivered to front gate",
+  "photos": [
+    "https://s3.amazonaws.com/aostp-packages/pictures/uuid-package-101/photo1-timestamp.jpg",
+    "https://s3.amazonaws.com/aostp-packages/pictures/uuid-package-101/photo2-timestamp.jpg"
+  ]
+}
+```
+
+**⚠️ Common Error:**
+
+If you include `bucketType`, `file`, or any upload-related fields in the delivery creation request, you will receive:
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": ["property bucketType should not exist"],
+  "timestamp": "2025-12-05T20:25:24.663Z"
+}
+```
+
+**Solution:** Only send the fields listed in the "Request Fields" table. Photos must be pre-uploaded URLs, not file uploads.
+
+---
+
 ## Data Models
 
 ### PackageDelivery
@@ -498,7 +587,9 @@ All error responses follow the NestJS standard format with `statusCode`, `messag
 
 - Delivery IDs are auto-generated and follow the format: `DEL{warehouseCode}-{sequentialNumber}`
 - A package can only have one delivery record (enforced at database level with unique constraint)
-- Photos are stored as URLs (presumed to be uploaded to S3 or similar)
+- **Photos must be uploaded separately** using `/api/v1/uploads/packages` endpoint before creating delivery
+- Photos are stored in S3 and only the URLs are saved in the delivery record
 - The `quantity` field represents the package quantity being delivered
 - Package status is automatically updated to `RELEASED` when delivery is created
 - Delivery is package-level, not item-level (one delivery per package)
+- Maximum 3 photos can be uploaded per batch using the uploads endpoint
