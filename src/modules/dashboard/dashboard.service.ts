@@ -28,6 +28,8 @@ export class DashboardService {
       shippingModeStats,
       activeContainers,
       outstandingInvoices,
+      paidInvoices,
+      paymentsTotals,
     ] = await Promise.all([
       // Total customers
       this.prisma.customer.count(),
@@ -60,12 +62,48 @@ export class DashboardService {
           status: {
             in: [InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID],
           },
+          createdAt: {
+            ...(filters?.dateFrom && { gte: new Date(filters.dateFrom) }),
+            ...(filters?.dateTo && { lte: new Date(filters.dateTo) }),
+          },
           balance: {
             gt: 0,
           },
         },
         _count: { id: true },
         _sum: { balance: true },
+      }),
+
+      // Paid invoices (for potential future use)
+      this.prisma.invoice.aggregate({
+        where: {
+          status: InvoiceStatus.PAID,
+          createdAt: {
+            ...(filters?.dateFrom && { gte: new Date(filters.dateFrom) }),
+            ...(filters?.dateTo && { lte: new Date(filters.dateTo) }),
+          },
+        },
+        _sum: { balance: true },
+        _count: { id: true },
+      }),
+
+      // Total payment aggregate breakdown USD and GHS
+      this.prisma.payment.aggregate({
+        where: {
+          gatewayStatus: 'COMPLETED',
+          ...(filters?.dateFrom || filters?.dateTo
+            ? {
+                processedAt: {
+                  ...(filters.dateFrom && { gte: new Date(filters.dateFrom) }),
+                  ...(filters.dateTo && { lte: new Date(filters.dateTo) }),
+                },
+              }
+            : {}),
+        },
+        _sum: {
+          amount: true,
+          localAmount: true,
+        },
       }),
     ]);
 
@@ -85,6 +123,12 @@ export class DashboardService {
       activeContainers,
       outstandingInvoicesCount: outstandingInvoices._count.id,
       outstandingInvoicesAmount: outstandingInvoices._sum.balance || 0,
+      paidInvoicesAmount: paidInvoices._sum.balance || 0,
+      paidInvoicesCount: paidInvoices._count.id,
+      paymentsTotals: {
+        amount: paymentsTotals._sum.amount || 0,
+        localAmount: paymentsTotals._sum.localAmount || 0,
+      },
     };
   }
 

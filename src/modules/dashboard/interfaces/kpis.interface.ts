@@ -6,4 +6,10 @@ export interface KpisInterface {
   activeContainers: number;
   outstandingInvoicesCount: number;
   outstandingInvoicesAmount: number;
+  paidInvoicesAmount: number;
+  paidInvoicesCount: number;
+  paymentsTotals: {
+    amount: number | null;
+    localAmount: number | null;
+  };
 }

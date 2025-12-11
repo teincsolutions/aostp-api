@@ -959,4 +959,938 @@ export class ReportsService {
       totalCBM,
     };
   }
+
+  /**
+   * DASHBOARD ENDPOINTS
+   */
+
+  private getMonthAbbreviation(month: number): string {
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    return months[month];
+  }
+
+  private buildDashboardWhere(query: any) {
+    const year = query.year || new Date().getFullYear();
+    const startDate = query.fromDate
+      ? new Date(query.fromDate)
+      : new Date(year, 0, 1);
+    const endDate = query.toDate
+      ? new Date(query.toDate)
+      : new Date(year, 11, 31, 23, 59, 59);
+
+    return {
+      year,
+      startDate,
+      endDate,
+      warehouseId: query.warehouseId,
+      shippingMode: query.shippingMode,
+    };
+  }
+
+  /**
+   * H1. INVOICES BY MONTH GRAPH
+   */
+  async getInvoicesByMonth(query: any) {
+    this.logger.log('Generating invoices by month graph');
+
+    const { year, startDate, endDate, warehouseId } =
+      this.buildDashboardWhere(query);
+
+    const where: any = {
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      where.package = {
+        warehouseId,
+      };
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      select: {
+        createdAt: true,
+      },
+    });
+
+    // Group by month
+    const monthCounts = new Array(12).fill(0);
+    invoices.forEach((inv) => {
+      const month = inv.createdAt.getMonth();
+      monthCounts[month]++;
+    });
+
+    const series = monthCounts.map((count, index) => ({
+      month: this.getMonthAbbreviation(index),
+      count,
+    }));
+
+    return {
+      year,
+      series,
+    };
+  }
+
+  /**
+   * H2. PAYMENTS BY MONTH GRAPH (AIR vs SEA)
+   */
+  async getPaymentsByMonth(query: any) {
+    this.logger.log('Generating payments by month graph');
+
+    const { year, startDate, endDate, warehouseId } =
+      this.buildDashboardWhere(query);
+
+    const where: any = {
+      processedAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    const payments = await this.prisma.payment.findMany({
+      where,
+      select: {
+        processedAt: true,
+        localAmount: true,
+        invoices: {
+          select: {
+            package: {
+              select: {
+                shippingMode: true,
+                warehouseId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter by warehouse if needed and group by month and shipping mode
+    const monthlyData = new Array(12)
+      .fill(null)
+      .map(() => ({ air: 0, sea: 0 }));
+
+    payments.forEach((payment) => {
+      payment.invoices.forEach((invoice) => {
+        if (invoice.package) {
+          if (warehouseId && invoice.package.warehouseId !== warehouseId) {
+            return;
+          }
+
+          const month = payment.processedAt.getMonth();
+          if (invoice.package.shippingMode === ShippingMode.AIR) {
+            monthlyData[month].air += payment.localAmount;
+          } else if (invoice.package.shippingMode === ShippingMode.SEA) {
+            monthlyData[month].sea += payment.localAmount;
+          }
+        }
+      });
+    });
+
+    const series = monthlyData.map((data, index) => ({
+      month: this.getMonthAbbreviation(index),
+      air: Math.round(data.air * 100) / 100,
+      sea: Math.round(data.sea * 100) / 100,
+    }));
+
+    return {
+      year,
+      series,
+    };
+  }
+
+  /**
+   * H3. INTAKES BY MONTH GRAPH
+   */
+  async getIntakesByMonth(query: any) {
+    this.logger.log('Generating intakes by month graph');
+
+    const { year, startDate, endDate, warehouseId } =
+      this.buildDashboardWhere(query);
+
+    const where: any = {
+      receivedDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      where.warehouseId = warehouseId;
+    }
+
+    const intakes = await this.prisma.package.findMany({
+      where,
+      select: {
+        receivedDate: true,
+      },
+    });
+
+    // Group by month
+    const monthCounts = new Array(12).fill(0);
+    intakes.forEach((intake) => {
+      const month = intake.receivedDate.getMonth();
+      monthCounts[month]++;
+    });
+
+    const series = monthCounts.map((count, index) => ({
+      month: this.getMonthAbbreviation(index),
+      count,
+    }));
+
+    return {
+      year,
+      series,
+    };
+  }
+
+  /**
+   * H4. PICKUPS BY MONTH GRAPH
+   */
+  async getPickupsByMonth(query: any) {
+    this.logger.log('Generating pickups by month graph');
+
+    const { year, startDate, endDate } = this.buildDashboardWhere(query);
+
+    const where: any = {
+      releaseDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    const pickups = await this.prisma.packageDelivery.findMany({
+      where,
+      select: {
+        releaseDate: true,
+      },
+    });
+
+    // Group by month
+    const monthCounts = new Array(12).fill(0);
+    pickups.forEach((pickup) => {
+      const month = pickup.releaseDate.getMonth();
+      monthCounts[month]++;
+    });
+
+    const series = monthCounts.map((count, index) => ({
+      month: this.getMonthAbbreviation(index),
+      count,
+    }));
+
+    return {
+      year,
+      series,
+    };
+  }
+
+  /**
+   * H5. PAYMENT METHOD BREAKDOWN GRAPH
+   */
+  async getPaymentMethods(query: any) {
+    this.logger.log('Generating payment methods breakdown');
+
+    const { startDate, endDate, warehouseId } = this.buildDashboardWhere(query);
+
+    const where: any = {
+      processedAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      where.customer = {
+        warehouseId,
+      };
+    }
+
+    const payments = await this.prisma.payment.groupBy({
+      by: ['paymentMethod'],
+      where,
+      _sum: {
+        localAmount: true,
+      },
+    });
+
+    const methods = payments.map((p) => ({
+      method: p.paymentMethod,
+      amount: Math.round((p._sum.localAmount || 0) * 100) / 100,
+    }));
+
+    const total = methods.reduce((sum, m) => sum + m.amount, 0);
+
+    return {
+      total: Math.round(total * 100) / 100,
+      methods,
+    };
+  }
+
+  /**
+   * H6. SHIPPING MODE SUMMARY GRAPH
+   */
+  async getShippingModes(query: any) {
+    this.logger.log('Generating shipping modes summary');
+
+    const { startDate, endDate, warehouseId } = this.buildDashboardWhere(query);
+
+    const where: any = {
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      where.warehouseId = warehouseId;
+    }
+
+    const counts = await this.prisma.package.groupBy({
+      by: ['shippingMode'],
+      where,
+      _count: {
+        id: true,
+      },
+    });
+
+    const air =
+      counts.find((c) => c.shippingMode === ShippingMode.AIR)?._count.id || 0;
+    const sea =
+      counts.find((c) => c.shippingMode === ShippingMode.SEA)?._count.id || 0;
+
+    return {
+      air,
+      sea,
+    };
+  }
+
+  /**
+   * H7. TOP 10 CUSTOMERS BY AMOUNT
+   */
+  async getTopCustomersByAmount(query: any) {
+    this.logger.log('Generating top customers by amount');
+
+    const { year, startDate, endDate, warehouseId } =
+      this.buildDashboardWhere(query);
+
+    const where: any = {
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      where.customer = {
+        warehouseId,
+      };
+    }
+
+    const topCustomers = await this.prisma.invoice.groupBy({
+      by: ['customerId'],
+      where,
+      _sum: {
+        totalAmount: true,
+        paidAmount: true,
+        balance: true,
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _sum: {
+          totalAmount: 'desc',
+        },
+      },
+      take: 10,
+    });
+
+    const customerIds = topCustomers.map((c) => c.customerId);
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        id: {
+          in: customerIds,
+        },
+      },
+      select: {
+        id: true,
+        customerCode: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    const top = topCustomers.map((item) => {
+      const customer = customers.find((c) => c.id === item.customerId);
+      return {
+        customerCode: customer?.customerCode || 'N/A',
+        customerName: customer
+          ? `${customer.firstName} ${customer.lastName}`
+          : 'N/A',
+        totalAmount: Math.round((item._sum.totalAmount || 0) * 100) / 100,
+        totalPaid: Math.round((item._sum.paidAmount || 0) * 100) / 100,
+        balance: Math.round((item._sum.balance || 0) * 100) / 100,
+        invoiceCount: item._count.id,
+      };
+    });
+
+    return {
+      year,
+      top,
+    };
+  }
+
+  /**
+   * H8. TOP 10 CUSTOMERS BY SHIPPING (CBM - Combined AIR & SEA)
+   */
+  async getTopCustomersShipping(query: any) {
+    this.logger.log('Generating top customers by shipping (combined CBM)');
+
+    const { year, startDate, endDate, warehouseId } =
+      this.buildDashboardWhere(query);
+
+    const packageWhere: any = {
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      packageWhere.warehouseId = warehouseId;
+    }
+
+    // Get top 10 customers by total CBM (AIR + SEA combined)
+    const topCustomersData = await this.prisma.package.groupBy({
+      by: ['customerId'],
+      where: packageWhere,
+      _sum: {
+        cbm: true,
+        weight: true,
+      },
+      orderBy: {
+        _sum: {
+          cbm: 'desc',
+        },
+      },
+      take: 10,
+    });
+
+    const customerIds = topCustomersData.map((c) => c.customerId);
+
+    // Get customer details
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        id: {
+          in: customerIds,
+        },
+      },
+      select: {
+        id: true,
+        customerCode: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    // Get invoice totals for these customers
+    const invoiceWhere: any = {
+      customerId: {
+        in: customerIds,
+      },
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (warehouseId) {
+      invoiceWhere.package = {
+        warehouseId,
+      };
+    }
+
+    const invoiceTotals = await this.prisma.invoice.groupBy({
+      by: ['customerId'],
+      where: invoiceWhere,
+      _sum: {
+        totalAmount: true,
+        paidAmount: true,
+      },
+    });
+
+    // Combine all data
+    const topCustomers = topCustomersData.map((item, index) => {
+      const customer = customers.find((c) => c.id === item.customerId);
+      const invoiceData = invoiceTotals.find(
+        (inv) => inv.customerId === item.customerId,
+      );
+
+      return {
+        rank: index + 1,
+        customerCode: customer?.customerCode || 'N/A',
+        customerName: customer
+          ? `${customer.firstName} ${customer.lastName}`
+          : 'N/A',
+        totalCBM: Math.round((item._sum.cbm || 0) * 100) / 100,
+        totalWeight: Math.round((item._sum.weight || 0) * 100) / 100,
+        totalInvoiceAmount:
+          Math.round((invoiceData?._sum.totalAmount || 0) * 100) / 100,
+        totalPaid: Math.round((invoiceData?._sum.paidAmount || 0) * 100) / 100,
+      };
+    });
+
+    return {
+      year,
+      topCustomers,
+    };
+  }
+
+  /**
+   * H9. RECENT INTAKES
+   */
+  async getRecentIntakes(query: any) {
+    this.logger.log('Fetching recent intakes');
+
+    const limit = Math.min(Number(query.limit) || 20, 100);
+    const where: any = {};
+
+    if (query.warehouseId) {
+      where.warehouseId = query.warehouseId;
+    }
+
+    if (query.fromDate || query.toDate) {
+      where.receivedDate = {};
+      if (query.fromDate) {
+        where.receivedDate.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        where.receivedDate.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.cursor) {
+      where.id = {
+        lt: query.cursor,
+      };
+    }
+
+    const items = await this.prisma.package.findMany({
+      where,
+      select: {
+        id: true,
+        trackingCode: true,
+        description: true,
+        quantity: true,
+        weight: true,
+        cbm: true,
+        receivedDate: true,
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        warehouse: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        receivedDate: 'desc',
+      },
+      take: limit + 1,
+    });
+
+    const hasMore = items.length > limit;
+    const resultItems = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore ? resultItems[resultItems.length - 1].id : null;
+
+    const mappedItems = resultItems.map((item) => ({
+      id: item.id,
+      intakeTrackingCode: item.trackingCode,
+      customerCode: item.customer.customerCode,
+      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      description: item.description,
+      quantity: item.quantity,
+      weight: item.weight,
+      cbm: item.cbm,
+      receivedDate: item.receivedDate,
+      warehouse: item.warehouse?.name,
+    }));
+
+    return {
+      items: mappedItems,
+      total: resultItems.length,
+      nextCursor,
+    };
+  }
+
+  /**
+   * H9. RECENT INVOICES VS PAYMENTS
+   */
+  async getRecentInvoicesPayments(query: any) {
+    this.logger.log('Fetching recent invoices vs payments');
+
+    const limit = Math.min(Number(query.limit) || 20, 100);
+    const where: any = {};
+
+    if (query.warehouseId) {
+      where.customer = {
+        warehouseId: query.warehouseId,
+      };
+    }
+
+    if (query.fromDate || query.toDate) {
+      where.createdAt = {};
+      if (query.fromDate) {
+        where.createdAt.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        where.createdAt.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.cursor) {
+      where.id = {
+        lt: query.cursor,
+      };
+    }
+
+    const items = await this.prisma.invoice.findMany({
+      where,
+      select: {
+        id: true,
+        invoiceNumber: true,
+        totalAmount: true,
+        paidAmount: true,
+        balance: true,
+        status: true,
+        createdAt: true,
+        dueDate: true,
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        payments: {
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: limit + 1,
+    });
+
+    const hasMore = items.length > limit;
+    const resultItems = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore ? resultItems[resultItems.length - 1].id : null;
+
+    const mappedItems = resultItems.map((item) => ({
+      id: item.id,
+      invoiceNumber: item.invoiceNumber,
+      customerCode: item.customer.customerCode,
+      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      totalAmount: item.totalAmount,
+      paidAmount: item.paidAmount,
+      balance: item.balance,
+      status: item.status,
+      paymentCount: item.payments.length,
+      createdAt: item.createdAt,
+      dueDate: item.dueDate,
+    }));
+
+    return {
+      items: mappedItems,
+      total: resultItems.length,
+      nextCursor,
+    };
+  }
+
+  /**
+   * H9. RECENT AGED PACKAGES
+   */
+  async getRecentAgedPackages(query: any) {
+    this.logger.log('Fetching recent aged packages');
+
+    const limit = Math.min(Number(query.limit) || 20, 100);
+    const minDays = query.minDays ? Number(query.minDays) : 0;
+
+    const where: any = {
+      status: {
+        not: PackageStatus.RELEASED,
+      },
+    };
+
+    // Filter by minimum days in warehouse
+    if (minDays > 0) {
+      where.daysInWarehouse = {
+        gte: minDays,
+      };
+    }
+
+    if (query.warehouseId) {
+      where.warehouseId = query.warehouseId;
+    }
+
+    if (query.fromDate || query.toDate) {
+      where.receivedDate = {};
+      if (query.fromDate) {
+        where.receivedDate.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        where.receivedDate.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.cursor) {
+      where.id = {
+        lt: query.cursor,
+      };
+    }
+
+    const items = await this.prisma.package.findMany({
+      where,
+      select: {
+        id: true,
+        trackingCode: true,
+        description: true,
+        status: true,
+        daysInWarehouse: true,
+        receivedDate: true,
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        warehouse: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        daysInWarehouse: 'desc',
+      },
+      take: limit + 1,
+    });
+
+    const hasMore = items.length > limit;
+    const resultItems = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore ? resultItems[resultItems.length - 1].id : null;
+
+    const mappedItems = resultItems.map((item) => ({
+      id: item.id,
+      trackingCode: item.trackingCode,
+      customerCode: item.customer.customerCode,
+      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      description: item.description,
+      status: item.status,
+      daysInWarehouse: item.daysInWarehouse,
+      receivedDate: item.receivedDate,
+      warehouse: item.warehouse?.name || 'N/A',
+    }));
+
+    return {
+      items: mappedItems,
+      total: resultItems.length,
+      nextCursor,
+    };
+  }
+
+  /**
+   * H9. RECENT PACKING LISTS
+   */
+  async getRecentPackingLists(query: any) {
+    this.logger.log('Fetching recent packing lists');
+
+    const limit = Math.min(Number(query.limit) || 20, 100);
+    const where: any = {};
+
+    if (query.warehouseId) {
+      where.warehouseId = query.warehouseId;
+    }
+
+    if (query.fromDate || query.toDate) {
+      where.loadingDate = {};
+      if (query.fromDate) {
+        where.loadingDate.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        where.loadingDate.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.cursor) {
+      where.id = {
+        lt: query.cursor,
+      };
+    }
+
+    const items = await this.prisma.packingList.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        totalPackages: true,
+        totalCustomers: true,
+        totalCBM: true,
+        totalWeight: true,
+        loadingDate: true,
+        eta: true,
+        container: {
+          select: {
+            containerNumber: true,
+          },
+        },
+        warehouse: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        loadingDate: 'desc',
+      },
+      take: limit + 1,
+    });
+
+    const hasMore = items.length > limit;
+    const resultItems = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore ? resultItems[resultItems.length - 1].id : null;
+
+    const mappedItems = resultItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      containerNumber: item.container.containerNumber,
+      status: item.status,
+      totalPackages: item.totalPackages,
+      totalCustomers: item.totalCustomers,
+      totalCBM: item.totalCBM,
+      totalWeight: item.totalWeight,
+      loadingDate: item.loadingDate,
+      eta: item.eta,
+      warehouse: item.warehouse?.name || 'N/A',
+    }));
+
+    return {
+      items: mappedItems,
+      total: resultItems.length,
+      nextCursor,
+    };
+  }
+
+  /**
+   * H9. RECENT PICKUPS
+   */
+  async getRecentPickups(query: any) {
+    this.logger.log('Fetching recent pickups');
+
+    const limit = Math.min(Number(query.limit) || 20, 100);
+    const where: any = {};
+
+    if (query.fromDate || query.toDate) {
+      where.releaseDate = {};
+      if (query.fromDate) {
+        where.releaseDate.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        where.releaseDate.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.cursor) {
+      where.id = {
+        lt: query.cursor,
+      };
+    }
+
+    const items = await this.prisma.packageDelivery.findMany({
+      where,
+      select: {
+        deliveryId: true,
+        quantity: true,
+        receiverName: true,
+        releaseDate: true,
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+            warehouse: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        invoice: {
+          select: {
+            invoiceNumber: true,
+          },
+        },
+        package: {
+          select: {
+            trackingCode: true,
+            pickupCode: true,
+          },
+        },
+      },
+      orderBy: {
+        releaseDate: 'desc',
+      },
+      take: limit + 1,
+    });
+
+    const hasMore = items.length > limit;
+    const resultItems = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore
+      ? resultItems[resultItems.length - 1].deliveryId
+      : null;
+
+    const mappedItems = resultItems.map((item) => ({
+      deliveryId: item.deliveryId,
+      customerCode: item.customer.customerCode,
+      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      invoiceNumber: item.invoice.invoiceNumber,
+      trackingCode: item.package.trackingCode,
+      pickupCode: item.package.pickupCode,
+      quantity: item.quantity,
+      receiverName: item.receiverName,
+      releaseDate: item.releaseDate,
+      warehouse: item.customer.warehouse?.name || 'N/A',
+    }));
+
+    return {
+      items: mappedItems,
+      total: resultItems.length,
+      nextCursor,
+    };
+  }
 }

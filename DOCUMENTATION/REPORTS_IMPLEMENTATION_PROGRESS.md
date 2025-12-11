@@ -4,6 +4,8 @@
 
 ### 1. DTOs Created
 
+**Core Reports:**
+
 - ✅ `common.dto.ts` - Common query filters
 - ✅ `payments-report.dto.ts` - Payments report response
 - ✅ `packing-list-report.dto.ts` - Packing list report response
@@ -12,6 +14,21 @@
 - ✅ `general-report.dto.ts` - General report response
 - ✅ `pickup-report.dto.ts` - Pickup report response
 - ✅ `warehouse-report.dto.ts` - Warehouse report response
+
+**Dashboard DTOs:**
+
+- ✅ `dashboard-common.dto.ts` - Dashboard query filters with year support
+- ✅ `dashboard-invoices-by-month.dto.ts` - Monthly invoice counts
+- ✅ `dashboard-payments-by-month.dto.ts` - Monthly payments by AIR/SEA
+- ✅ `dashboard-intakes-by-month.dto.ts` - Monthly intake counts
+- ✅ `dashboard-pickups-by-month.dto.ts` - Monthly pickup counts
+- ✅ `dashboard-payment-methods.dto.ts` - Payment method breakdown
+- ✅ `dashboard-shipping-modes.dto.ts` - AIR vs SEA counts
+- ✅ `dashboard-top-customers-by-amount.dto.ts` - Top 10 by amount
+- ✅ `dashboard-top-customers-shipping.dto.ts` - Top 10 by CBM/weight
+- ✅ `dashboard-recent-items.dto.ts` - Recent activity responses
+
+**Total DTOs: 17 files**
 
 ### 2. Service Implementation
 
@@ -27,8 +44,11 @@ All service methods implemented with:
 - ✅ Status enum filtering
 - ✅ Top 10 customer rankings
 - ✅ Pickup rate calculations
+- ✅ Monthly time-series data with abbreviations (JAN, FEB, etc.)
+- ✅ Cursor-based pagination for recent items
+- ✅ Year-based filtering with current year default
 
-**Endpoints Implemented:**
+**Core Report Methods:**
 
 1. ✅ `getPaymentsReport()` - All payments with currency totals
 2. ✅ `getPackingListReport()` - Invoice stats per packing list
@@ -38,18 +58,45 @@ All service methods implemented with:
 6. ✅ `getPickupReport()` - Package delivery records
 7. ✅ `getWarehouseReport()` - Warehouse aggregations
 
+**Dashboard Graph Methods:**
+
+8. ✅ `getInvoicesByMonth()` - Monthly invoice counts
+9. ✅ `getPaymentsByMonth()` - Monthly payments by AIR/SEA
+10. ✅ `getIntakesByMonth()` - Monthly intake counts
+11. ✅ `getPickupsByMonth()` - Monthly pickup counts
+12. ✅ `getPaymentMethods()` - Payment method breakdown
+13. ✅ `getShippingModes()` - AIR vs SEA package counts
+14. ✅ `getTopCustomersByAmount()` - Top 10 by invoice amount
+15. ✅ `getTopCustomersShipping()` - Top 10 by CBM and weight
+
+**Recent Activity Methods:**
+
+16. ✅ `getRecentIntakes()` - Last 20 intakes with pagination
+17. ✅ `getRecentInvoicesPayments()` - Last 20 invoices with payments
+18. ✅ `getRecentAgedPackages()` - Unreleased packages by days
+19. ✅ `getRecentPackingLists()` - Last 20 packing lists
+20. ✅ `getRecentPickups()` - Last 20 package deliveries
+
+**Helper Methods:**
+
+- ✅ `buildWhereClause()` - Core reports filter builder
+- ✅ `buildDashboardWhere()` - Dashboard filter builder
+- ✅ `getMonthAbbreviation()` - Month number to abbreviation
+
+**Total Service Methods: 23 methods**
+
 ### 3. Controller Implementation
 
 **File:** `src/modules/reports/reports.controller.ts`
 
-- ✅ All 7 endpoints registered
+- ✅ All 20 endpoints registered (7 core + 13 dashboard)
 - ✅ JWT authentication required
 - ✅ Role-based access control
 - ✅ Swagger documentation complete
 - ✅ Query parameter decorators
 - ✅ Response type definitions
 
-**Route Structure:**
+**Core Report Routes:**
 
 ```
 GET /reports/payments
@@ -60,6 +107,31 @@ GET /reports/general
 GET /reports/pickups
 GET /reports/warehouses
 ```
+
+**Dashboard Graph Routes:**
+
+```
+GET /reports/dashboard/invoices-by-month
+GET /reports/dashboard/payments-by-month
+GET /reports/dashboard/intakes-by-month
+GET /reports/dashboard/pickups-by-month
+GET /reports/dashboard/payment-methods
+GET /reports/dashboard/shipping-modes
+GET /reports/dashboard/top-customers-by-amount
+GET /reports/dashboard/top-customers-shipping
+```
+
+**Dashboard Recent Activity Routes:**
+
+```
+GET /reports/dashboard/recent-intakes
+GET /reports/dashboard/recent-invoices-payments
+GET /reports/dashboard/recent-aged-packages
+GET /reports/dashboard/recent-packing-lists
+GET /reports/dashboard/recent-pickups
+```
+
+**Total Endpoints: 20 routes**
 
 ### 4. Module Registration
 
