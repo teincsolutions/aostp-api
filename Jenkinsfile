@@ -11,7 +11,7 @@ pipeline {
         DOCKER_IMAGE_NAME = 'teincsolutions/aostp-api'
         DOCKER_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
         NODE_ENV = 'production'
-        CORS_ORIGIN = 'https://aostp.akomapacargo.com,https://test.aostp.akomapacargo.com'
+        CORS_ORIGIN = 'https://aostp.akomapacargo.com,https://test-aostp.akomapacargo.com'
         FRONTEND_URL = 'https://aostp.akomapacargo.com'
         CDN_DOMAIN = 'cdn.akomapacargo.com'
         JWT_EXPIRATION = '15m'
