@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bull';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validate } from './config/env.validation';
 import { PrismaModule } from './shared/prisma/prisma.module';
@@ -31,6 +32,7 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { CitiesModule } from './modules/cities/cities.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -39,6 +41,15 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       isGlobal: true,
       validate,
       cache: true,
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get('REDIS_HOST', 'localhost'),
+          port: configService.get('REDIS_PORT', 6379),
+        },
+      }),
     }),
     PrismaModule,
     SharedModule,
@@ -62,6 +73,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ConsolidationModule,
     PackageDeliveryModule,
     WarehousesModule,
+    ReportsModule,
   ],
   providers: [
     {
