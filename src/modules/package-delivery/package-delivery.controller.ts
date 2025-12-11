@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { PackageDeliveryService } from './package-delivery.service';
 import { CreatePackageDeliveryDto } from './dto/create-package-delivery.dto';
+import { FilterPackageDeliveryDto } from './dto/filter-package-delivery.dto';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -33,47 +35,96 @@ export class PackageDeliveryController {
     private readonly packageDeliveryService: PackageDeliveryService,
   ) {}
 
+  @Get()
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get all package deliveries with filters and pagination',
+    description:
+      'Retrieves all package delivery records with advanced filtering by customer, invoice, package, warehouse, packing list, date range, and more.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Deliveries retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              deliveryId: { type: 'string' },
+              customerId: { type: 'string' },
+              invoiceId: { type: 'string' },
+              packageId: { type: 'string' },
+              quantity: { type: 'number' },
+              receiverName: { type: 'string', nullable: true },
+              releaseDate: { type: 'string', format: 'date-time' },
+              notes: { type: 'string', nullable: true },
+              customer: { type: 'object' },
+              invoice: { type: 'object' },
+              package: { type: 'object' },
+              createdBy: { type: 'object' },
+            },
+          },
+        },
+        meta: {
+          type: 'object',
+          properties: {
+            total: { type: 'number' },
+            page: { type: 'number' },
+            limit: { type: 'number' },
+            totalPages: { type: 'number' },
+            hasNextPage: { type: 'boolean' },
+            hasPreviousPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized access' })
+  @ApiForbiddenResponse({
+    description: 'Insufficient permissions (requires OPERATIONS_CLERK role)',
+  })
+  findAll(@Query() filterDto: FilterPackageDeliveryDto) {
+    const { page, limit, sortBy, sortOrder, ...filters } = filterDto;
+    const paginationDto = { page, limit, sortBy, sortOrder };
+    return this.packageDeliveryService.getAllDeliveries(paginationDto, filters);
+  }
+
   @Post()
   @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Create package delivery record',
+    summary: 'Create package pickup records for multiple invoices',
     description:
-      'Records when a package item is delivered to the customer. Creates delivery record, updates package item status to RELEASED, and sends delivery notification.',
+      'Records when packages are picked up by the customer. Can handle multiple invoices and packages in a single pickup. If trackingCodes are not provided, all packages from the specified invoices will be picked up. Creates delivery records, updates package statuses to RELEASED, and sends pickup notifications.',
   })
   @ApiBody({
     type: CreatePackageDeliveryDto,
     description:
-      'Delivery details including invoice ID and package tracking code. Creates one delivery record for the package',
+      'Pickup details including invoice IDs and optional tracking codes. If trackingCodes are omitted, all packages from the invoices will be picked up.',
   })
   @ApiResponse({
     status: 201,
-    description: 'Delivery record created successfully',
+    description: 'Pickup records created successfully',
     schema: {
       type: 'object',
       properties: {
-        id: { type: 'string', example: 'uuid' },
-        deliveryId: { type: 'string', example: 'DEL001-2025001' },
-        customerId: { type: 'string' },
-        invoiceId: { type: 'string' },
-        packageId: { type: 'string' },
-        receiverName: { type: 'string', nullable: true },
-        quantity: { type: 'number', example: 1 },
-        releaseDate: { type: 'string', format: 'date-time' },
-        photos: { type: 'array', items: { type: 'string' } },
-        package: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            trackingCode: {
-              type: 'string',
-              example: 'TR-2025-001',
-            },
-            warehouse: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-              },
+        success: { type: 'boolean', example: true },
+        count: { type: 'number', example: 3 },
+        deliveries: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'uuid' },
+              deliveryId: { type: 'string', example: 'DEL001-2025001' },
+              invoiceId: { type: 'string' },
+              packageId: { type: 'string' },
+              trackingCode: { type: 'string', example: 'TR-2025-001' },
+              quantity: { type: 'number', example: 1 },
+              releaseDate: { type: 'string', format: 'date-time' },
             },
           },
         },

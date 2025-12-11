@@ -318,31 +318,31 @@ export class NotificationsService {
     // Email content (HTML)
     if (customer.email) {
       const receiverInfo = delivery.receiverName
-        ? `<tr><td><strong>Received By:</strong></td><td>${delivery.receiverName}</td></tr>`
+        ? `<tr><td><strong>Picked Up By:</strong></td><td>${delivery.receiverName}</td></tr>`
         : '';
 
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Package Delivered - AOSTP Logistics</h2>
+          <h2>Package Picked Up - AOSTP Logistics</h2>
           <p>Dear ${customer.firstName} ${customer.lastName},</p>
-          <p>We are pleased to inform you that your package has been successfully delivered.</p>
+          <p>We are pleased to inform you that your package has been successfully picked up.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
             <tr><td><strong>Package Description:</strong></td><td>${pkg.description}</td></tr>
-            <tr><td><strong>Delivery ID:</strong></td><td>${delivery.deliveryId}</td></tr>
-            <tr><td><strong>Delivered Quantity:</strong></td><td>${delivery.quantity}</td></tr>
+            <tr><td><strong>Pickup ID:</strong></td><td>${delivery.deliveryId}</td></tr>
+            <tr><td><strong>Picked Up Quantity:</strong></td><td>${delivery.quantity}</td></tr>
             ${receiverInfo}
-            <tr><td><strong>Delivery Date:</strong></td><td>${new Date(delivery.releaseDate).toLocaleString()}</td></tr>
+            <tr><td><strong>Pickup Date:</strong></td><td>${new Date(delivery.releaseDate).toLocaleString()}</td></tr>
           </table>
-          <p>If you did not receive this package or have any questions, please contact us immediately.</p>
-          <p>You can <a href="https://aostp.akomapacargo.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for delivery details.</p>
+          <p>If you did not pick up this package or have any questions, please contact us immediately.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/track/${pkg.trackingCode}" target="_blank">track your package</a> for pickup details.</p>
           <p>Thank you for choosing AOSTP Logistics.</p>
         </div>
       `;
       channels.push({
         channel: NotificationChannel.EMAIL,
         recipient: customer.email,
-        subject: 'Package Delivered - AOSTP Logistics',
+        subject: 'Package Picked Up - AOSTP Logistics',
         content: emailContent,
       });
     }
@@ -358,9 +358,9 @@ export class NotificationsService {
 
       if (channel) {
         const receiverText = delivery.receiverName
-          ? ` Received by: ${delivery.receiverName}.`
+          ? ` Picked up by: ${delivery.receiverName}.`
           : '';
-        const content = `Hi ${customer.firstName}, your package (${pkg.trackingCode}) has been delivered.${receiverText} Delivery ID: ${delivery.deliveryId}. Track: https://aostp.akomapacargo.com/track/${pkg.trackingCode}`;
+        const content = `Hi ${customer.firstName}, your package (${pkg.trackingCode}) has been picked up.${receiverText} Pickup ID: ${delivery.deliveryId}. Track: https://aostp.akomapacargo.com/track/${pkg.trackingCode}`;
         channels.push({
           channel,
           recipient: customer.phoneNumber,
@@ -636,7 +636,7 @@ export class NotificationsService {
         'Your package has been assigned to a packing list for shipment.',
       SHIPPED: 'Your package has been shipped and is in transit.',
       ARRIVED: 'Your package has arrived at the destination.',
-      RELEASED: 'Your package has been released for delivery.',
+      RELEASED: 'Your package is ready for pickup.',
     };
     return messages[status] || 'Your package status has been updated.';
   }

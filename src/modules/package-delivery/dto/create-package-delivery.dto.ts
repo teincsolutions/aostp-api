@@ -5,26 +5,34 @@ import {
   IsArray,
   Min,
   IsNotEmpty,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePackageDeliveryDto {
   @ApiProperty({
-    description: 'Invoice ID where the delivery belongs',
-    example: '60f1b2b5c1d9e2f4e6b4f1a2',
+    description:
+      'Invoice IDs where the deliveries belong (can be multiple invoices for the same customer)',
+    example: ['60f1b2b5c1d9e2f4e6b4f1a2', '60f1b2b5c1d9e2f4e6b4f1a3'],
+    type: [String],
   })
-  @IsString()
-  @IsNotEmpty()
-  invoiceId: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  invoiceIds: string[];
 
   @ApiProperty({
     description:
-      'Package tracking code. The delivery will be created for the package on the invoice',
-    example: 'TR-2025-001',
+      'Package tracking codes (optional). If not provided, all packages from the invoices will be picked up. If provided, only specified packages will be picked up.',
+    example: ['TR-2025-001', 'TR-2025-002'],
+    type: [String],
+    required: false,
   })
-  @IsString()
-  @IsNotEmpty()
-  trackingCode: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  trackingCodes?: string[];
 
   @ApiProperty({
     description: 'Receiver name (optional)',
@@ -36,14 +44,14 @@ export class CreatePackageDeliveryDto {
   receiverName?: string;
 
   @ApiProperty({
-    description: 'Quantity released (optional, defaults to full quantity)',
+    description: 'Quantity being picked up',
     example: 5,
-    required: false,
+    required: true,
   })
-  @IsOptional()
+  @IsNotEmpty()
   @IsInt()
   @Min(1)
-  quantity?: number;
+  quantity: number;
 
   @ApiProperty({
     description: 'Optional delivery notes',

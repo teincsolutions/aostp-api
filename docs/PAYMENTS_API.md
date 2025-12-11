@@ -267,22 +267,33 @@ Retrieve paginated list of payments with advanced filtering.
 
 **Query Parameters:**
 
-| Parameter       | Type   | Required | Description                                 |
-| --------------- | ------ | -------- | ------------------------------------------- |
-| `page`          | number | No       | Page number (default: 1)                    |
-| `limit`         | number | No       | Items per page (default: 20)                |
-| `sortBy`        | string | No       | Field to sort by (default: processedAt)     |
-| `sortOrder`     | string | No       | Sort order: `asc` or `desc` (default: desc) |
-| `customerId`    | string | No       | Filter by customer ID                       |
-| `paymentMethod` | string | No       | Filter by payment method                    |
-| `currency`      | string | No       | Filter by currency code                     |
-| `dateFrom`      | string | No       | Filter from date (ISO format)               |
-| `dateTo`        | string | No       | Filter to date (ISO format)                 |
+All parameters are optional and can be combined for advanced filtering.
 
-**Example Request:**
+| Parameter       | Type   | Required | Description                                                                |
+| --------------- | ------ | -------- | -------------------------------------------------------------------------- |
+| `page`          | number | No       | Page number (default: 1)                                                   |
+| `limit`         | number | No       | Items per page (default: 20, max: 100)                                     |
+| `sortBy`        | string | No       | Field to sort by (default: processedAt)                                    |
+| `sortOrder`     | string | No       | Sort order: `asc` or `desc` (default: desc)                                |
+| `customerId`    | string | No       | Filter by customer ID (UUID)                                               |
+| `paymentMethod` | string | No       | Filter by payment method (CASH, BANK_TRANSFER, MOBILE_MONEY, etc.)         |
+| `currency`      | string | No       | Filter by currency code (USD, GHS, CNY, etc.)                              |
+| `dateFrom`      | string | No       | Filter from date (ISO format: YYYY-MM-DD)                                  |
+| `dateTo`        | string | No       | Filter to date (ISO format: YYYY-MM-DD)                                    |
+| `packingListId` | string | No       | Filter by packing list ID (payments for invoices in specific packing list) |
+| `warehouseId`   | string | No       | Filter by warehouse ID (payments for packages in specific warehouse)       |
+
+**Example Requests:**
 
 ```bash
+# Filter by payment method and date range
 GET /api/payments?page=1&limit=20&paymentMethod=CASH&dateFrom=2025-12-01&dateTo=2025-12-31
+
+# Filter by packing list
+GET /api/payments?packingListId=uuid-packing-list-123
+
+# Filter by warehouse
+GET /api/payments?warehouseId=uuid-warehouse-456
 ```
 
 **Response:**

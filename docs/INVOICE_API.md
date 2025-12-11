@@ -83,16 +83,16 @@ Retrieve all invoices with advanced filtering options.
 
 **Query Parameters:**
 
-| Parameter       | Type              | Required | Description                                                                                                                                 |
-| --------------- | ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `page`          | number            | No       | Page number (default: 1)                                                                                                                    |
-| `limit`         | number            | No       | Items per page (default: 20)                                                                                                                |
-| `customerId`    | string (UUID)     | No       | Filter by customer ID                                                                                                                       |
-| `status`        | string            | No       | Filter by invoice status: `UNPAID`, `PARTIALLY_PAID`, `PAID`                                                                                |
-| `packingListId` | string (UUID)     | No       | Filter by packing list ID                                                                                                                   |
-| `dateFrom`      | string (ISO date) | No       | Filter invoices created from this date                                                                                                      |
-| `dateTo`        | string (ISO date) | No       | Filter invoices created until this date                                                                                                     |
-| `search`        | string            | No       | Search across invoice number, package tracking code, pickup code, packing list name, and container number (partial match, case-insensitive) |
+| Parameter       | Type              | Required | Description                                                                                                                                                                                       |
+| --------------- | ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`          | number            | No       | Page number (default: 1)                                                                                                                                                                          |
+| `limit`         | number            | No       | Items per page (default: 20)                                                                                                                                                                      |
+| `customerId`    | string (UUID)     | No       | Filter by customer ID                                                                                                                                                                             |
+| `status`        | string            | No       | Filter by invoice status: `UNPAID`, `PARTIALLY_PAID`, `PAID`                                                                                                                                      |
+| `packingListId` | string (UUID)     | No       | Filter by packing list ID                                                                                                                                                                         |
+| `dateFrom`      | string (ISO date) | No       | Filter invoices created from this date                                                                                                                                                            |
+| `dateTo`        | string (ISO date) | No       | Filter invoices created until this date                                                                                                                                                           |
+| `search`        | string            | No       | Search across invoice number, customer code, customer full name (e.g., "John Doe"), package tracking code, pickup code, packing list name, and container number (partial match, case-insensitive) |
 
 **Example Request:**
 
@@ -174,40 +174,58 @@ GET /api/invoices?page=1&limit=20&status=UNPAID&customerId=uuid&search=AOSTP-202
    GET /api/invoices?customerId=uuid&packingListId=uuid
    ```
 
-3. **Search by package tracking code:**
+3. **Search by customer code:**
+
+   ```
+   GET /api/invoices?search=JOH12567
+   ```
+
+4. **Search by customer full name:**
+
+   ```
+   GET /api/invoices?search=John Doe
+   ```
+
+5. **Search by customer first or last name:**
+
+   ```
+   GET /api/invoices?search=John
+   ```
+
+6. **Search by package tracking code:**
 
    ```
    GET /api/invoices?search=AOSTP-20251204-ABC123
    ```
 
-4. **Search by pickup code:**
+7. **Search by pickup code:**
 
    ```
    GET /api/invoices?search=PICK-123456
    ```
 
-5. **Search by packing list name:**
+8. **Search by packing list name:**
 
    ```
    GET /api/invoices?search=PL-2025
    ```
 
-6. **Search by container number:**
+9. **Search by container number:**
 
    ```
    GET /api/invoices?search=CONT-123456
    ```
 
-7. **Search by invoice number:**
+10. **Search by invoice number:**
 
-   ```
-   GET /api/invoices?search=INV-2025-001234
-   ```
+    ```
+    GET /api/invoices?search=INV-2025-001234
+    ```
 
-8. **Combined filters:**
-   ```
-   GET /api/invoices?status=PARTIALLY_PAID&search=PL-2025&page=1&limit=50
-   ```
+11. **Combined filters:**
+    ```
+    GET /api/invoices?status=PARTIALLY_PAID&search=PL-2025&page=1&limit=50
+    ```
 
 ---
 
@@ -632,6 +650,15 @@ POST /api/invoices/{invoiceId}/regenerate-pdf
 # Find all unpaid invoices for a specific packing list
 GET /api/invoices?status=UNPAID&search=PL-2025-001
 
+# Find invoice by customer code
+GET /api/invoices?search=JOH12567
+
+# Find invoice by customer full name
+GET /api/invoices?search=John Doe
+
+# Find invoice by customer first or last name
+GET /api/invoices?search=John
+
 # Find invoice by package tracking code
 GET /api/invoices?search=AOSTP-20251204-ABC123
 
@@ -738,7 +765,15 @@ Standard API rate limits apply:
 curl -X GET "http://localhost:3000/api/invoices?status=UNPAID&page=1&limit=20" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-# Search by tracking code, pickup code, container number, etc.
+# Search by customer code
+curl -X GET "http://localhost:3000/api/invoices?search=JOH12567" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Search by customer full name
+curl -X GET "http://localhost:3000/api/invoices?search=John%20Doe" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Search by package tracking code
 curl -X GET "http://localhost:3000/api/invoices?search=AOSTP-20251204-ABC123" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 

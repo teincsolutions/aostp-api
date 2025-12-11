@@ -390,8 +390,21 @@ export class InvoicesService {
       }
     }
 
-    // Search across multiple fields (invoice number, package tracking code, pickup code, packing list name, container number)
+    // Search across multiple fields (invoice number, customer code, customer full name, package tracking code, pickup code, packing list name, container number)
     if (filters?.search) {
+      // For customer name search, we need to get IDs that match concatenated name
+      let customerIdsFromNameSearch: string[] = [];
+
+      if (filters.search) {
+        const customersMatchingName = await this.prisma.$queryRaw<
+          { id: string }[]
+        >`
+          SELECT id FROM "Customer" 
+          WHERE LOWER(CONCAT("firstName", ' ', "lastName")) LIKE LOWER(${`%${filters.search}%`})
+        `;
+        customerIdsFromNameSearch = customersMatchingName.map((c) => c.id);
+      }
+
       where.OR = [
         {
           invoiceNumber: {
@@ -399,6 +412,23 @@ export class InvoicesService {
             mode: 'insensitive',
           },
         },
+        {
+          customer: {
+            customerCode: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        ...(customerIdsFromNameSearch.length > 0
+          ? [
+              {
+                customerId: {
+                  in: customerIdsFromNameSearch,
+                },
+              },
+            ]
+          : []),
         {
           package: {
             trackingCode: {

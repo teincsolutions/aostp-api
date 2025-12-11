@@ -384,6 +384,8 @@ export class PDFService {
     branches: string;
     email: string;
     logoPath?: string;
+    momoNumber?: string;
+    momoName?: string;
   };
   private companyLogo: Buffer | null = null;
 
@@ -408,6 +410,11 @@ export class PDFService {
         this.configService.get<string>('COMPANY_EMAIL') ||
         'info@akomapacargo.com',
       logoPath: this.configService.get<string>('COMPANY_LOGO_PATH'),
+      momoNumber:
+        this.configService.get<string>('COMPANY_MOMO_NUMBER') || '0539 766 892',
+      momoName:
+        this.configService.get<string>('COMPANY_MOMO_NAME') ||
+        'AKOMAPA ONE STOP TRADE PROVIDER - YANG QIAOLING',
     };
 
     // Load company logo if path is provided (fire and forget)
@@ -763,11 +770,11 @@ export class PDFService {
       (data.items?.length ?? 0) > 0
         ? data.items!.map((item) => ({
             ...item,
-            description: `${item.description}\n${data.package?.trackingCode ? ` ${data.package.trackingCode}` : ''}`,
+            description: `${item.description}${data.package?.trackingCode ? `\nTracking: ${data.package.trackingCode}` : ''}`,
           }))
         : [
             {
-              description: `${data.package?.description || ''}\n${data.package?.pickupCode ? `Pickup Code: ${data.package.pickupCode}` : ''}`,
+              description: `${data.package?.description || ''}${data.package?.trackingCode ? `\nTracking: ${data.package.trackingCode}` : ''}${data.package?.pickupCode ? `\nPickup Code: ${data.package.pickupCode}` : ''}`,
               quantity: data.package?.quantity ?? 1,
               unitPrice:
                 (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
@@ -828,6 +835,39 @@ export class PDFService {
         'left',
       );
       y += LAYOUT.rowH;
+    }
+
+    // Payment instruction message
+    if (y + 30 <= maxY) {
+      y += 8; // Add some spacing
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#000');
+      writeLineClamped(
+        doc,
+        'Kindly start making payments as soon you receive your invoice to the momo account below',
+        L + 6,
+        y,
+        contentW - 12,
+        'left',
+      );
+      y += 10;
+      doc.font('Helvetica-Bold').fontSize(8);
+      writeLineClamped(
+        doc,
+        `MOMO NUMBER: ${safe(this.companyInfo.momoNumber)}`,
+        L + 6,
+        y,
+        contentW - 12,
+        'left',
+      );
+      y += 10;
+      writeLineClamped(
+        doc,
+        `NAME: ${safe(this.companyInfo.momoName)}`,
+        L + 6,
+        y,
+        contentW - 12,
+        'left',
+      );
     }
   }
 
@@ -1339,6 +1379,7 @@ export class PDFService {
       const chips: string[] = [];
       if (safe(pkg.trackingCode))
         chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
+      if (safe(pkg.pickupCode)) chips.push(`PICKUP: ${safe(pkg.pickupCode)}`);
       if (pkg.shippingMode === 'AIR') {
         const t = pkg.airType || 'NORMAL_AIR';
         chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);

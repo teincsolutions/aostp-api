@@ -21,6 +21,7 @@ import {
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { FilterPaymentDto } from './dto/filter-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -82,28 +83,10 @@ export class PaymentsController {
   @Get()
   @Roles(UserRole.PAYMENT_CLERK, UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get all payments with filters and pagination' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'customerId', required: false, type: String })
-  @ApiQuery({ name: 'paymentMethod', required: false, type: String })
-  @ApiQuery({ name: 'currency', required: false, type: String })
-  @ApiQuery({ name: 'dateFrom', required: false, type: String })
-  @ApiQuery({ name: 'dateTo', required: false, type: String })
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('customerId') customerId?: string,
-    @Query('paymentMethod') paymentMethod?: string,
-    @Query('currency') currency?: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-  ) {
-    const filters = {
-      customerId,
-      paymentMethod,
-      currency,
-      dateFrom,
-      dateTo,
-    };
+  findAll(@Query() filterDto: FilterPaymentDto) {
+    const { page, limit, sortBy, sortOrder, ...filters } = filterDto;
+
+    const paginationDto: PaginationDto = { page, limit, sortBy, sortOrder };
 
     return this.paymentsService.findAll(paginationDto, filters);
   }

@@ -297,6 +297,8 @@ export class PaymentsService {
       dateFrom?: string;
       dateTo?: string;
       currency?: string;
+      packingListId?: string;
+      warehouseId?: string;
     },
   ) {
     const { page = 1, limit = 20 } = paginationDto;
@@ -324,6 +326,26 @@ export class PaymentsService {
       if (filters.dateTo) {
         where.processedAt.lte = new Date(filters.dateTo);
       }
+    }
+
+    // Filter by packing list - payments for invoices in a specific packing list
+    if (filters?.packingListId) {
+      where.invoices = {
+        some: {
+          packingListId: filters.packingListId,
+        },
+      };
+    }
+
+    // Filter by warehouse - payments for invoices with packages in a specific warehouse
+    if (filters?.warehouseId) {
+      where.invoices = {
+        some: {
+          package: {
+            warehouseId: filters.warehouseId,
+          },
+        },
+      };
     }
 
     const [data, total] = await Promise.all([
