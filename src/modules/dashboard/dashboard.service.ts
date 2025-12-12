@@ -90,7 +90,6 @@ export class DashboardService {
       // Total payment aggregate breakdown USD and GHS
       this.prisma.payment.aggregate({
         where: {
-          gatewayStatus: 'COMPLETED',
           ...(filters?.dateFrom || filters?.dateTo
             ? {
                 processedAt: {
