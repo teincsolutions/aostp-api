@@ -1239,6 +1239,7 @@ export class PaymentsService {
         number: payment.paymentCode,
         date: payment.processedAt.toLocaleDateString(),
         paymentMethod: payment.paymentMethod,
+        processedBy: payment.processedBy?.firstName || 'System',
       },
       customer: {
         code: payment.customer.customerCode,

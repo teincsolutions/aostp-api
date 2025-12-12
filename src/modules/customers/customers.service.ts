@@ -53,12 +53,10 @@ export class CustomersService {
       }
     }
 
-    // Generate customer code: 3 letters from name + last 5 digits of phone
-    const namePart =
-      `${createCustomerDto.firstName}${createCustomerDto.lastName}`
-        .replace(/\s/g, '')
-        .substring(0, 3)
-        .toUpperCase();
+    // Generate customer code: first name + last 5 digits of phone
+    const namePart = createCustomerDto.firstName
+      .replace(/\s/g, '')
+      .toUpperCase();
     const phonePart = createCustomerDto.phoneNumber.slice(-5);
     let customerCode = `${namePart}${phonePart}`;
     let counter = 0;

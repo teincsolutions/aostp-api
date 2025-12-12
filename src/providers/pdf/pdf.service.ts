@@ -6,6 +6,7 @@ import { PassThrough } from 'stream';
 import { City } from '@prisma/client';
 import axios from 'axios';
 import { format } from 'date-fns';
+import { ToWords } from 'to-words';
 
 // =====================
 // Base interfaces
@@ -102,6 +103,7 @@ export interface PackageIntakeData extends PDFTemplateData {
     trackingCode: string;
     date: string;
     warehouse?: string;
+    receivedBy?: string;
   };
   customer: {
     code: string;
@@ -131,6 +133,7 @@ export interface ReceiptData extends PDFTemplateData {
     number: string;
     date: string;
     paymentMethod: string;
+    processedBy?: string;
   };
   customer: {
     code: string;
@@ -787,7 +790,9 @@ export class PDFService {
 
     for (let i = 0; i < showCount; i++) {
       const it = rows[i];
-      writeLineClamped(
+
+      // Use writeTextWrapped for description to allow multi-line text
+      const descHeight = writeTextWrapped(
         doc,
         it.description || '',
         cols[0].x,
@@ -821,7 +826,10 @@ export class PDFService {
         cols[3].w,
         'right',
       );
-      y += LAYOUT.rowH;
+
+      // Use the actual height of the description or minimum row height
+      const rowActualHeight = Math.max(descHeight, LAYOUT.rowH);
+      y += rowActualHeight;
     }
 
     if (overflow > 0 && y <= maxY) {
@@ -1056,12 +1064,13 @@ export class PDFService {
     writeLineClamped(doc, 'Intake Code:', L, metaY, 72, 'left');
     writeLineClamped(doc, 'Date:', L, metaY + 12, 72, 'left');
     writeLineClamped(doc, 'Warehouse:', L, metaY + 24, 72, 'left');
+    writeLineClamped(doc, 'Received By:', L, metaY + 36, 72, 'left');
 
     doc.font('Helvetica').fontSize(9);
     writeLineClamped(
       doc,
       safe(data.intake.trackingCode),
-      L + 60,
+      L + 72,
       metaY,
       140,
       'left',
@@ -1069,7 +1078,7 @@ export class PDFService {
     writeLineClamped(
       doc,
       formatDate(data.intake.date),
-      L + 60,
+      L + 72,
       metaY + 12,
       140,
       'left',
@@ -1077,8 +1086,16 @@ export class PDFService {
     writeLineClamped(
       doc,
       safe(data.intake.warehouse),
-      L + 60,
+      L + 72,
       metaY + 24,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.intake.receivedBy),
+      L + 72,
+      metaY + 36,
       140,
       'left',
     );
@@ -1124,7 +1141,7 @@ export class PDFService {
     // Package details box
     const boxW = contentW;
     const boxH = 54;
-    const boxY = metaY + 54;
+    const boxY = metaY + 66; // Increased from 54 to account for extra row
     doc.roundedRect(L, boxY, boxW, boxH, 3).stroke();
 
     let py = boxY + 8;
@@ -1415,12 +1432,13 @@ export class PDFService {
     writeLineClamped(doc, 'Receipt #:', L, metaY, 68, 'left');
     writeLineClamped(doc, 'Date:', L, metaY + 12, 68, 'left');
     writeLineClamped(doc, 'Method:', L, metaY + 24, 68, 'left');
+    writeLineClamped(doc, 'Processed By:', L, metaY + 36, 68, 'left');
 
     doc.font('Helvetica').fontSize(9);
     writeLineClamped(
       doc,
       safe(data.receipt.number),
-      L + 66,
+      L + 68,
       metaY,
       140,
       'left',
@@ -1428,7 +1446,7 @@ export class PDFService {
     writeLineClamped(
       doc,
       formatDate(data.receipt.date),
-      L + 66,
+      L + 68,
       metaY + 12,
       140,
       'left',
@@ -1436,8 +1454,16 @@ export class PDFService {
     writeLineClamped(
       doc,
       safe(data.receipt.paymentMethod),
-      L + 66,
+      L + 68,
       metaY + 24,
+      140,
+      'left',
+    );
+    writeLineClamped(
+      doc,
+      safe(data.receipt.processedBy),
+      L + 68,
+      metaY + 36,
       140,
       'left',
     );
@@ -1464,9 +1490,9 @@ export class PDFService {
 
     // Amount box
     const boxW = 210;
-    const boxH = 26;
+    const boxH = 38;
     const boxX = L + (contentW - boxW) / 2;
-    const boxY = metaY + 42;
+    const boxY = metaY + 54; // Increased from 42 to account for extra row
     doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
     doc.font('Helvetica-Bold').fontSize(11);
     writeLineClamped(
@@ -1474,6 +1500,26 @@ export class PDFService {
       `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.amount)}`,
       boxX,
       boxY + 6,
+      boxW,
+      'center',
+    );
+
+    // Amount in words
+    const toWords = new ToWords({
+      localeCode: 'en-GH',
+      converterOptions: {
+        currency: true,
+        ignoreDecimal: false,
+        doNotAddOnly: false,
+      },
+    });
+    const amountInWords = toWords.convert(data.payment.amount);
+    doc.font('Helvetica-Oblique').fontSize(8);
+    writeLineClamped(
+      doc,
+      `(${amountInWords})`,
+      boxX,
+      boxY + 22,
       boxW,
       'center',
     );

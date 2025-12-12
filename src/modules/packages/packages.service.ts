@@ -16,6 +16,7 @@ import {
   ShippingMode,
   AirShippingType,
   InvoiceStatus,
+  Package,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
@@ -927,6 +928,7 @@ export class PackagesService {
           trackingCode: pkg.trackingCode,
           date: new Date().toLocaleDateString(),
           warehouse: pkg.warehouse?.name,
+          receivedBy: pkg.createdBy?.firstName || 'N/A',
         },
         customer: {
           code: pkg.customer.customerCode,
@@ -937,13 +939,13 @@ export class PackagesService {
         package: {
           description: pkg.description,
           shippingMode: pkg.shippingMode,
-          airType: pkg.airShippingType,
+          airType: pkg.airShippingType || undefined,
           quantity: pkg.quantity,
-          weightKg: pkg.weight,
-          cbm: pkg.cbm,
+          weightKg: pkg.weight || undefined,
+          cbm: pkg.cbm || undefined,
           destinationCity: pkg.destinationCity,
         },
-        notes: pkg.notes,
+        notes: pkg.notes || undefined,
         photos: pkg.photos || [],
       };
 

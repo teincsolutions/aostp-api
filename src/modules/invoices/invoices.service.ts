@@ -18,6 +18,7 @@ import {
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class InvoicesService {
@@ -28,6 +29,7 @@ export class InvoicesService {
     private readonly idGeneratorService: IdGeneratorService,
     private readonly pdfService: PDFService,
     private readonly notificationsService: NotificationsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async generateFromPackingList(
@@ -937,7 +939,7 @@ export class InvoicesService {
   ): Promise<{ url: string; key: string }> {
     // Get company info from PDF service (which uses config)
     const companyInfo = {
-      name: 'AOSTP Logistics',
+      name: this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics',
       address: 'Accra, Ghana',
       phone: '+233 XX XXX XXXX',
       email: 'info@aostp.com',
@@ -962,9 +964,11 @@ export class InvoicesService {
       container: invoice.packingList?.container
         ? {
             number: invoice.packingList.container.containerNumber,
-            loadingDate: invoice.packingList.loadingDate
-              .toISOString()
-              .split('T')[0],
+            loadingDate: invoice.packingList.container.loadingDate
+              ? invoice.packingList.container.loadingDate
+                  .toISOString()
+                  .split('T')[0]
+              : invoice.packingList.loadingDate.toISOString().split('T')[0],
             origin:
               invoice.packingList.container.departureCity?.name || 'Unknown',
             destination:
@@ -994,7 +998,10 @@ export class InvoicesService {
           total: item.quantity * (invoice.package?.shippingRate || 0),
         })) || [],
       totals: {
-        total: invoice.totalAmount,
+        total:
+          invoice.currency === 'USD'
+            ? invoice.totalAmount || 0
+            : invoice.localAmount || 0,
         paid: invoice.paidAmount || 0,
         balance: invoice.balance,
         currency: invoice.currency,
@@ -1032,9 +1039,11 @@ export class InvoicesService {
 
     // Email content (HTML)
     if (invoice.customer.email) {
+      const companyName =
+        this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics';
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Invoice PDF Updated - AOSTP Logistics</h2>
+          <h2>Invoice PDF Updated - ${companyName}</h2>
           <p>Dear ${invoice.customer.firstName} ${invoice.customer.lastName},</p>
           <p>Your invoice PDF has been updated with the latest information.</p>
           <table style="border-collapse: collapse; width: 100%;">
@@ -1044,13 +1053,13 @@ export class InvoicesService {
           </table>
           <p>You can <a href="${pdfUrl}" target="_blank">download the latest invoice PDF</a> to view the updated details.</p>
           <p>If you have any questions, please contact our support team.</p>
-          <p>Thank you for choosing AOSTP Logistics.</p>
+          <p>Thank you for choosing ${companyName}.</p>
         </div>
       `;
       channels.push({
         channel: 'EMAIL',
         recipient: invoice.customer.email,
-        subject: 'Invoice PDF Updated - AOSTP Logistics',
+        subject: `Invoice PDF Updated - ${companyName}`,
         content: emailContent,
       });
     }

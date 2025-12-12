@@ -61,15 +61,15 @@ export class CreateCustomerDto {
   @IsOptional()
   alternatePhone?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Customer address',
     example: '123 Main Street, Accra',
     maxLength: 200,
   })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(200)
-  address: string;
+  address?: string;
 
   @ApiPropertyOptional({
     description: 'Warehouse ID',
