@@ -359,28 +359,61 @@ export class ReportsService {
       },
     );
 
-    // Top by payments
-    const topByPayments = await this.prisma.payment.groupBy({
-      by: ['customerId'],
+    // Top by payments (sum of amount + localAmount converted to USD)
+    const payments = await this.prisma.payment.findMany({
       where,
-      _sum: {
+      select: {
+        customerId: true,
         amount: true,
-      },
-      _count: {
-        id: true,
-      },
-      orderBy: {
-        _sum: {
-          amount: 'desc',
+        localAmount: true,
+        currency: true,
+        exchangeRate: {
+          select: {
+            rate: true,
+          },
         },
       },
-      take: 10,
     });
+
+    // Group by customer and calculate total in USD
+    const customerPaymentTotals = new Map<
+      string,
+      { totalUsd: number; count: number }
+    >();
+
+    payments.forEach((payment) => {
+      const existing = customerPaymentTotals.get(payment.customerId) || {
+        totalUsd: 0,
+        count: 0,
+      };
+
+      // Convert localAmount to USD using exchange rate
+      let localAmountInUsd = 0;
+      if (payment.localAmount && payment.exchangeRate?.rate) {
+        localAmountInUsd = payment.localAmount / payment.exchangeRate.rate;
+      }
+
+      // Add amount (already in USD) + converted localAmount
+      existing.totalUsd += (payment.amount || 0) + localAmountInUsd;
+      existing.count += 1;
+
+      customerPaymentTotals.set(payment.customerId, existing);
+    });
+
+    // Sort by total USD and take top 10
+    const paymentTotals = Array.from(customerPaymentTotals.entries())
+      .map(([customerId, data]) => ({
+        customerId,
+        totalValue: data.totalUsd,
+        count: data.count,
+      }))
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 10);
 
     const topPaymentCustomers = await this.prisma.customer.findMany({
       where: {
         id: {
-          in: topByPayments.map((t) => t.customerId),
+          in: paymentTotals.map((t) => t.customerId),
         },
       },
       select: {
@@ -391,7 +424,7 @@ export class ReportsService {
       },
     });
 
-    const topByPaymentsDto: CustomerRankingDto[] = topByPayments.map(
+    const topByPaymentsDto: CustomerRankingDto[] = paymentTotals.map(
       (item, index) => {
         const customer = topPaymentCustomers.find(
           (c) => c.id === item.customerId,
@@ -401,7 +434,7 @@ export class ReportsService {
           customerName: customer
             ? `${customer.firstName} ${customer.lastName}`
             : 'N/A',
-          value: item._sum.amount || 0,
+          value: item.totalValue,
           rank: index + 1,
         };
       },
