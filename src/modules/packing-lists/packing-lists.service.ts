@@ -678,6 +678,65 @@ export class PackingListsService {
     };
   }
 
+  // Unfinalize packing list (SUPER_ADMIN only)
+  async unfinalize(id: string, userId: string) {
+    const packingList = await this.findOne(id);
+
+    // Check if packing list is finalized
+    if (packingList.status !== 'FINALIZED') {
+      throw new BadRequestException('Packing list is not finalized');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const unfinalizedPackingList = await tx.packingList.update({
+        where: { id },
+        data: {
+          status: 'DRAFT',
+        },
+        include: {
+          container: true,
+          packages: {
+            include: {
+              customer: true,
+            },
+          },
+          invoices: {
+            include: {
+              customer: true,
+            },
+          },
+        },
+      });
+
+      // Log the unfinalization action
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'UPDATE',
+          entity: 'PackingList',
+          entityId: id,
+          before: packingList,
+          after: unfinalizedPackingList as any,
+          metadata: {
+            action: 'UNFINALIZED',
+            existingInvoiceCount: packingList.invoices.length,
+          },
+        },
+      });
+
+      return unfinalizedPackingList;
+    });
+
+    this.logger.log(
+      `Packing list '${packingList.name}' unfinalized by user ${userId}`,
+    );
+
+    return {
+      packingList: result,
+      message: `Packing list unfinalized successfully. Can now add more packages.`,
+    };
+  }
+
   // Finalize packing list and generate invoices
   async finalize(id: string, userId: string) {
     const packingList = await this.findOne(id);
@@ -695,18 +754,26 @@ export class PackingListsService {
       );
     }
 
-    // Check if already finalized
-    if (packingList.invoices.length > 0) {
-      throw new BadRequestException(
-        'Packing list has already been finalized (invoices generated)',
-      );
-    }
-    if (packingList.status === 'FINALIZED') {
-      throw new BadRequestException('Packing list is already finalized');
-    }
+    // Filter packages that already have invoices
+    const existingInvoices = await this.prisma.invoice.findMany({
+      where: {
+        packingListId: id,
+      },
+      select: {
+        packageId: true,
+      },
+    });
 
-    // Check that all packages have valid shipping rates
-    const invalidPackages = packingList.packages.filter(
+    const packageIdsWithInvoices = new Set(
+      existingInvoices.map((inv) => inv.packageId),
+    );
+
+    const packagesWithoutInvoices = packingList.packages.filter(
+      (pkg) => !packageIdsWithInvoices.has(pkg.id),
+    );
+
+    // Check that all packages without invoices have valid shipping rates
+    const invalidPackages = packagesWithoutInvoices.filter(
       (pkg) => !pkg.shippingRate || pkg.shippingRate === 0,
     );
     if (invalidPackages.length > 0) {
@@ -717,14 +784,29 @@ export class PackingListsService {
       );
     }
 
-    // Generate invoices using the existing service
-    const invoices = await this.generateInvoicesForPackingList(id, userId);
+    let invoices: any[] = [];
+    let newInvoiceCount = 0;
 
-    // Send notifications for all generated invoices
-    await this.sendInvoiceNotifications(invoices);
+    // Only generate invoices for packages that don't have invoices yet
+    if (packagesWithoutInvoices.length > 0) {
+      // Generate invoices using the existing service
+      invoices = await this.generateInvoicesForPackingList(id, userId);
+      newInvoiceCount = invoices.length;
 
-    // Generate PDFs for all invoices
-    await this.generateInvoicePDFs(invoices);
+      // Send notifications for all generated invoices
+      await this.sendInvoiceNotifications(invoices);
+
+      // Generate PDFs for all invoices
+      await this.generateInvoicePDFs(invoices);
+
+      this.logger.log(
+        `Generated ${newInvoiceCount} new invoices for packing list '${packingList.name}'`,
+      );
+    } else {
+      this.logger.log(
+        `No new invoices to generate for packing list '${packingList.name}' (all packages already have invoices)`,
+      );
+    }
 
     // Update packing list as finalized (no further edits allowed)
     const result = await this.prisma.$transaction(async (tx) => {
@@ -761,8 +843,11 @@ export class PackingListsService {
           before: packingList,
           after: finalizedPackingList as any,
           metadata: {
-            invoiceCount: invoices.length,
+            newInvoiceCount: newInvoiceCount,
+            totalInvoiceCount: invoices.length,
             packageCount: packingList.packages.length,
+            packagesWithoutInvoices: packagesWithoutInvoices.length,
+            existingInvoiceCount: existingInvoices.length,
           },
         },
       });
@@ -770,14 +855,25 @@ export class PackingListsService {
       return finalizedPackingList;
     });
 
+    const message =
+      newInvoiceCount > 0
+        ? `Packing list finalized successfully. ${newInvoiceCount} new invoice(s) generated.`
+        : `Packing list finalized successfully. No new invoices generated (all packages already have invoices).`;
+
     this.logger.log(
-      `Packing list '${packingList.name}' finalized with ${invoices.length} invoices generated`,
+      `Packing list '${packingList.name}' finalized with ${newInvoiceCount} new invoices generated`,
     );
 
     return {
       packingList: result,
       invoices,
-      message: `Packing list finalized successfully. ${invoices.length} invoice(s) generated.`,
+      message,
+      stats: {
+        newInvoiceCount,
+        totalPackageCount: packingList.packages.length,
+        packagesWithoutInvoices: packagesWithoutInvoices.length,
+        existingInvoiceCount: existingInvoices.length,
+      },
     };
   }
 

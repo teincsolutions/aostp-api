@@ -276,6 +276,31 @@ export class PackingListsController {
     return this.packingListsService.finalize(id, req.user.sub);
   }
 
+  @Post(':id/unfinalize')
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Unfinalize packing list (SUPER_ADMIN only)',
+    description:
+      'Sets packing list status back to DRAFT without changing invoices or sending notifications',
+  })
+  @ApiParam({ name: 'id', description: 'Packing list UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Packing list unfinalized successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Packing list not found',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - packing list is not finalized',
+  })
+  unfinalize(@Param('id') id: string, @Request() req: any) {
+    return this.packingListsService.unfinalize(id, req.user.sub);
+  }
+
   @Delete(':id')
   @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete packing list' })
