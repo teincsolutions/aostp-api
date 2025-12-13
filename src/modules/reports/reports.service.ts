@@ -107,6 +107,8 @@ export class ReportsService {
         },
         processedBy: {
           select: {
+            firstName: true,
+            lastName: true,
             email: true,
           },
         },
@@ -133,7 +135,7 @@ export class ReportsService {
       paymentMethod: p.paymentMethod,
       processedAt: p.processedAt,
       warehouse: p.customer.warehouse?.name || 'N/A',
-      processedBy: p.processedBy.email,
+      processedBy: `${p.processedBy.firstName} ${p.processedBy.lastName} <${p.processedBy.email}>`,
     }));
 
     // Aggregate totals by currency
