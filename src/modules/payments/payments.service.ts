@@ -200,12 +200,12 @@ export class PaymentsService {
           customer: {
             connect: { id: customerId },
           },
-          amount: roundedAmount,
+          amount: currency === 'USD' ? roundedAmount : 0,
           currency,
           exchangeRate: {
             connect: { id: exchangeRateId },
           },
-          localAmount,
+          localAmount: currency === 'GHS' ? localAmount : 0,
           paymentMethod,
           reference,
           notes: paymentNotes,
