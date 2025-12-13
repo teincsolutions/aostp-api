@@ -895,7 +895,7 @@ export class PDFService {
     const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
     const pillX = R - LAYOUT.pillW;
-    const pillY = H - 66;
+    const pillY = H - doc.page.margins.bottom - 70;
     doc
       .roundedRect(pillX, pillY, LAYOUT.pillW, LAYOUT.pillH, 3)
       .fill(theme.totalsBg);
@@ -913,7 +913,7 @@ export class PDFService {
     );
 
     // NB strip
-    const nbY = H - 36;
+    const nbY = H - doc.page.margins.bottom - 40;
     doc.rect(L, nbY, contentW, LAYOUT.nbStripH).fill(theme.nbStrip);
     doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
     writeLineClamped(
@@ -925,8 +925,8 @@ export class PDFService {
       'left',
     );
 
-    // Arrival / MoMo strip (single line)
-    const bottomY = nbY + LAYOUT.nbStripH + 2;
+    // Arrival / MoMo strip (single line) - ensure it stays within page bounds
+    const bottomY = H - doc.page.margins.bottom - 24;
     doc
       .font('Helvetica-Bold')
       .fontSize(LAYOUT.bottomInfoFont)
