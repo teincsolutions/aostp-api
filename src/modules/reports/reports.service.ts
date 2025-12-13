@@ -128,14 +128,14 @@ export class ReportsService {
     const paymentItems: PaymentItemDto[] = payments.map((p) => ({
       paymentCode: p.paymentCode,
       customerCode: p.customer.customerCode,
-      customerName: `${p.customer.firstName} ${p.customer.lastName}`,
+      customerName: `${p.customer.firstName}${p.customer.lastName ? ' ' + p.customer.lastName : ''}`,
       amount: p.amount,
       localAmount: p.localAmount,
       currency: p.currency,
       paymentMethod: p.paymentMethod,
       processedAt: p.processedAt,
       warehouse: p.customer.warehouse?.name || 'N/A',
-      processedBy: `${p.processedBy.firstName} ${p.processedBy.lastName} <${p.processedBy.email}>`,
+      processedBy: `${p.processedBy.firstName}${p.processedBy.lastName ? ' ' + p.processedBy.lastName : ''} <${p.processedBy.email}>`,
     }));
 
     // Aggregate totals by currency
@@ -351,7 +351,7 @@ export class ReportsService {
         return {
           customerCode: customer?.customerCode || 'N/A',
           customerName: customer
-            ? `${customer.firstName} ${customer.lastName}`
+            ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
             : 'N/A',
           value: item._sum.totalAmount || 0,
           rank: index + 1,
@@ -432,7 +432,7 @@ export class ReportsService {
         return {
           customerCode: customer?.customerCode || 'N/A',
           customerName: customer
-            ? `${customer.firstName} ${customer.lastName}`
+            ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
             : 'N/A',
           value: item.totalValue,
           rank: index + 1,
@@ -485,7 +485,7 @@ export class ReportsService {
       return {
         customerCode: customer?.customerCode || 'N/A',
         customerName: customer
-          ? `${customer.firstName} ${customer.lastName}`
+          ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
           : 'N/A',
         value: item._sum.cbm || 0,
         rank: index + 1,
@@ -529,7 +529,7 @@ export class ReportsService {
         return {
           customerCode: customer?.customerCode || 'N/A',
           customerName: customer
-            ? `${customer.firstName} ${customer.lastName}`
+            ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
             : 'N/A',
           value: item._sum.weight || 0,
           rank: index + 1,
@@ -628,7 +628,7 @@ export class ReportsService {
 
           customerDetails.set(p.customerId, {
             code: p.customer.customerCode,
-            name: `${p.customer.firstName} ${p.customer.lastName}`,
+            name: `${p.customer.firstName}${p.customer.lastName ? ' ' + p.customer.lastName : ''}`,
           });
         }
       });
@@ -763,7 +763,7 @@ export class ReportsService {
 
         return {
           customerCode: customer.customerCode,
-          customerName: `${customer.firstName} ${customer.lastName}`,
+          customerName: `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`,
           totalInvoices,
           totalInvoiceAmount,
           totalPayments,
@@ -850,7 +850,7 @@ export class ReportsService {
 
     const pickups: PickupItemDto[] = deliveries.map((d) => ({
       customerCode: d.customer.customerCode,
-      customerName: `${d.customer.firstName} ${d.customer.lastName}`,
+      customerName: `${d.customer.firstName}${d.customer.lastName ? ' ' + d.customer.lastName : ''}`,
       invoiceNumber: d.invoice.invoiceNumber,
       pickupCode: d.package.pickupCode || 'N/A',
       pickupDate: d.releaseDate,
@@ -1376,7 +1376,7 @@ export class ReportsService {
       return {
         customerCode: customer?.customerCode || 'N/A',
         customerName: customer
-          ? `${customer.firstName} ${customer.lastName}`
+          ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
           : 'N/A',
         totalAmount: Math.round((item._sum.totalAmount || 0) * 100) / 100,
         totalPaid: Math.round((item._sum.paidAmount || 0) * 100) / 100,
@@ -1481,7 +1481,7 @@ export class ReportsService {
         rank: index + 1,
         customerCode: customer?.customerCode || 'N/A',
         customerName: customer
-          ? `${customer.firstName} ${customer.lastName}`
+          ? `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`
           : 'N/A',
         totalCBM: Math.round((item._sum.cbm || 0) * 100) / 100,
         totalWeight: Math.round((item._sum.weight || 0) * 100) / 100,
@@ -1563,7 +1563,7 @@ export class ReportsService {
       id: item.id,
       intakeTrackingCode: item.trackingCode,
       customerCode: item.customer.customerCode,
-      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      customerName: `${item.customer.firstName}${item.customer.lastName ? ' ' + item.customer.lastName : ''}`,
       description: item.description,
       quantity: item.quantity,
       weight: item.weight,
@@ -1648,7 +1648,7 @@ export class ReportsService {
       id: item.id,
       invoiceNumber: item.invoiceNumber,
       customerCode: item.customer.customerCode,
-      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      customerName: `${item.customer.firstName}${item.customer.lastName ? ' ' + item.customer.lastName : ''}`,
       totalAmount: item.totalAmount,
       paidAmount: item.paidAmount,
       balance: item.balance,
@@ -1743,7 +1743,7 @@ export class ReportsService {
       id: item.id,
       trackingCode: item.trackingCode,
       customerCode: item.customer.customerCode,
-      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      customerName: `${item.customer.firstName}${item.customer.lastName ? ' ' + item.customer.lastName : ''}`,
       description: item.description,
       status: item.status,
       daysInWarehouse: item.daysInWarehouse,
@@ -1912,7 +1912,7 @@ export class ReportsService {
     const mappedItems = resultItems.map((item) => ({
       deliveryId: item.deliveryId,
       customerCode: item.customer.customerCode,
-      customerName: `${item.customer.firstName} ${item.customer.lastName}`,
+      customerName: `${item.customer.firstName}${item.customer.lastName ? ' ' + item.customer.lastName : ''}`,
       invoiceNumber: item.invoice.invoiceNumber,
       trackingCode: item.package.trackingCode,
       pickupCode: item.package.pickupCode,

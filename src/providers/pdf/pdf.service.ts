@@ -144,6 +144,7 @@ export interface ReceiptData extends PDFTemplateData {
   };
   payment: {
     amount: number;
+    localAmount: number;
     currency: string;
     reference?: string;
   };
@@ -152,6 +153,8 @@ export interface ReceiptData extends PDFTemplateData {
     total: number;
     paid: number;
     balance: number;
+    packingListName?: string;
+    packageCount?: number;
   }>;
   notes?: string;
 
@@ -333,45 +336,45 @@ function writeTextWrapped(
 }
 
 // =====================
-// LAYOUT CONSTANTS (tightened)
+// LAYOUT CONSTANTS (adjusted for A5)
 // =====================
 const LAYOUT = {
   // general
-  margin: 12, // was 16
-  topY: 6, // header top Y
-  line: 0.8,
+  margin: 16, // increased for A5
+  topY: 8, // header top Y
+  line: 1,
 
   // header/company/date
-  companyFont: 15, //
-  addressFont: 8,
-  dateBoxW: 80,
-  dateBoxH: 14,
-  dateFont: 11,
+  companyFont: 18, // larger for A5
+  addressFont: 9,
+  dateBoxW: 100, // wider for A5
+  dateBoxH: 16,
+  dateFont: 12,
 
   // colored band
-  bandHeight: 16, // was 20
-  bandFont: 10,
+  bandHeight: 20, // taller for A5
+  bandFont: 12,
 
   // package slab
-  pkgSlabH: 30, // was 22
-  pkgFont: 8,
+  pkgSlabH: 32,
+  pkgFont: 9,
 
   // table
-  headH: 24, // was 18
-  headFont: 8, // was 9
-  rowH: 11, // was 14
-  rowFont: 8, // was 9
+  headH: 26,
+  headFont: 10, // larger fonts for A5
+  rowH: 14,
+  rowFont: 10,
 
   // totals + strips
-  pillW: 130, // was 150
-  pillH: 20, // was 24
-  pillFont: 10,
-  nbStripH: 10, // was 14
-  nbFont: 7,
-  bottomInfoFont: 8,
+  pillW: 160, // wider for A5
+  pillH: 26,
+  pillFont: 12,
+  nbStripH: 12,
+  nbFont: 8,
+  bottomInfoFont: 9,
 
   // reserved vertical block at bottom (pill + strips area)
-  bottomReserved: 64, // reduced from ~86
+  bottomReserved: 76, // adjusted for larger elements
 };
 
 // =====================
@@ -515,8 +518,8 @@ export class PDFService {
   private async createPDF(config: PDFConfig): Promise<Buffer> {
     const chunks: Buffer[] = [];
 
-    // Use A4 for package intake receipts, A6 landscape for invoices/receipts
-    const pageSize = config.template === 'package-intake' ? 'A4' : 'A6';
+    // Use A4 for package intake receipts, A5 landscape for invoices/receipts
+    const pageSize = config.template === 'package-intake' ? 'A4' : 'A5';
     const pageLayout =
       config.template === 'package-intake' ? 'portrait' : 'landscape';
 
@@ -1276,7 +1279,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by ${this.companyInfo.name}`,
       L,
-      H - 22,
+      H - 28,
       contentW,
       'center',
     );
@@ -1487,6 +1490,14 @@ export class PDFService {
       contentW - (midX - L),
       'left',
     );
+    writeLineClamped(
+      doc,
+      `Contact: ${safe(data.customer.phone)}`,
+      midX,
+      metaY + 36,
+      contentW - (midX - L),
+      'left',
+    );
 
     // Amount box
     const boxW = 210;
@@ -1494,10 +1505,10 @@ export class PDFService {
     const boxX = L + (contentW - boxW) / 2;
     const boxY = metaY + 54; // Increased from 42 to account for extra row
     doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
-    doc.font('Helvetica-Bold').fontSize(11);
+    doc.font('Helvetica-Bold').fontSize(13);
     writeLineClamped(
       doc,
-      `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.amount)}`,
+      `Amount Paid: ${safe(data.payment.currency).toUpperCase()} ${fmt(data.payment.currency === 'GHS' ? data.payment.localAmount : data.payment.amount)}`,
       boxX,
       boxY + 6,
       boxW,
@@ -1506,15 +1517,19 @@ export class PDFService {
 
     // Amount in words
     const toWords = new ToWords({
-      localeCode: 'en-GH',
+      localeCode: data.payment.currency === 'GHS' ? 'en-GH' : 'en-US',
       converterOptions: {
         currency: true,
         ignoreDecimal: false,
         doNotAddOnly: false,
       },
     });
-    const amountInWords = toWords.convert(data.payment.amount);
-    doc.font('Helvetica-Oblique').fontSize(8);
+    const amountInWords = toWords.convert(
+      data.payment.currency === 'GHS'
+        ? data.payment.localAmount
+        : data.payment.amount,
+    );
+    doc.font('Helvetica-Oblique').fontSize(12);
     writeLineClamped(
       doc,
       `(${amountInWords})`,
@@ -1543,9 +1558,33 @@ export class PDFService {
       doc.font('Helvetica').fontSize(9);
       for (let i = 0; i < showCount; i++) {
         const inv = data.invoices[i];
+
+        // First line: Invoice number with amounts
         const line = `Invoice ${safe(inv.number)} | Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)} | Paid: ${fmt(inv.paid)} | Balance: ${fmt(inv.balance)}`;
         writeLineClamped(doc, line, L, y, contentW, 'left');
         y += rowH;
+
+        // Second line: Packing list and package details (if available)
+        if ((inv as any).packingListName || (inv as any).packageCount) {
+          doc.font('Helvetica').fontSize(8).fillColor('#666');
+          const detailParts: string[] = [];
+          if ((inv as any).packingListName) {
+            detailParts.push(`Packing List: ${(inv as any).packingListName}`);
+          }
+          if ((inv as any).packageCount) {
+            detailParts.push(`Packages: ${(inv as any).packageCount}`);
+          }
+          writeLineClamped(
+            doc,
+            `  ${detailParts.join(' | ')}`,
+            L + 10,
+            y,
+            contentW - 10,
+            'left',
+          );
+          doc.fillColor('#000'); // Reset color
+          y += rowH;
+        }
       }
 
       if (overflow > 0 && y <= maxY) {
@@ -1582,7 +1621,7 @@ export class PDFService {
       doc,
       `Generated on ${new Date().toLocaleDateString()} by AOSTP Logistics System`,
       L,
-      H - 22,
+      H - 28,
       contentW,
       'center',
     );

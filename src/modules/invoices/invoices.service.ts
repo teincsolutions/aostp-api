@@ -659,7 +659,7 @@ export class InvoicesService {
 
   async getPendingInvoices(customerId?: string) {
     const where: Prisma.InvoiceWhereInput = {
-      status: InvoiceStatus.UNPAID,
+      status: { not: InvoiceStatus.PAID },
       OR: [
         { paidAmount: 0 },
         {
@@ -956,7 +956,7 @@ export class InvoicesService {
       },
       customer: {
         code: invoice.customer.customerCode,
-        name: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+        name: `${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''}`,
         address: invoice.customer.address || '',
         phone: invoice.customer.phoneNumber || '',
         email: invoice.customer.email || '',
@@ -1044,7 +1044,7 @@ export class InvoicesService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Invoice PDF Updated - ${companyName}</h2>
-          <p>Dear ${invoice.customer.firstName} ${invoice.customer.lastName},</p>
+          <p>Dear ${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''},</p>
           <p>Your invoice PDF has been updated with the latest information.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>

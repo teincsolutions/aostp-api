@@ -24,17 +24,17 @@ export class CreateCustomerDto {
   @MaxLength(50)
   firstName: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Customer last name',
     example: 'Doe',
     minLength: 2,
     maxLength: 50,
   })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(2)
   @MaxLength(50)
-  lastName: string;
+  lastName?: string;
 
   @ApiPropertyOptional({
     description: 'Customer email address',

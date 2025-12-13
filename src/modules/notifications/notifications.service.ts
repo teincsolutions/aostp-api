@@ -258,7 +258,7 @@ export class NotificationsService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Package Received - AOSTP Logistics</h2>
-          <p>Dear ${pkg.customer.firstName} ${pkg.customer.lastName},</p>
+          <p>Dear ${pkg.customer.firstName}${pkg.customer.lastName ? ' ' + pkg.customer.lastName : ''},</p>
           <p>Your package has been received and registered in our system.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
@@ -324,7 +324,7 @@ export class NotificationsService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Package Picked Up - AOSTP Logistics</h2>
-          <p>Dear ${customer.firstName} ${customer.lastName},</p>
+          <p>Dear ${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''},</p>
           <p>We are pleased to inform you that your package has been successfully picked up.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
@@ -389,7 +389,7 @@ export class NotificationsService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Invoice Issued - AOSTP Logistics</h2>
-          <p>Dear ${invoice.customer.firstName} ${invoice.customer.lastName},</p>
+          <p>Dear ${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''},</p>
           <p>An invoice has been issued for your shipment.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
@@ -447,7 +447,7 @@ export class NotificationsService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Payment Received - AOSTP Logistics</h2>
-          <p>Dear ${payment.customer.firstName} ${payment.customer.lastName},</p>
+          <p>Dear ${payment.customer.firstName}${payment.customer.lastName ? ' ' + payment.customer.lastName : ''},</p>
           <p>We have received your payment. Thank you for your prompt payment.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Payment Code:</strong></td><td>${payment.paymentCode}</td></tr>
@@ -507,7 +507,7 @@ export class NotificationsService {
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Package Status Update - AOSTP Logistics</h2>
-          <p>Dear ${pkg.customer.firstName} ${pkg.customer.lastName},</p>
+          <p>Dear ${pkg.customer.firstName}${pkg.customer.lastName ? ' ' + pkg.customer.lastName : ''},</p>
           <p>Your package status has been updated.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Tracking Code:</strong></td><td>${pkg.trackingCode}</td></tr>
@@ -573,7 +573,7 @@ export class NotificationsService {
         const emailContent = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Container Arrival Notice - AOSTP Logistics</h2>
-            <p>Dear ${customer.firstName} ${customer.lastName},</p>
+            <p>Dear ${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''},</p>
             <p>We are pleased to inform you that the container carrying your shipment has arrived.</p>
             <table style="border-collapse: collapse; width: 100%;">
               <tr><td><strong>Container Number:</strong></td><td>${container.containerNumber}</td></tr>

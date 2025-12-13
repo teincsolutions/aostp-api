@@ -189,7 +189,7 @@ model Customer {
   id               String              @id @default(uuid())
   customerCode     String              @unique
   firstName        String
-  lastName         String
+  lastName         String?
   email            String?
   phoneNumber      String // Mandatory
   alternatePhone   String?

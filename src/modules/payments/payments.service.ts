@@ -140,7 +140,7 @@ export class PaymentsService {
             currency: 'GHS',
             customerEmail: customer.email || undefined,
             customerPhone: customer.phoneNumber,
-            customerName: `${customer.firstName} ${customer.lastName}`,
+            customerName: `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`,
             reference: paymentCode,
             description: `Payment for invoices: ${invoicesToPay.map((inv: any) => inv.invoiceNumber).join(', ')}`,
             callbackToken: callbackToken,
@@ -1215,6 +1215,17 @@ export class PaymentsService {
             totalAmount: true,
             paidAmount: true,
             balance: true,
+            packingList: {
+              select: {
+                id: true,
+                name: true,
+                packages: {
+                  select: {
+                    id: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -1243,12 +1254,13 @@ export class PaymentsService {
       },
       customer: {
         code: payment.customer.customerCode,
-        name: `${payment.customer.firstName} ${payment.customer.lastName}`,
+        name: `${payment.customer.firstName}${payment.customer.lastName ? ' ' + payment.customer.lastName : ''}`,
         phone: payment.customer.phoneNumber,
         email: payment.customer.email || undefined,
       },
       payment: {
         amount: payment.amount,
+        localAmount: payment.localAmount,
         currency: payment.currency,
         reference: payment.reference || undefined,
       },
@@ -1257,6 +1269,8 @@ export class PaymentsService {
         total: inv.totalAmount,
         paid: inv.paidAmount,
         balance: inv.balance,
+        packingListName: inv.packingList?.name,
+        packageCount: inv.packingList?.packages?.length || 0,
       })),
       notes: payment.notes ? `Payment Notes: ${payment.notes}` : undefined,
     };
