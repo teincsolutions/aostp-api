@@ -58,7 +58,7 @@ export class CustomersService {
       .replace(/\s/g, '')
       .toUpperCase();
     const phonePart = createCustomerDto.phoneNumber.slice(-5);
-    let customerCode = `${namePart}${phonePart}`;
+    let customerCode = `${namePart}-${phonePart}`;
     let counter = 0;
 
     // Ensure uniqueness

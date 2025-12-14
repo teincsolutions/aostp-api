@@ -934,7 +934,7 @@ export class PDFService {
     const phone = safe(this.companyInfo.phone);
     writeLineClamped(
       doc,
-      phone ? `MOMO: ${phone}` : `MOMO:`,
+      phone ? `CALL/WHATSAPP: ${phone}` : `CALL/WHATSAPP:`,
       L,
       bottomY,
       contentW * 0.5,
