@@ -756,7 +756,7 @@ export class PDFService {
       {
         x: L + contentW * 0.75 + 6,
         w: contentW * 0.22,
-        label: `AMOUNT (${currency})`,
+        label: `AMOUNT (USD})`,
         align: 'right' as const,
       },
     ];
@@ -1560,7 +1560,7 @@ export class PDFService {
         const inv = data.invoices[i];
 
         // First line: Invoice number with amounts
-        const line = `Invoice ${safe(inv.number)} | Total: ${safe(data.payment.currency).toUpperCase()} ${fmt(inv.total)} | Paid: ${fmt(inv.paid)} | Balance: ${fmt(inv.balance)}`;
+        const line = `Invoice ${safe(inv.number)} | Total: USD ${fmt(inv.total)} | Paid: USD ${fmt(inv.paid)} | Balance: USD ${fmt(inv.balance)}`;
         writeLineClamped(doc, line, L, y, contentW, 'left');
         y += rowH;
 
