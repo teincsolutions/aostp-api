@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PaymentSource } from '@prisma/client';
 
 export class PaymentItemDto {
   @ApiProperty({ description: 'Payment code', example: 'PAY-2025-001' })
@@ -29,6 +30,13 @@ export class PaymentItemDto {
   paymentMethod: string;
 
   @ApiProperty({
+    description: 'Payment source/origin (CR-02)',
+    enum: PaymentSource,
+    example: PaymentSource.PAID_IN_GHANA,
+  })
+  paymentSource: PaymentSource;
+
+  @ApiProperty({
     description: 'Processing timestamp',
     example: '2025-01-15T10:30:00Z',
   })
@@ -55,6 +63,24 @@ export class CurrencyTotalDto {
   total: number;
 }
 
+export class PaymentSourceTotalDto {
+  @ApiProperty({
+    description: 'Payment source',
+    enum: PaymentSource,
+    example: PaymentSource.PAID_IN_GHANA,
+  })
+  paymentSource: PaymentSource;
+
+  @ApiProperty({ description: 'Number of payments', example: 50 })
+  count: number;
+
+  @ApiProperty({ description: 'Total amount', example: 15000.0 })
+  totalAmount: number;
+
+  @ApiProperty({ description: 'Total local amount', example: 150000.0 })
+  totalLocalAmount: number;
+}
+
 export class PaymentTotalsDto {
   @ApiProperty({ description: 'Total in USD', example: 25000.0 })
   usdTotal: number;
@@ -67,6 +93,12 @@ export class PaymentTotalsDto {
     type: [CurrencyTotalDto],
   })
   otherCurrencies: CurrencyTotalDto[];
+
+  @ApiProperty({
+    description: 'Breakdown by payment source (CR-02)',
+    type: [PaymentSourceTotalDto],
+  })
+  byPaymentSource: PaymentSourceTotalDto[];
 }
 
 export class PaymentsReportResponseDto {

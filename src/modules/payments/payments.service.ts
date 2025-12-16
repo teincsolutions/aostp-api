@@ -18,6 +18,7 @@ import {
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
+import { S3Service } from '../../providers/storage/s3.service';
 import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
 import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
 import { HubtelCallbackData } from 'src/providers/payment-gateway/providers/hubtel.provider';
@@ -32,6 +33,7 @@ export class PaymentsService {
     private readonly paymentGatewayService: PaymentGatewayService,
     private readonly callbackTokenService: CallbackTokenService,
     private readonly pdfService: PDFService,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(
@@ -47,6 +49,8 @@ export class PaymentsService {
       reference,
       invoiceIds,
       notes,
+      paymentSource,
+      referenceDocumentKey,
     } = createPaymentDto;
 
     // Verify customer exists
@@ -209,6 +213,8 @@ export class PaymentsService {
           paymentMethod,
           reference,
           notes: paymentNotes,
+          paymentSource, // CR-02: Payment source field
+          referenceDocumentKey, // CR-01: Reference document key
           gatewayStatus: isGatewayPayment
             ? GatewayPaymentStatus.PENDING
             : undefined,
@@ -260,11 +266,13 @@ export class PaymentsService {
             localAmount,
             paymentMethod,
             isGatewayPayment,
+            paymentSource: paymentSource, // CR-02: Include payment source in audit log
+            hasReferenceDocument: !!referenceDocumentKey, // CR-01: Track if document was uploaded
           },
         },
       });
 
-      return payment;
+      return payment as any;
     });
 
     // Generate receipt for cash payments immediately
@@ -299,6 +307,7 @@ export class PaymentsService {
       currency?: string;
       packingListId?: string;
       warehouseId?: string;
+      paymentSource?: string; // CR-02
     },
   ) {
     const { page = 1, limit = 20 } = paginationDto;
@@ -316,6 +325,11 @@ export class PaymentsService {
 
     if (filters?.currency) {
       where.currency = filters.currency;
+    }
+
+    // CR-02: Filter by payment source
+    if (filters?.paymentSource) {
+      where.paymentSource = filters.paymentSource as any;
     }
 
     if (filters?.dateFrom || filters?.dateTo) {
@@ -364,6 +378,8 @@ export class PaymentsService {
           paymentMethod: true,
           reference: true,
           notes: true,
+          paymentSource: true, // CR-02
+          referenceDocumentKey: true, // CR-01
           processedById: true,
           processedAt: true,
           createdAt: true,
@@ -463,6 +479,8 @@ export class PaymentsService {
         paymentMethod: true,
         reference: true,
         notes: true,
+        paymentSource: true, // CR-02
+        referenceDocumentKey: true, // CR-01
         processedById: true,
         processedAt: true,
         createdAt: true,
@@ -611,33 +629,43 @@ export class PaymentsService {
       }
     }
 
-    const [totalStats, methodStats, currencyStats] = await Promise.all([
-      // Total payments and amount
-      this.prisma.payment.aggregate({
-        where,
-        _count: { id: true },
-        _sum: { amount: true, localAmount: true },
-        _avg: { amount: true },
-      }),
+    const [totalStats, methodStats, currencyStats, sourceStats] =
+      await Promise.all([
+        // Total payments and amount
+        this.prisma.payment.aggregate({
+          where,
+          _count: { id: true },
+          _sum: { amount: true, localAmount: true },
+          _avg: { amount: true },
+        }),
 
-      // By payment method
-      this.prisma.payment.groupBy({
-        by: ['paymentMethod'],
-        where,
-        _count: { id: true },
-        _sum: { amount: true, localAmount: true },
-        orderBy: { _count: { id: 'desc' } },
-      }),
+        // By payment method
+        this.prisma.payment.groupBy({
+          by: ['paymentMethod'],
+          where,
+          _count: { id: true },
+          _sum: { amount: true, localAmount: true },
+          orderBy: { _count: { id: 'desc' } },
+        }),
 
-      // By currency
-      this.prisma.payment.groupBy({
-        by: ['currency'],
-        where,
-        _count: { id: true },
-        _sum: { amount: true, localAmount: true },
-        orderBy: { _sum: { amount: 'desc' } },
-      }),
-    ]);
+        // By currency
+        this.prisma.payment.groupBy({
+          by: ['currency'],
+          where,
+          _count: { id: true },
+          _sum: { amount: true, localAmount: true },
+          orderBy: { _sum: { amount: 'desc' } },
+        }),
+
+        // CR-02: By payment source
+        this.prisma.payment.groupBy({
+          by: ['paymentSource'],
+          where,
+          _count: { id: true },
+          _sum: { amount: true, localAmount: true },
+          orderBy: { _count: { id: 'desc' } },
+        }),
+      ]);
 
     return {
       totals: {
@@ -648,6 +676,7 @@ export class PaymentsService {
       },
       byPaymentMethod: methodStats,
       byCurrency: currencyStats,
+      byPaymentSource: sourceStats, // CR-02: Include payment source breakdown
     };
   }
 
@@ -1300,5 +1329,26 @@ export class PaymentsService {
    */
   async getPaymentReceiptUrl(receiptKey: string): Promise<string> {
     return await this.pdfService.generateSignedDownloadUrl(receiptKey);
+  }
+
+  /**
+   * Get signed download URL for a payment reference document (CR-01)
+   */
+  async getPaymentDocumentUrl(documentKey: string): Promise<string> {
+    try {
+      // Generate presigned URL valid for 1 hour
+      const url = await this.s3Service.generatePresignedDownloadUrl(
+        documentKey,
+        3600,
+      );
+      return url;
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate presigned URL for document ${documentKey}: ${error.message}`,
+      );
+      throw new NotFoundException(
+        'Payment reference document not found or could not be accessed',
+      );
+    }
   }
 }

@@ -6,12 +6,14 @@ import {
   IsArray,
   Min,
   ValidateIf,
+  IsEnum,
   registerDecorator,
   ValidationOptions,
   ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDecimalPlaces } from '../../../shared/validators/decimal.validator';
+import { PaymentSource } from '@prisma/client';
 
 // Custom validator for Direct Momo Transfer reference requirement
 function IsReferenceRequired(validationOptions?: ValidationOptions) {
@@ -90,4 +92,22 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({
+    description: 'Payment source/origin (CR-02)',
+    enum: PaymentSource,
+    default: PaymentSource.PAID_IN_GHANA,
+    example: PaymentSource.PAID_IN_GHANA,
+  })
+  @IsEnum(PaymentSource)
+  @IsOptional()
+  paymentSource?: PaymentSource = PaymentSource.PAID_IN_GHANA;
+
+  @ApiPropertyOptional({
+    description:
+      'S3 key for payment reference document (CR-01). Upload document via /uploads/payments endpoint first.',
+  })
+  @IsOptional()
+  @IsString()
+  referenceDocumentKey?: string;
 }

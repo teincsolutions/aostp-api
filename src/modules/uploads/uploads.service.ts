@@ -5,6 +5,7 @@ import {
   UploadPackageDto,
   UploadUserDto,
   UploadLogDto,
+  UploadPaymentDto,
   BucketType,
 } from './dto';
 
@@ -14,6 +15,7 @@ export class UploadsService {
   private readonly packagesBucket: string;
   private readonly usersBucket: string;
   private readonly logsBucket: string;
+  private readonly paymentsBucket: string;
 
   constructor(
     private readonly s3Service: S3Service,
@@ -28,6 +30,11 @@ export class UploadsService {
     this.logsBucket = this.configService.getOrThrow<string>(
       'AWS_LOGS_BUCKET_NAME',
     );
+    // For payments, we'll use packages bucket as default if no separate bucket is configured
+    this.paymentsBucket = this.configService.get<string>(
+      'AWS_PAYMENTS_BUCKET_NAME',
+      this.packagesBucket,
+    );
   }
 
   /**
@@ -41,6 +48,8 @@ export class UploadsService {
         return this.usersBucket;
       case BucketType.LOGS:
         return this.logsBucket;
+      case BucketType.PAYMENTS:
+        return this.paymentsBucket;
       default:
         throw new BadRequestException(
           `Invalid bucket type: ${bucketType as string}`,
@@ -148,6 +157,68 @@ export class UploadsService {
     const extension = fileName.split('.').pop() || 'log';
     const fileNameUnique = `${timestamp}_${random}.${extension}`;
     return `${folder}/${fileNameUnique}`;
+  }
+
+  /**
+   * Upload a file for payments (CR-01)
+   * Supports PDF, JPG, PNG files up to 5MB
+   */
+  async uploadPaymentFile(
+    dto: UploadPaymentDto,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<S3UploadResult> {
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (buffer.length > maxSize) {
+      throw new BadRequestException(
+        'File size exceeds 5MB limit for payment reference documents',
+      );
+    }
+
+    // Validate file type
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+    ];
+    if (!allowedTypes.includes(contentType.toLowerCase())) {
+      throw new BadRequestException(
+        'Only PDF, JPG, and PNG files are allowed for payment reference documents',
+      );
+    }
+
+    const bucket = dto.bucketType
+      ? this.getBucketByType(dto.bucketType)
+      : this.paymentsBucket;
+    const key = this.generatePaymentKey(
+      dto.folder,
+      dto.paymentId,
+      dto.fileName || 'document',
+    );
+    return this.s3Service.uploadFileWithBucket(
+      bucket,
+      key,
+      buffer,
+      contentType,
+    );
+  }
+
+  /**
+   * Generate key for payment uploads (CR-01)
+   * Structure: folder/paymentId/timestamp_random.extension
+   */
+  private generatePaymentKey(
+    folder: string,
+    paymentId: string,
+    fileName: string,
+  ): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const extension = fileName.split('.').pop() || 'bin';
+    const fileNameUnique = `${timestamp}_${random}.${extension}`;
+    return `${folder}/${paymentId}/${fileNameUnique}`;
   }
 
   /**

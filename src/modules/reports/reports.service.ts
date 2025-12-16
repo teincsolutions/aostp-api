@@ -6,6 +6,7 @@ import {
   PaymentItemDto,
   PaymentTotalsDto,
   CurrencyTotalDto,
+  PaymentSourceTotalDto,
 } from './dto/payments-report.dto';
 import {
   PackingListReportResponseDto,
@@ -92,6 +93,7 @@ export class ReportsService {
         localAmount: true,
         currency: true,
         paymentMethod: true,
+        paymentSource: true, // CR-02
         processedAt: true,
         customer: {
           select: {
@@ -133,6 +135,7 @@ export class ReportsService {
       localAmount: p.localAmount,
       currency: p.currency,
       paymentMethod: p.paymentMethod,
+      paymentSource: p.paymentSource, // CR-02
       processedAt: p.processedAt,
       warehouse: p.customer.warehouse?.name || 'N/A',
       processedBy: `${p.processedBy.firstName}${p.processedBy.lastName ? ' ' + p.processedBy.lastName : ''} <${p.processedBy.email}>`,
@@ -160,10 +163,31 @@ export class ReportsService {
         total: a._sum.amount || 0,
       }));
 
+    // CR-02: Aggregate by payment source
+    const sourceAggregates = await this.prisma.payment.groupBy({
+      by: ['paymentSource'],
+      where,
+      _count: {
+        id: true,
+      },
+      _sum: {
+        amount: true,
+        localAmount: true,
+      },
+    });
+
+    const byPaymentSource = sourceAggregates.map((s) => ({
+      paymentSource: s.paymentSource,
+      count: s._count.id,
+      totalAmount: s._sum.amount || 0,
+      totalLocalAmount: s._sum.localAmount || 0,
+    }));
+
     const totals: PaymentTotalsDto = {
       usdTotal,
       ghsTotal,
       otherCurrencies,
+      byPaymentSource, // CR-02
     };
 
     return {

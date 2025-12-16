@@ -1,6 +1,7 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
+import { PaymentSource } from '@prisma/client';
 
 export class FilterPaymentDto extends PaginationDto {
   @ApiPropertyOptional({
@@ -66,4 +67,13 @@ export class FilterPaymentDto extends PaginationDto {
   @IsOptional()
   @IsString()
   warehouseId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by payment source (CR-02)',
+    enum: PaymentSource,
+    example: PaymentSource.PAID_IN_GHANA,
+  })
+  @IsOptional()
+  @IsEnum(PaymentSource)
+  paymentSource?: PaymentSource;
 }

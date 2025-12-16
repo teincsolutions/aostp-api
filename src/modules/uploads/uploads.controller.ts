@@ -6,6 +6,7 @@ import {
   Body,
   BadRequestException,
   UploadedFiles,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -13,13 +14,25 @@ import {
   ApiBody,
   ApiResponse,
   ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiTags,
 } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Multer } from 'multer';
 import { UploadsService } from './uploads.service';
-import { UploadPackageDto, UploadUserDto, S3UploadResultDto } from './dto';
+import {
+  UploadPackageDto,
+  UploadUserDto,
+  UploadPaymentDto,
+  S3UploadResultDto,
+} from './dto';
 import { Public } from '../../shared/decorators/public.decorator';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { RolesGuard } from '../../shared/guards/roles.guard';
+import { Roles } from '../../shared/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
+@ApiTags('uploads')
 @Controller('uploads')
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
@@ -147,6 +160,75 @@ export class UploadsController {
     }
 
     const result = await this.uploadsService.uploadUserFile(
+      dto,
+      file.buffer,
+      file.mimetype,
+    );
+    return result;
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PAYMENT_CLERK, UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Upload a reference document for a payment (CR-01)',
+    description:
+      'Uploads a payment reference document to S3. Supports PDF, JPG, PNG files up to 5MB. Only accessible by Payment Clerk, Finance Manager, and Super Admin.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'The reference document to upload (PDF, JPG, PNG)',
+        },
+        folder: {
+          type: 'string',
+          enum: ['reference-documents'],
+          description: 'Folder to upload the file to',
+          default: 'reference-documents',
+        },
+        paymentId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'UUID of the payment',
+        },
+        bucketType: {
+          type: 'string',
+          enum: ['packages', 'users', 'logs', 'payments'],
+          description: 'Type of bucket to upload to (optional)',
+        },
+        fileName: {
+          type: 'string',
+          description: 'Original file name (optional)',
+        },
+      },
+      required: ['file', 'folder', 'paymentId'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    type: S3UploadResultDto,
+    description: 'Payment reference document uploaded successfully',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Bad request - File missing, invalid type, or exceeds 5MB size limit',
+  })
+  @Post('payments')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPaymentFile(
+    @Body() dto: UploadPaymentDto,
+    @UploadedFile() file: Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    const result = await this.uploadsService.uploadPaymentFile(
       dto,
       file.buffer,
       file.mimetype,

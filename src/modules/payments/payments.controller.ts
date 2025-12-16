@@ -194,4 +194,39 @@ export class PaymentsController {
     );
     return { url, key: payment.receiptKey };
   }
+
+  @Get(':id/document')
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Get payment reference document URL (CR-01)',
+    description:
+      'Generates a presigned URL to download the payment reference document. Only accessible by Finance Manager and Super Admin.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Document URL retrieved',
+    schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Presigned download URL' },
+        key: { type: 'string', description: 'S3 object key' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Payment or document not found' })
+  async getPaymentDocument(@Param('id') id: string) {
+    const payment = await this.paymentsService.findOne(id);
+
+    if (!payment.referenceDocumentKey) {
+      throw new NotFoundException(
+        'No reference document found for this payment',
+      );
+    }
+
+    // Get the signed URL for the document
+    const url = await this.paymentsService.getPaymentDocumentUrl(
+      payment.referenceDocumentKey,
+    );
+    return { url, key: payment.referenceDocumentKey };
+  }
 }

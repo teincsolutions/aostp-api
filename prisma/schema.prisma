@@ -70,6 +70,11 @@ enum PaymentGatewayStatus {
   REFUNDED
 }
 
+enum PaymentSource {
+  PAID_IN_GHANA
+  PAID_IN_CHINA
+}
+
 enum InvoiceStatus {
   PAID
   UNPAID
@@ -505,14 +510,21 @@ model Payment {
   gatewayTransactionId String? // ID from payment gateway (e.g. Hubtel checkout ID)
   gatewayStatus        PaymentGatewayStatus? // Status from payment gateway
 
+  // Payment source (CR-02)
+  paymentSource PaymentSource @default(PAID_IN_GHANA)
+
   // Receipt
   receiptKey String? // S3 key for payment receipt PDF
+
+  // Reference document (CR-01)
+  referenceDocumentKey String? // S3 key for payment reference document (PDF, JPG, PNG)
 
   // Relations
   invoices Invoice[]
 
   @@index([paymentCode])
   @@index([customerId])
+  @@index([paymentSource])
 }
 
 model ExchangeRate {
