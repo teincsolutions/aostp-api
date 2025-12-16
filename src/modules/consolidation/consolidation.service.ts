@@ -131,6 +131,7 @@ export class ConsolidationService {
           quantity: totalQuantity,
           shippingMode,
           airShippingType,
+          shippingRate: sourcePackages[0].shippingRate, // to be calculated later
           isConsolidated: true,
           status: 'RECEIVED',
           warehouseId,

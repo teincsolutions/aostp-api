@@ -38,6 +38,7 @@ export interface InvoiceData extends PDFTemplateData {
     date: string; // top-right
     dueDate: string; // arrival / est. arrival
     status: string; // preserved
+    shippingRate?: number; // shipping rate to display
   };
 
   customer: {
@@ -64,6 +65,7 @@ export interface InvoiceData extends PDFTemplateData {
     weightKg?: number;
     cbm?: number;
     destinationCity?: string;
+    shippingRate: number;
     warehouse?: string;
     pickupCode?: string;
   };
@@ -348,8 +350,10 @@ const LAYOUT = {
   companyFont: 18, // larger for A5
   addressFont: 9,
   dateBoxW: 100, // wider for A5
+  rateBoxW: 150,
   dateBoxH: 16,
   dateFont: 12,
+  rateFont: 10,
 
   // colored band
   bandHeight: 20, // taller for A5
@@ -584,6 +588,7 @@ export class PDFService {
     R: number,
   ): number {
     const dateBoxX = R - LAYOUT.dateBoxW;
+    const rateBoxX = R - LAYOUT.rateBoxW;
     const dateBoxY = LAYOUT.topY;
 
     // Company logo (top-left)
@@ -631,7 +636,22 @@ export class PDFService {
       'center',
     );
 
-    // Branches (below date box) - allow wrapping
+    // Shipping rate below date box
+    let nextY = dateBoxY + LAYOUT.dateBoxH + 4;
+    if (data.package?.shippingRate != null) {
+      doc.fontSize(LAYOUT.rateFont).font('Helvetica-Bold');
+      writeLineClamped(
+        doc,
+        `Shipping Rate: ${data.currency || 'USD'} ${fmt(data.package.shippingRate)}`,
+        rateBoxX,
+        nextY,
+        LAYOUT.rateBoxW,
+        'center',
+      );
+      nextY += 13;
+    }
+
+    // Branches (below date box or shipping rate)
     let branchesHeight = 0;
     if (safe(this.companyInfo.branches)) {
       doc.font('Helvetica').fontSize(LAYOUT.addressFont).fillColor('#000');
@@ -639,7 +659,7 @@ export class PDFService {
         doc,
         `Branches: ${safe(this.companyInfo.branches)}`,
         dateBoxX - 50,
-        dateBoxY + LAYOUT.dateBoxH + 4,
+        nextY,
         130,
         'right',
       );
@@ -648,7 +668,7 @@ export class PDFService {
     // Return next Y position based on max height of name or branches
     const maxHeight = Math.max(
       nameHeight + LAYOUT.topY,
-      dateBoxY + LAYOUT.dateBoxH + 4 + branchesHeight,
+      nextY + branchesHeight,
     );
     return maxHeight + 12; // Return next Y position
   }
@@ -756,7 +776,7 @@ export class PDFService {
       {
         x: L + contentW * 0.75 + 6,
         w: contentW * 0.22,
-        label: `AMOUNT (USD})`,
+        label: `AMOUNT (USD)`,
         align: 'right' as const,
       },
     ];

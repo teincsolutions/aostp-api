@@ -50,6 +50,7 @@ export class InvoicesService {
             customerId: true,
             shippingMode: true,
             airShippingType: true,
+            shippingRate: true,
             quantity: true,
             shippingCost: true,
             shippingCurrency: true,
@@ -210,6 +211,7 @@ export class InvoicesService {
         cbm: true,
         customerId: true,
         shippingMode: true,
+        shippingRate: true,
         airShippingType: true,
         quantity: true,
         shippingCost: true,
@@ -628,6 +630,7 @@ export class InvoicesService {
               id: true,
               trackingCode: true,
               description: true,
+              shippingRate: true,
               weight: true,
               cbm: true,
             },
@@ -852,6 +855,10 @@ export class InvoicesService {
   async downloadInvoicePdf(id: string): Promise<string> {
     const invoice = await this.findOne(id);
 
+    const pkg = await this.prisma.package.findUnique({
+      where: { id: invoice.packageId || '' },
+    });
+
     // If PDF key doesn't exist, generate PDF on-the-fly
     if (!invoice.invoicePdfKey) {
       try {
@@ -859,7 +866,10 @@ export class InvoicesService {
           `Generating PDF on-demand for invoice ${invoice.invoiceNumber}`,
         );
 
-        const result = await this.generateInvoicePdfData(invoice);
+        const result = await this.generateInvoicePdfData(
+          invoice,
+          pkg?.shippingRate || 0,
+        );
         return result.url;
       } catch (error) {
         this.logger.error(
@@ -883,11 +893,17 @@ export class InvoicesService {
     userId: string,
   ): Promise<{ url: string; key: string }> {
     const invoice = await this.findOne(id);
+    const pkg = await this.prisma.package.findUnique({
+      where: { id: invoice.packageId || '' },
+    });
 
     try {
       this.logger.log(`Regenerating PDF for invoice ${invoice.invoiceNumber}`);
 
-      const result = await this.generateInvoicePdfData(invoice);
+      const result = await this.generateInvoicePdfData(
+        invoice,
+        pkg?.shippingRate || 0,
+      );
 
       // Log the action
       await this.prisma.auditLog.create({
@@ -936,6 +952,7 @@ export class InvoicesService {
    */
   private async generateInvoicePdfData(
     invoice: any,
+    shippingRate: number = 0,
   ): Promise<{ url: string; key: string }> {
     // Get company info from PDF service (which uses config)
     const companyInfo = {
@@ -982,6 +999,7 @@ export class InvoicesService {
             shippingMode: invoice.package.shippingMode,
             airType: invoice.package.airShippingType,
             quantity: invoice.package.quantity,
+            shippingRate,
             weightKg: invoice.package.weight,
             cbm: invoice.package.cbm,
             destinationCity: invoice.package.destinationCity,

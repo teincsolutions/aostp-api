@@ -950,6 +950,7 @@ export class PackingListsService {
                 airType: invoice.package.airShippingType,
                 quantity: invoice.package.quantity,
                 weightKg: invoice.package.weight,
+                shippingRate: invoice.package.shippingRate,
                 cbm: invoice.package.cbm,
                 destinationCity: invoice.package.destinationCity,
                 warehouse: invoice.package.warehouse?.name,
