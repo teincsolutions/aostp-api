@@ -71,7 +71,7 @@ export class UploadPaymentDto {
   bucketType?: BucketType;
   fileName?: string;
   folder: PaymentFolder;
-  paymentId: string; // UUID
+  // Note: No paymentId required - documents uploaded before payment creation
 }
 ```
 
@@ -87,9 +87,9 @@ export class UploadPaymentDto {
 1. `uploadPaymentFile()` - Handles payment document uploads
    - Validates file size (max 5MB)
    - Validates file type (PDF, JPG, PNG only)
-   - Generates secure S3 key with payment ID
+   - Generates secure S3 key with UUID
 2. `generatePaymentKey()` - Creates structured S3 keys
-   - Format: `reference-documents/{paymentId}/{timestamp}_{random}.{ext}`
+   - Format: `reference-documents/{uuid}/{timestamp}_{random}.{ext}`
 
 **Configuration:**
 
@@ -392,7 +392,7 @@ Response: {
 
 ### Integration Testing
 
-- [ ] Upload document → Create payment → Download document flow
+- [ ] Upload document → Create payment → Download document flow (CORRECT ORDER: Upload first, then create payment with document key)
 - [ ] Test role-based access control for document upload
 - [ ] Test role-based access control for document download
 - [ ] Test payment source filter with pagination

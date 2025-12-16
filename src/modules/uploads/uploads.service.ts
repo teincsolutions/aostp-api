@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { S3Service, S3UploadResult } from '../../providers/storage/s3.service';
 import {
   UploadPackageDto,
@@ -168,6 +169,10 @@ export class UploadsService {
     buffer: Buffer,
     contentType: string,
   ): Promise<S3UploadResult> {
+    this.logger.log(
+      `Starting payment file upload: folder=${dto.folder}, fileName=${dto.fileName}, size=${buffer.length} bytes`,
+    );
+
     // Validate file size (5MB max)
     const maxSize = 5 * 1024 * 1024; // 5MB in bytes
     if (buffer.length > maxSize) {
@@ -191,12 +196,14 @@ export class UploadsService {
 
     const bucket = dto.bucketType
       ? this.getBucketByType(dto.bucketType)
-      : this.paymentsBucket;
-    const key = this.generatePaymentKey(
-      dto.folder,
-      dto.paymentId,
-      dto.fileName || 'document',
-    );
+      : this.packagesBucket; // Use packages bucket as default for payments
+
+    this.logger.log(`Using bucket: ${bucket} for payment document upload`);
+
+    const key = this.generatePaymentKey(dto.folder, dto.fileName || 'document');
+
+    this.logger.log(`Generated S3 key: ${key}`);
+
     return this.s3Service.uploadFileWithBucket(
       bucket,
       key,
@@ -207,18 +214,15 @@ export class UploadsService {
 
   /**
    * Generate key for payment uploads (CR-01)
-   * Structure: folder/paymentId/timestamp_random.extension
+   * Structure: folder/uuid/timestamp_random.extension
    */
-  private generatePaymentKey(
-    folder: string,
-    paymentId: string,
-    fileName: string,
-  ): string {
+  private generatePaymentKey(folder: string, fileName: string): string {
+    const uuid = randomUUID();
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 15);
     const extension = fileName.split('.').pop() || 'bin';
     const fileNameUnique = `${timestamp}_${random}.${extension}`;
-    return `${folder}/${paymentId}/${fileNameUnique}`;
+    return `${folder}/${uuid}/${fileNameUnique}`;
   }
 
   /**

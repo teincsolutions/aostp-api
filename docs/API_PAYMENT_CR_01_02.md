@@ -58,7 +58,6 @@ POST /api/v1/uploads/payments
 |-------|------|----------|-------------|
 | `file` | File | Yes | Document file (PDF, JPG, PNG) |
 | `folder` | String | Yes | Must be `"reference-documents"` |
-| `paymentId` | UUID | Yes | UUID of the payment |
 | `bucketType` | String | No | Bucket type (default: payments) |
 | `fileName` | String | No | Original file name |
 
@@ -73,8 +72,8 @@ POST /api/v1/uploads/payments
 
 ```json
 {
-  "url": "https://cdn.aostp.com/payments/reference-documents/550e8400-e29b-41d4-a716-446655440000/1734345600_abc123def.pdf",
-  "key": "reference-documents/550e8400-e29b-41d4-a716-446655440000/1734345600_abc123def.pdf",
+  "url": "https://cdn.aostp.com/payments/reference-documents/f47ac10b-58cc-4372-a567-0e02b2c3d479/1734345600_abc123def.pdf",
+  "key": "reference-documents/f47ac10b-58cc-4372-a567-0e02b2c3d479/1734345600_abc123def.pdf",
   "size": 1048576,
   "bucket": "aostp-payments"
 }
@@ -127,8 +126,7 @@ POST /api/v1/uploads/payments
 curl -X POST "https://api.aostp.com/api/v1/uploads/payments" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -F "file=@/path/to/receipt.pdf" \
-  -F "folder=reference-documents" \
-  -F "paymentId=550e8400-e29b-41d4-a716-446655440000"
+  -F "folder=reference-documents"
 ```
 
 ### JavaScript Example
@@ -137,7 +135,6 @@ curl -X POST "https://api.aostp.com/api/v1/uploads/payments" \
 const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 formData.append('folder', 'reference-documents');
-formData.append('paymentId', '550e8400-e29b-41d4-a716-446655440000');
 
 const response = await fetch('/api/v1/uploads/payments', {
   method: 'POST',
@@ -149,6 +146,49 @@ const response = await fetch('/api/v1/uploads/payments', {
 
 const result = await response.json();
 console.log('Document uploaded:', result.key);
+// Use result.key in payment creation
+```
+
+---
+
+## Workflow: Upload Document → Create Payment
+
+**Correct Order of Operations:**
+
+1. **First:** Upload the reference document via `POST /uploads/payments`
+2. **Then:** Use the returned `key` in payment creation
+
+### Step 1: Upload Document
+
+```javascript
+// Upload document first
+const uploadResponse = await fetch('/api/v1/uploads/payments', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+  body: formData, // with file and folder
+});
+
+const uploadResult = await uploadResponse.json();
+const documentKey = uploadResult.key; // Save this key
+```
+
+### Step 2: Create Payment with Document Reference
+
+```javascript
+// Use the document key in payment creation
+const paymentResponse = await fetch('/api/v1/payments', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    customerId: '550e8400-e29b-41d4-a716-446655440000',
+    amount: 1500.0,
+    // ... other payment fields
+    referenceDocumentKey: documentKey, // Use key from upload
+  }),
+});
 ```
 
 ---
@@ -188,7 +228,7 @@ POST /api/v1/payments
   "invoiceIds": ["770e8400-e29b-41d4-a716-446655440002"],
   "notes": "Payment via wire transfer",
   "paymentSource": "PAID_IN_GHANA",
-  "referenceDocumentKey": "reference-documents/550e8400-e29b-41d4-a716-446655440000/1734345600_abc123def.pdf"
+  "referenceDocumentKey": "reference-documents/f47ac10b-58cc-4372-a567-0e02b2c3d479/1734345600_abc123def.pdf"
 }
 ```
 

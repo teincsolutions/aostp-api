@@ -48,6 +48,10 @@ export class S3Service {
           'AWS_SECRET_ACCESS_KEY',
         ),
       },
+      // Add timeout configuration for Hetzner Object Storage
+      requestTimeout: 30000, // 30 seconds
+      connectionTimeout: 10000, // 10 seconds
+      maxAttempts: 3, // Retry up to 3 times
     };
 
     if (this.endpoint) {
