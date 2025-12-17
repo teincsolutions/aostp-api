@@ -486,9 +486,11 @@ export class InvoicesService {
             select: {
               id: true,
               trackingCode: true,
+              pickupCode: true,
               description: true,
               weight: true,
               cbm: true,
+              shippingCost: true,
             },
           },
           payments: {
@@ -684,6 +686,17 @@ export class InvoicesService {
         packingList: {
           include: {
             container: true,
+          },
+        },
+        package: {
+          select: {
+            id: true,
+            trackingCode: true,
+            pickupCode: true,
+            shippingCost: true,
+            description: true,
+            weight: true,
+            cbm: true,
           },
         },
       },
