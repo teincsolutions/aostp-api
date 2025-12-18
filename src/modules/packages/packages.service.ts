@@ -115,9 +115,7 @@ export class PackagesService {
         units = packageData.weight || 0;
       }
 
-      finalShippingCost = roundToTwoDecimals(
-        shippingRate * units * packageData.quantity,
-      );
+      finalShippingCost = roundToTwoDecimals(shippingRate * units);
     }
 
     // Check if provided tracking code is unique
@@ -439,12 +437,6 @@ export class PackagesService {
           ? updatePackageDto.shippingMode
           : pkg.shippingMode;
 
-      // Determine quantity - use updated value if provided, otherwise use existing
-      const quantity =
-        updatePackageDto.quantity !== undefined
-          ? updatePackageDto.quantity
-          : pkg.quantity;
-
       let units = 0;
 
       if (shippingMode === ShippingMode.SEA) {
@@ -461,9 +453,7 @@ export class PackagesService {
             : pkg.weight || 0;
       }
 
-      calculatedShippingCost = roundToTwoDecimals(
-        shippingRate * units * quantity,
-      );
+      calculatedShippingCost = roundToTwoDecimals(shippingRate * units);
     }
 
     const result = await this.prisma.$transaction(async (tx) => {

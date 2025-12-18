@@ -283,7 +283,7 @@ model Package {
   destinationCityId String? // Destination city for this package
   shippingRate      Float? // Rate per unit (per CBM for SEA, per KG for AIR)
   shippingCurrency  String           @default("USD") // Currency for shipping rate
-  shippingCost      Float? // Per package shipping cost (rate * units * quantity)
+  shippingCost      Float? // Per package shipping cost (rate * units: cbm for SEA, weight for AIR)
   shippingMode      ShippingMode
   airShippingType   AirShippingType?
   isConsolidated    Boolean          @default(false) // True for parent packages
