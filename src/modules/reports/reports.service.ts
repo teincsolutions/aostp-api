@@ -947,6 +947,7 @@ export class ReportsService {
           select: {
             id: true,
             customerId: true,
+            quantity: true,
             weight: true,
             cbm: true,
             invoice: {
@@ -983,7 +984,10 @@ export class ReportsService {
     let totalCBM = 0;
 
     const warehouseStats: WarehouseStatsDto[] = warehouses.map((wh) => {
-      const whPackageCount = wh.packages.length;
+      const whPackageCount = wh.packages.reduce(
+        (sum, p) => sum + (p.quantity || 0),
+        0,
+      );
       const whCustomerCount = new Set(wh.packages.map((p) => p.customerId))
         .size;
       const whWeight = wh.packages.reduce((sum, p) => sum + (p.weight || 0), 0);
