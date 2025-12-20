@@ -1244,6 +1244,13 @@ export class PaymentsService {
             totalAmount: true,
             paidAmount: true,
             balance: true,
+            package: {
+              select: {
+                id: true,
+                quantity: true,
+                trackingCode: true,
+              },
+            },
             packingList: {
               select: {
                 id: true,
@@ -1299,7 +1306,7 @@ export class PaymentsService {
         paid: inv.paidAmount,
         balance: inv.balance,
         packingListName: inv.packingList?.name,
-        packageCount: inv.packingList?.packages?.length || 0,
+        packageCount: inv.package?.quantity || 0,
       })),
       notes: payment.notes ? `Payment Notes: ${payment.notes}` : undefined,
     };

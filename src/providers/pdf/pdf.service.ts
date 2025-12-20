@@ -156,7 +156,7 @@ export interface ReceiptData extends PDFTemplateData {
     paid: number;
     balance: number;
     packingListName?: string;
-    packageCount?: number;
+    packageCount?: number; // Quantity of items in the specific package for this invoice
   }>;
   notes?: string;
 
@@ -1163,7 +1163,7 @@ export class PDFService {
 
     // Package details box
     const boxW = contentW;
-    const boxH = 54;
+    const boxH = 72; // Increased height to accommodate multi-line description
     const boxY = metaY + 66; // Increased from 54 to account for extra row
     doc.roundedRect(L, boxY, boxW, boxH, 3).stroke();
 
@@ -1173,7 +1173,8 @@ export class PDFService {
     py += 14;
 
     doc.font('Helvetica').fontSize(8);
-    writeLineClamped(
+    // Use writeTextWrapped to allow multi-line description
+    const descHeight = writeTextWrapped(
       doc,
       `Description: ${safe(data.package.description)} • Mode: ${data.package.shippingMode}${data.package.airType ? ` / ${data.package.airType.replace('_', ' ')}` : ''}`,
       L + 8,
@@ -1181,7 +1182,7 @@ export class PDFService {
       boxW - 16,
       'left',
     );
-    py += 11;
+    py += descHeight + 3;
 
     writeLineClamped(
       doc,
@@ -1519,12 +1520,11 @@ export class PDFService {
       'left',
     );
 
-    // Amount box
+    // Amount box (no border)
     const boxW = 210;
     const boxH = 38;
     const boxX = L + (contentW - boxW) / 2;
     const boxY = metaY + 54; // Increased from 42 to account for extra row
-    doc.roundedRect(boxX, boxY, boxW, boxH, 3).stroke();
     doc.font('Helvetica-Bold').fontSize(13);
     writeLineClamped(
       doc,
@@ -1592,7 +1592,7 @@ export class PDFService {
             detailParts.push(`Packing List: ${(inv as any).packingListName}`);
           }
           if ((inv as any).packageCount) {
-            detailParts.push(`Packages: ${(inv as any).packageCount}`);
+            detailParts.push(`Quantity: ${(inv as any).packageCount}`);
           }
           writeLineClamped(
             doc,
