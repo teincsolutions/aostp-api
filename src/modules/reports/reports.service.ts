@@ -476,9 +476,18 @@ export class ReportsService {
       }
     }
 
+    // Filter out packages with null or zero CBM
+    const cbmWhere = {
+      ...packageWhere,
+      cbm: {
+        not: null,
+        gt: 0,
+      },
+    };
+
     const topByCbm = await this.prisma.package.groupBy({
       by: ['customerId'],
-      where: packageWhere,
+      where: cbmWhere,
       _sum: {
         cbm: true,
       },
@@ -517,9 +526,17 @@ export class ReportsService {
     });
 
     // Top by weight
+    const weightWhere = {
+      ...packageWhere,
+      weight: {
+        not: null,
+        gt: 0,
+      },
+    };
+
     const topByWeight = await this.prisma.package.groupBy({
       by: ['customerId'],
-      where: packageWhere,
+      where: weightWhere,
       _sum: {
         weight: true,
       },
