@@ -633,7 +633,10 @@ export class PackingListsService {
       where: { packingListId },
     });
 
-    const totalPackages = packages.length;
+    const totalPackages = packages.reduce(
+      (sum, pkg) => sum + (pkg.quantity || 0),
+      0,
+    );
     const totalWeight = packages.reduce(
       (sum, pkg) => sum + (pkg.weight || 0),
       0,
