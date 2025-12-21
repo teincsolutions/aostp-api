@@ -229,4 +229,21 @@ export class PaymentsController {
     );
     return { url, key: payment.referenceDocumentKey };
   }
+
+  @Patch(':id/delete')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Delete a payment (Super Admin only)',
+    description:
+      'Permanently deletes a payment record from the database. This action is restricted to Super Admin only and cannot be undone. An audit log entry will be created before deletion.',
+  })
+  @ApiResponse({ status: 200, description: 'Payment deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Super Admin access required',
+  })
+  async deletePayment(@Param('id') id: string, @Request() req: any) {
+    return await this.paymentsService.deletePayment(id, req.user.id);
+  }
 }
