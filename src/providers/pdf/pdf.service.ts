@@ -343,7 +343,7 @@ function writeTextWrapped(
 const LAYOUT = {
   // general
   margin: 16, // increased for A5
-  topY: 8, // header top Y
+  topY: 20, // header top Y - increased to give more space for invoice number
   line: 1,
 
   // header/company/date
@@ -622,13 +622,13 @@ export class PDFService {
       'center',
     );
 
-    // Invoice number (above date box)
-    doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
+    // Invoice number (above date box) - use smaller font to prevent truncation
+    doc.fillColor('#000').fontSize(10).font('Helvetica-Bold');
     writeLineClamped(
       doc,
       `Invoice: ${data.invoice.number}`,
       dateBoxX,
-      dateBoxY - 12,
+      dateBoxY - 18,
       LAYOUT.dateBoxW,
       'center',
     );
