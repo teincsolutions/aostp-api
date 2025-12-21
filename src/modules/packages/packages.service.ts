@@ -292,7 +292,17 @@ export class PackagesService {
           warehouse: true,
           destinationCity: true,
           photos: true,
-          invoice: true,
+          invoice: {
+            select: {
+              id: true,
+              invoiceNumber: true,
+              totalAmount: true,
+              paidAmount: true,
+              balance: true,
+              localAmount: true,
+              status: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -323,6 +333,7 @@ export class PackagesService {
             warehouse: true,
           },
         },
+        destinationCity: true,
         invoice: {
           include: {
             payments: true,
