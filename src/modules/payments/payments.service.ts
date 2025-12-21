@@ -563,14 +563,14 @@ export class PaymentsService {
     return result;
   }
 
-  async deletePayment(id: string, userId: string): Promise<Payment> {
+  async deletePayment(id: string, userId: string): Promise<void> {
     const existingPayment = await this.findOne(id);
 
     if (!existingPayment) {
       throw new NotFoundException(`Payment with ID ${id} not found`);
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       // Log the deletion action before deleting
       await tx.auditLog.create({
         data: {
@@ -584,28 +584,14 @@ export class PaymentsService {
       });
 
       // Delete the payment
-      const deletedPayment = await tx.payment.delete({
+      await tx.payment.delete({
         where: { id },
-        include: {
-          customer: true,
-          exchangeRate: true,
-          processedBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-          invoices: true,
-        },
       });
-
-      return deletedPayment;
     });
 
-    this.logger.log(`Payment ${result.paymentCode} deleted by user ${userId}`);
-    return result;
+    this.logger.log(
+      `Payment ${existingPayment.paymentCode} deleted by user ${userId}`,
+    );
   }
 
   async getCustomerPayments(customerId: string, paginationDto: PaginationDto) {
