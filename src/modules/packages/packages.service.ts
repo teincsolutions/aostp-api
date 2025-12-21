@@ -290,9 +290,9 @@ export class PackagesService {
         include: {
           customer: true,
           warehouse: true,
+          destinationCity: true,
           photos: true,
           invoice: true,
-          items: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
