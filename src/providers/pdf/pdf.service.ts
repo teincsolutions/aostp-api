@@ -623,12 +623,12 @@ export class PDFService {
     );
 
     // Invoice number (above date box) - use smaller font to prevent truncation
-    doc.fillColor('#000').fontSize(10).font('Helvetica-Bold');
+    doc.fillColor('#000').fontSize(9).font('Helvetica-Bold');
     writeLineClamped(
       doc,
-      `Invoice: ${data.invoice.number}`,
+      `Inv: ${data.invoice.number}`,
       dateBoxX,
-      dateBoxY - 18,
+      dateBoxY - 14,
       LAYOUT.dateBoxW,
       'center',
     );
