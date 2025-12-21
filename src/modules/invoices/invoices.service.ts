@@ -537,6 +537,7 @@ export class InvoicesService {
           include: {
             items: true,
             warehouse: true,
+            destinationCity: true,
           },
         },
         payments: {
@@ -980,11 +981,7 @@ export class InvoicesService {
       company: companyInfo,
       invoice: {
         number: invoice.invoiceNumber,
-        date: invoice.packingList.container.loadingDate
-          ? invoice.packingList.container.loadingDate
-              .toISOString()
-              .split('T')[0]
-          : invoice.packingList.loadingDate.toISOString().split('T')[0],
+        date: invoice.packingList.loadingDate.toISOString().split('T')[0],
         dueDate: invoice.dueDate.toISOString().split('T')[0],
         status: invoice.status,
       },

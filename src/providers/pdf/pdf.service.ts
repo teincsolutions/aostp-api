@@ -64,7 +64,7 @@ export interface InvoiceData extends PDFTemplateData {
     quantity: number; // includes sub-packages
     weightKg?: number;
     cbm?: number;
-    destinationCity?: string;
+    destinationCity?: City;
     shippingRate: number;
     warehouse?: string;
     pickupCode?: string;
@@ -622,6 +622,17 @@ export class PDFService {
       'center',
     );
 
+    // Invoice number (above date box)
+    doc.fillColor('#000').fontSize(LAYOUT.dateFont).font('Helvetica-Bold');
+    writeLineClamped(
+      doc,
+      `Invoice: ${data.invoice.number}`,
+      dateBoxX,
+      dateBoxY - 14,
+      LAYOUT.dateBoxW,
+      'center',
+    );
+
     // Date + address (right)
     doc
       .roundedRect(dateBoxX, dateBoxY, LAYOUT.dateBoxW, LAYOUT.dateBoxH, 2)
@@ -715,17 +726,33 @@ export class PDFService {
       'left',
     );
 
+    // Destination City below contact
+    if (data.package?.destinationCity) {
+      writeLineClamped(
+        doc,
+        `Dest. City: ${data.package.destinationCity.name}`,
+        L + contentW * 0.7,
+        customerY + 18,
+        120,
+        'left',
+      );
+    }
+
+    // Customer name - use multi-line wrapping
     doc.font('Helvetica').fontSize(12);
-    writeLineClamped(
+    const customerName =
+      `${data.customer?.name} (${data.customer?.code})`.toUpperCase();
+    const nameHeight = writeTextWrapped(
       doc,
-      `${data.customer?.name} (${data.customer?.code})`.toUpperCase(),
+      customerName,
       L,
       customerY + 12,
       contentW * 0.5,
       'left',
     );
 
-    return customerY + 28; // Return next Y position
+    // Add extra line spacing after customer name
+    return customerY + 12 + nameHeight + 14; // Return next Y position with extra line
   }
 
   private drawTableWithTotals(
