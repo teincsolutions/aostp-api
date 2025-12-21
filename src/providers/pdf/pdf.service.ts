@@ -628,7 +628,7 @@ export class PDFService {
       doc,
       `Invoice: ${data.invoice.number}`,
       dateBoxX,
-      dateBoxY - 14,
+      dateBoxY - 12,
       LAYOUT.dateBoxW,
       'center',
     );
