@@ -1577,7 +1577,7 @@ export class PDFService {
         : data.payment.amount,
     );
     doc.font('Helvetica-Oblique').fontSize(12);
-    writeLineClamped(
+    writeTextWrapped(
       doc,
       `(${amountInWords})`,
       boxX,
@@ -1586,11 +1586,11 @@ export class PDFService {
       'center',
     );
 
-    // Applied invoices — height limited
+    // Applied invoices
     y = boxY + boxH + 8;
     const rowH = 11;
     const bottomReserved = 26; // footer
-    const maxY = H - doc.page.margins.bottom - bottomReserved;
+    let maxY = H - doc.page.margins.bottom - bottomReserved;
     doc.font('Helvetica').fontSize(8);
 
     if (data.invoices?.length) {
@@ -1598,13 +1598,28 @@ export class PDFService {
       writeLineClamped(doc, 'Applied to Invoices:', L, y, 140, 'left');
       y += 14;
 
-      const spaceRows = Math.max(0, Math.floor((maxY - y) / rowH));
-      const showCount = Math.min(spaceRows, data.invoices.length);
-      const overflow = data.invoices.length - showCount;
-
       doc.font('Helvetica').fontSize(9);
-      for (let i = 0; i < showCount; i++) {
+      for (let i = 0; i < data.invoices.length; i++) {
         const inv = data.invoices[i];
+
+        // Calculate height needed
+        let heightNeeded = rowH;
+        if ((inv as any).packingListName || (inv as any).packageCount) {
+          heightNeeded += rowH;
+        }
+
+        // Check if we need a new page
+        if (y + heightNeeded > maxY) {
+          doc.addPage();
+          // Reset y to top, perhaps with a continued header
+          y = LAYOUT.topY;
+          maxY = H - doc.page.margins.bottom - bottomReserved;
+          // Optional: add continued header
+          doc.font('Helvetica-Bold').fontSize(10);
+          writeLineClamped(doc, 'Applied to Invoices (continued):', L, y, 200, 'left');
+          y += 14;
+          doc.font('Helvetica').fontSize(9);
+        }
 
         // First line: Invoice number with amounts
         const line = `Invoice ${safe(inv.number)} | Total: USD ${fmt(inv.total)} | Paid: USD ${fmt(inv.paid)} | Balance: USD ${fmt(inv.balance)}`;
@@ -1632,19 +1647,6 @@ export class PDFService {
           doc.fillColor('#000'); // Reset color
           y += rowH;
         }
-      }
-
-      if (overflow > 0 && y <= maxY) {
-        doc.font('Helvetica-Oblique').fontSize(9);
-        writeLineClamped(
-          doc,
-          `(+${overflow} more invoices)`,
-          L,
-          y,
-          contentW,
-          'left',
-        );
-        y += rowH;
       }
     }
 
