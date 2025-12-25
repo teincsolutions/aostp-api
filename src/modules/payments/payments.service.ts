@@ -1280,6 +1280,7 @@ export class PaymentsService {
                 id: true,
                 quantity: true,
                 trackingCode: true,
+                pickupCode: true,
               },
             },
             packingList: {
