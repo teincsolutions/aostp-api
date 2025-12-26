@@ -1438,8 +1438,8 @@ export class PDFService {
 
       const chips: string[] = [];
       if (safe(pkg.trackingCodes))
-        chips.push(`TCODE: ${safe(pkg.trackingCodes)}`);
-      if (safe(pkg.pickupCodes)) chips.push(`PICKUP: ${safe(pkg.pickupCodes)}`);
+        chips.push(`TCODES: ${safe(pkg.trackingCodes)}`);
+      if (safe(pkg.pickupCodes)) chips.push(`PICKUPS: ${safe(pkg.pickupCodes)}`);
      
       doc.font('Helvetica-Bold').fontSize(8);
       writeLineClamped(
