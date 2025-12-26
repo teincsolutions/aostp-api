@@ -161,16 +161,8 @@ export interface ReceiptData extends PDFTemplateData {
   notes?: string;
 
   package?: {
-    trackingCode: string;
-    description?: string;
-    shippingMode: 'SEA' | 'AIR';
-    airType?: 'NORMAL_AIR' | 'EXPRESS_AIR' | 'BATTERY_GOODS' | 'PHONES';
-    quantity: number;
-    weightKg?: number;
-    cbm?: number;
-    destinationCity?: string;
-    warehouse?: string;
-    pickupCode?: string;
+    trackingCodes: string;
+    pickupCodes?: string;
   };
 }
 
@@ -1445,21 +1437,10 @@ export class PDFService {
         .stroke();
 
       const chips: string[] = [];
-      if (safe(pkg.trackingCode))
-        chips.push(`TCODE: ${safe(pkg.trackingCode)}`);
-      if (safe(pkg.pickupCode)) chips.push(`PICKUP: ${safe(pkg.pickupCode)}`);
-      if (pkg.shippingMode === 'AIR') {
-        const t = pkg.airType || 'NORMAL_AIR';
-        chips.push(`MODE: AIR / ${t.replace('_', ' ')}`);
-      } else if (pkg.shippingMode === 'SEA') {
-        chips.push('MODE: SEA');
-      }
-      chips.push(`QTY: ${pkg.quantity}`);
-      if (pkg.weightKg != null) chips.push(`WT: ${pkg.weightKg} KG`);
-      if (pkg.cbm != null) chips.push(`CBM: ${pkg.cbm}`);
-      if (safe(pkg.destinationCity)) chips.push(`DEST: ${pkg.destinationCity}`);
-      if (safe(pkg.warehouse)) chips.push(`WH: ${pkg.warehouse}`);
-
+      if (safe(pkg.trackingCodes))
+        chips.push(`TCODE: ${safe(pkg.trackingCodes)}`);
+      if (safe(pkg.pickupCodes)) chips.push(`PICKUP: ${safe(pkg.pickupCodes)}`);
+     
       doc.font('Helvetica-Bold').fontSize(8);
       writeLineClamped(
         doc,
