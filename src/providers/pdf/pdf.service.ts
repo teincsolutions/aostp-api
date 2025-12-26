@@ -157,13 +157,12 @@ export interface ReceiptData extends PDFTemplateData {
     balance: number;
     packingListName?: string;
     packageCount?: number; // Quantity of items in the specific package for this invoice
+    package: {
+      trackingCode?: string;
+      pickupCode?: string;
+    };
   }>;
   notes?: string;
-
-  package?: {
-    trackingCodes: string;
-    pickupCodes?: string;
-  };
 }
 
 // =====================
@@ -1425,37 +1424,10 @@ export class PDFService {
       .lineWidth(LAYOUT.line)
       .stroke();
 
-    // PACKAGE summary slab
-    const pkg = data.package;
     let y = titleRuleY + 30;
-    if (pkg) {
-      const slabH = 18;
-      doc
-        .rect(L, y, contentW, slabH)
-        .strokeColor('#000')
-        .lineWidth(LAYOUT.line)
-        .stroke();
-
-      const chips: string[] = [];
-      if (safe(pkg.trackingCodes))
-        chips.push(`TCODES: ${safe(pkg.trackingCodes)}`);
-      if (safe(pkg.pickupCodes)) chips.push(`PICKUPS: ${safe(pkg.pickupCodes)}`);
-     
-      doc.font('Helvetica-Bold').fontSize(8);
-      writeLineClamped(
-        doc,
-        chips.join(' • '),
-        L + 5,
-        y + 3,
-        contentW - 10,
-        'left',
-      );
-      y += slabH + 8;
-    } else {
       // No package, still give adequate spacing after title
       y += 6;
-    }
-
+    
     // Meta left / right
     const metaY = y;
     const midX = L + contentW * 0.52;
@@ -1608,7 +1580,7 @@ export class PDFService {
         y += rowH;
 
         // Second line: Packing list and package details (if available)
-        if ((inv as any).packingListName || (inv as any).packageCount) {
+        if ((inv as any).packingListName || (inv as any).packageCount || (inv as any).package?.trackingCode || (inv as any).package?.pickupCode) {
           doc.font('Helvetica').fontSize(8).fillColor('#666');
           const detailParts: string[] = [];
           if ((inv as any).packingListName) {
@@ -1616,6 +1588,12 @@ export class PDFService {
           }
           if ((inv as any).packageCount) {
             detailParts.push(`Quantity: ${(inv as any).packageCount}`);
+          }
+          if ((inv as any).package?.trackingCode) {
+            detailParts.push(`Tracking: ${(inv as any).package.trackingCode}`);
+          }
+          if ((inv as any).package?.pickupCode) {
+            detailParts.push(`Pickup: ${(inv as any).package.pickupCode}`);
           }
           writeLineClamped(
             doc,

@@ -1339,16 +1339,12 @@ export class PaymentsService {
         balance: inv.balance,
         packingListName: inv.packingList?.name,
         packageCount: inv.package?.quantity || 0,
+        package: {
+          trackingCode: inv.package?.trackingCode,
+          pickupCode: inv.package?.pickupCode || '',
+        },
       })),
       notes: payment.notes ? `Payment Notes: ${payment.notes}` : undefined,
-      package: {
-        trackingCodes: payment.invoices
-          .map((inv) => inv.package?.trackingCode)
-          .filter((code) => code).join(', ') as string,
-        pickupCodes: payment.invoices
-          .map((inv) => inv.package?.pickupCode)
-          .filter((code) => code).join(', ') as string,
-      },
     };
 
     const result = await this.pdfService.generateReceiptPDF(receiptData);
