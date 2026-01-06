@@ -381,18 +381,23 @@ export class NotificationsService {
     });
   }
 
-  async notifyInvoiceIssued(invoice: Invoice & { customer: Customer }) {
+  async notifyInvoiceIssued(invoice: Invoice & { customer: Customer; packingList?: { name: string } }) {
     const channels: NotificationChannelContent[] = [];
 
     // Email content (HTML)
     if (invoice.customer.email) {
+      const packingListRow = invoice.packingList?.name
+        ? `<tr><td><strong>Packing List:</strong></td><td>${invoice.packingList.name}</td></tr>`
+        : '';
+      
       const emailContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Invoice Issued - AOSTP Logistics</h2>
+          <h2>Invoice Issued - AOSTP</h2>
           <p>Dear ${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''},</p>
           <p>An invoice has been issued for your shipment.</p>
           <table style="border-collapse: collapse; width: 100%;">
             <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
+            ${packingListRow}
             <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
             <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
           </table>
