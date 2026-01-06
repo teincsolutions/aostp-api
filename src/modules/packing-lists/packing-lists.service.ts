@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePackingListDto } from './dto/create-packing-list.dto';
 import { UpdatePackingListDto } from './dto/update-packing-list.dto';
@@ -25,6 +26,7 @@ export class PackingListsService {
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
     private readonly pdfService: PDFService,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(
@@ -907,26 +909,28 @@ export class PackingListsService {
   private async generateInvoicePDFs(invoices: any[]) {
     for (const invoice of invoices) {
       try {
-        // Prepare invoice data for PDF generation
-        // Prepare invoice data for PDF generation similar to packing-lists service
-        // Get company info from PDF service (which uses config)
+        // Get company info from config service
         const companyInfo = {
-          name: 'AOSTP Logistics',
+          name:
+            this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics',
           address: 'Accra, Ghana',
           phone: '+233 XX XXX XXXX',
           email: 'info@aostp.com',
         };
+
         const pdfData = {
           company: companyInfo,
           invoice: {
             number: invoice.invoiceNumber,
-            date: invoice.createdAt.toISOString().split('T')[0],
+            date: invoice.packingList.container.loadingDate
+              .toISOString()
+              .split('T')[0],
             dueDate: invoice.dueDate.toISOString().split('T')[0],
             status: invoice.status,
           },
           customer: {
             code: invoice.customer.customerCode,
-            name: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+            name: `${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''}`,
             address: invoice.customer.address || '',
             phone: invoice.customer.phoneNumber || '',
             email: invoice.customer.email || '',
@@ -934,9 +938,11 @@ export class PackingListsService {
           container: invoice.packingList?.container
             ? {
                 number: invoice.packingList.container.containerNumber,
-                loadingDate: invoice.packingList.loadingDate
-                  .toISOString()
-                  .split('T')[0],
+                loadingDate: invoice.packingList.container.loadingDate
+                  ? invoice.packingList.container.loadingDate
+                      .toISOString()
+                      .split('T')[0]
+                  : invoice.packingList.loadingDate.toISOString().split('T')[0],
                 origin:
                   invoice.packingList.container.departureCity?.name ||
                   'Unknown',
@@ -952,25 +958,27 @@ export class PackingListsService {
                 shippingMode: invoice.package.shippingMode,
                 airType: invoice.package.airShippingType,
                 quantity: invoice.package.quantity,
+                shippingRate: invoice.package.shippingRate || 0,
                 weightKg: invoice.package.weight,
-                shippingRate: invoice.package.shippingRate,
                 cbm: invoice.package.cbm,
                 destinationCity: invoice.package.destinationCity,
                 warehouse: invoice.package.warehouse?.name,
+                pickupCode: invoice.package.pickupCode,
               }
             : undefined,
-          // Use package items directly with package-level shipping rate
+          // Use package items with correct unit pricing based on shipping rate
           items:
             invoice.package?.items?.map((item) => ({
               description: item.description || '',
               quantity: item.quantity,
-              unitPrice: invoice.package?.shippingRate
-                ? invoice.package.shippingRate
-                : 0,
+              unitPrice: invoice.package?.shippingRate || 0,
               total: item.quantity * (invoice.package?.shippingRate || 0),
             })) || [],
           totals: {
-            total: invoice.totalAmount,
+            total:
+              invoice.currency === 'USD'
+                ? invoice.totalAmount || 0
+                : invoice.localAmount || 0,
             paid: invoice.paidAmount || 0,
             balance: invoice.balance,
             currency: invoice.currency,
