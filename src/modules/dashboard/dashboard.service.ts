@@ -264,7 +264,7 @@ export class DashboardService {
     const rows: InvoiceRowInterface[] = invoices.map((invoice) => ({
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      customer: `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+      customer: `${invoice.customer.firstName} ${invoice.customer.lastName||""}`,
       total: invoice.totalAmount,
       paid: invoice.paidAmount,
       balance: invoice.balance,
@@ -320,7 +320,7 @@ export class DashboardService {
     const rows: AgingPackageRowInterface[] = packages.map((pkg) => ({
       id: pkg.id,
       trackingNumber: pkg.trackingCode,
-      customer: `${pkg.customer.firstName} ${pkg.customer.lastName}`,
+      customer: `${pkg.customer.firstName} ${pkg.customer.lastName||""}`,
       daysInWarehouse: pkg.daysInWarehouse,
       status: pkg.status,
       createdAt: pkg.createdAt.toISOString(),

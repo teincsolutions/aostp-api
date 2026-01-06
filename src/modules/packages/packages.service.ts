@@ -933,7 +933,7 @@ export class PackagesService {
         },
         customer: {
           code: pkg.customer.customerCode,
-          name: `${pkg.customer.firstName} ${pkg.customer.lastName}`,
+          name: `${pkg.customer.firstName} ${pkg.customer.lastName||""}`,
           phone: pkg.customer.phoneNumber,
           email: pkg.customer.email || undefined,
         },
