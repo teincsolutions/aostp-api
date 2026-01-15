@@ -402,7 +402,7 @@ export class NotificationsService {
             <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
           </table>
           <p>Please ensure payment is made before the due date.</p>
-          <p>You can <a href="https://aostp.akomapacargo.com/invoices/${invoice.invoiceNumber}" target="_blank">view your invoice</a> for details.</p>
+          <p>You can <a href="https://aostp.akomapacargo.com/invoices/${invoice.id}" target="_blank">view your invoice</a> for details.</p>
           <p>Thank you for your business.</p>
         </div>
       `;
@@ -424,7 +424,7 @@ export class NotificationsService {
             : null;
 
       if (channel) {
-        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://aostp.akomapacargo.com/invoices/${invoice.invoiceNumber}`;
+        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://aostp.akomapacargo.com/invoices/${invoice.id}`;
         channels.push({
           channel,
           recipient: invoice.customer.phoneNumber,
