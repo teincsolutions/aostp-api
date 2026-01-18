@@ -404,6 +404,14 @@ export class NotificationsService {
         dueDate: invoice.dueDate.toISOString(),
       });
 
+      // If queue returned null/falsy (Redis unavailable), fall back to direct email
+      if (!jobId) {
+        this.logger.warn(
+          `Queue unavailable for invoice ${invoice.invoiceNumber}, falling back to direct email`,
+        );
+        return this.sendInvoiceEmailDirect(invoice);
+      }
+
       this.logger.log(
         `Invoice notification queued for ${invoice.invoiceNumber} - Job ID: ${jobId}`,
       );
@@ -414,7 +422,93 @@ export class NotificationsService {
         `Failed to queue invoice notification for ${invoice.invoiceNumber}`,
         error,
       );
-      throw error;
+      // Fall back to direct email on any error
+      return this.sendInvoiceEmailDirect(invoice);
+    }
+  }
+
+  /**
+   * Send invoice email directly (fallback when queue is unavailable)
+   * Does not include PDF attachment - customer can request it or view online
+   */
+  private async sendInvoiceEmailDirect(
+    invoice: Invoice & { customer: Customer; packingList?: { name: string } },
+  ) {
+    const customer = invoice.customer;
+
+    // Always send email if customer has email address
+    if (!customer.email) {
+      this.logger.warn(
+        `Cannot send direct email for invoice ${invoice.invoiceNumber} - customer has no email`,
+      );
+      return { sent: false, reason: 'NO_EMAIL' };
+    }
+
+    const customerName = `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`;
+    const packingListRow = invoice.packingList?.name
+      ? `<tr><td><strong>Packing List:</strong></td><td>${invoice.packingList.name}</td></tr>`
+      : '';
+    const dueDate = invoice.dueDate.toLocaleDateString();
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'https://app.aostp.com');
+    const invoiceLink = `${frontendUrl}/invoices/${invoice.id}`;
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Invoice Issued - AOSTP</h2>
+        <p>Dear ${customerName},</p>
+        <p>An invoice has been issued for your shipment.</p>
+        <table style="border-collapse: collapse; width: 100%;">
+          <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
+          ${packingListRow}
+          <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
+          <tr><td><strong>Due Date:</strong></td><td>${dueDate}</td></tr>
+        </table>
+        <p style="margin-top: 20px;">
+          <a href="${invoiceLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Invoice</a>
+        </p>
+        <p>Please ensure payment is made before the due date.</p>
+        <p>Thank you for your business.</p>
+      </div>
+    `;
+
+    try {
+      const result = await this.emailProvider.sendEmail(
+        customer.email,
+        'Invoice Issued - AOSTP Logistics',
+        emailContent,
+        { html: true },
+      );
+
+      // Save notification record
+      await this.prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          type: NotificationType.INVOICE_ISSUED,
+          channel: NotificationChannel.EMAIL,
+          recipient: customer.email,
+          subject: 'Invoice Issued - AOSTP Logistics',
+          content: emailContent,
+          metadata: {
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            directSend: true, // Flag to indicate this was not queued
+          },
+          status: result.success ? 'SENT' : 'FAILED',
+          sentAt: result.success ? new Date() : null,
+          failReason: result.success ? null : result.error,
+        },
+      });
+
+      this.logger.log(
+        `Direct email sent to ${customer.email} for invoice ${invoice.invoiceNumber} - Success: ${result.success}`,
+      );
+
+      return { sent: result.success, direct: true };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send direct email for invoice ${invoice.invoiceNumber}: ${error.message}`,
+      );
+      return { sent: false, error: error.message };
     }
   }
 
@@ -439,6 +533,14 @@ export class NotificationsService {
         processedAt: payment.processedAt.toISOString(),
       });
 
+      // If queue returned null/falsy (Redis unavailable), fall back to direct email
+      if (!jobId) {
+        this.logger.warn(
+          `Queue unavailable for payment ${payment.paymentCode}, falling back to direct email`,
+        );
+        return this.sendPaymentEmailDirect(payment);
+      }
+
       this.logger.log(
         `Payment notification queued for ${payment.paymentCode} - Job ID: ${jobId}`,
       );
@@ -449,7 +551,81 @@ export class NotificationsService {
         `Failed to queue payment notification for ${payment.paymentCode}`,
         error,
       );
-      throw error;
+      // Fall back to direct email on any error
+      return this.sendPaymentEmailDirect(payment);
+    }
+  }
+
+  /**
+   * Send payment email directly (fallback when queue is unavailable)
+   */
+  private async sendPaymentEmailDirect(payment: Payment & { customer: Customer }) {
+    const customer = payment.customer;
+
+    // Always send email if customer has email address
+    if (!customer.email) {
+      this.logger.warn(
+        `Cannot send direct email for payment ${payment.paymentCode} - customer has no email`,
+      );
+      return { sent: false, reason: 'NO_EMAIL' };
+    }
+
+    const customerName = `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`;
+    const processedDate = new Date(payment.processedAt).toLocaleDateString();
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Payment Received - AOSTP</h2>
+        <p>Dear ${customerName},</p>
+        <p>We have received your payment. Thank you!</p>
+        <table style="border-collapse: collapse; width: 100%;">
+          <tr><td><strong>Receipt Number:</strong></td><td>${payment.paymentCode}</td></tr>
+          <tr><td><strong>Amount:</strong></td><td>${payment.currency} ${payment.amount}</td></tr>
+          <tr><td><strong>Payment Method:</strong></td><td>${payment.paymentMethod}</td></tr>
+          <tr><td><strong>Date:</strong></td><td>${processedDate}</td></tr>
+        </table>
+        <p>Thank you for your business.</p>
+      </div>
+    `;
+
+    try {
+      const result = await this.emailProvider.sendEmail(
+        customer.email,
+        'Payment Received - AOSTP Logistics',
+        emailContent,
+        { html: true },
+      );
+
+      // Save notification record
+      await this.prisma.notification.create({
+        data: {
+          customerId: customer.id,
+          type: NotificationType.PAYMENT_RECEIVED,
+          channel: NotificationChannel.EMAIL,
+          recipient: customer.email,
+          subject: 'Payment Received - AOSTP Logistics',
+          content: emailContent,
+          metadata: {
+            paymentId: payment.id,
+            paymentCode: payment.paymentCode,
+            directSend: true,
+          },
+          status: result.success ? 'SENT' : 'FAILED',
+          sentAt: result.success ? new Date() : null,
+          failReason: result.success ? null : result.error,
+        },
+      });
+
+      this.logger.log(
+        `Direct email sent to ${customer.email} for payment ${payment.paymentCode} - Success: ${result.success}`,
+      );
+
+      return { sent: result.success, direct: true };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send direct email for payment ${payment.paymentCode}: ${error.message}`,
+      );
+      return { sent: false, error: error.message };
     }
   }
 
