@@ -48,6 +48,16 @@ import { ReportsModule } from './modules/reports/reports.module';
         redis: {
           host: configService.get('REDIS_HOST', 'localhost'),
           port: configService.get('REDIS_PORT', 6379),
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times: number) => {
+            if (times > 3) {
+              // Stop retrying after 3 attempts
+              return null;
+            }
+            return Math.min(times * 1000, 3000);
+          },
+          enableOfflineQueue: false,
+          lazyConnect: true,
         },
       }),
     }),
