@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -69,8 +70,8 @@ export class CustomersController {
     status: 403,
     description: 'Forbidden - insufficient permissions',
   })
-  create(@Body() createCustomerDto: CreateCustomerDto) {
-    return this.customersService.create(createCustomerDto);
+  create(@Body() createCustomerDto: CreateCustomerDto, @Request() req: any) {
+    return this.customersService.create(createCustomerDto, req.user?.id);
   }
 
   @Get()
@@ -277,8 +278,9 @@ export class CustomersController {
   update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
+    @Request() req: any,
   ) {
-    return this.customersService.update(id, updateCustomerDto);
+    return this.customersService.update(id, updateCustomerDto, req.user?.id);
   }
 
   @Delete(':id')
@@ -299,7 +301,7 @@ export class CustomersController {
     status: 403,
     description: 'Forbidden - insufficient permissions',
   })
-  remove(@Param('id') id: string) {
-    return this.customersService.remove(id);
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.customersService.remove(id, req.user?.id);
   }
 }

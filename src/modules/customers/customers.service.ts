@@ -14,7 +14,7 @@ import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
 export class CustomersService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createCustomerDto: CreateCustomerDto): Promise<Customer> {
+  async create(createCustomerDto: CreateCustomerDto, userId?: string): Promise<Customer> {
     // Check if customer with same phone number exists
     const existingCustomer = await this.prisma.customer.findFirst({
       where: { phoneNumber: createCustomerDto.phoneNumber },
@@ -75,12 +75,30 @@ export class CustomersService {
       customerCode = `${namePart}${phonePart}${counter}`;
     }
 
-    return this.prisma.customer.create({
+    const customer = await this.prisma.customer.create({
       data: {
         ...createCustomerDto,
         customerCode,
       },
     });
+
+    // Create audit log if userId is provided
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entity: 'Customer',
+          entityId: customer.id,
+          after: customer as any,
+          metadata: {
+            customerCode: customer.customerCode,
+          },
+        },
+      });
+    }
+
+    return customer;
   }
 
   async findAll(
@@ -266,6 +284,7 @@ export class CustomersService {
   async update(
     id: string,
     updateCustomerDto: UpdateCustomerDto,
+    userId?: string,
   ): Promise<Customer> {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
@@ -329,13 +348,33 @@ export class CustomersService {
       }
     }
 
-    return this.prisma.customer.update({
+    const updatedCustomer = await this.prisma.customer.update({
       where: { id },
       data: updateCustomerDto,
     });
+
+    // Create audit log if userId is provided
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'UPDATE',
+          entity: 'Customer',
+          entityId: id,
+          before: customer as any,
+          after: updatedCustomer as any,
+          metadata: {
+            customerCode: customer.customerCode,
+            changedFields: Object.keys(updateCustomerDto),
+          },
+        },
+      });
+    }
+
+    return updatedCustomer;
   }
 
-  async remove(id: string): Promise<Customer> {
+  async remove(id: string, userId?: string): Promise<Customer> {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
@@ -359,18 +398,42 @@ export class CustomersService {
       customer._count.invoices > 0 ||
       customer._count.payments > 0;
 
+    let result: Customer;
+    let action: string;
+
     if (hasRelatedRecords) {
       // Soft delete - just deactivate the customer
-      return this.prisma.customer.update({
+      result = await this.prisma.customer.update({
         where: { id },
         data: { isActive: false },
       });
+      action = 'DEACTIVATE';
+    } else {
+      // Hard delete if no related records
+      result = await this.prisma.customer.delete({
+        where: { id },
+      });
+      action = 'DELETE';
     }
 
-    // Hard delete if no related records
-    return this.prisma.customer.delete({
-      where: { id },
-    });
+    // Create audit log if userId is provided
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action,
+          entity: 'Customer',
+          entityId: id,
+          before: customer as any,
+          metadata: {
+            customerCode: customer.customerCode,
+            hardDelete: action === 'DELETE',
+          },
+        },
+      });
+    }
+
+    return result;
   }
 
   async getCustomerStats(id: string) {
