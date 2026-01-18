@@ -51,13 +51,11 @@ import { ReportsModule } from './modules/reports/reports.module';
           maxRetriesPerRequest: 3,
           retryStrategy: (times: number) => {
             if (times > 3) {
-              // Stop retrying after 3 attempts
+              // Stop retrying after 3 attempts - return null to stop
               return null;
             }
             return Math.min(times * 1000, 3000);
           },
-          enableOfflineQueue: false,
-          lazyConnect: true,
         },
       }),
     }),
