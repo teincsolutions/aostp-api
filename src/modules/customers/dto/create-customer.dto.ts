@@ -6,6 +6,7 @@ import {
   IsEnum,
   MinLength,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IdType, NotificationChannel } from '@prisma/client';
@@ -41,6 +42,7 @@ export class CreateCustomerDto {
     example: 'john.doe@example.com',
     format: 'email',
   })
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail()
   @IsOptional()
   email?: string;
