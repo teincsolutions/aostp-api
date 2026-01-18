@@ -938,12 +938,17 @@ export class InvoicesService {
         `PDF regenerated for invoice ${invoice.invoiceNumber} - Key: ${result.key}`,
       );
 
-      // Send notification about PDF regeneration if customer has contact info
+      // Send notification with the new PDF attached
+      // Re-fetch invoice to get updated invoicePdfKey
+      const updatedInvoice = await this.findOne(id);
       try {
-        await this.sendPdfRegenerationNotification(invoice, result.url);
+        await this.notificationsService.notifyInvoiceIssued(updatedInvoice);
+        this.logger.log(
+          `Regeneration notification queued for invoice ${invoice.invoiceNumber}`,
+        );
       } catch (notificationError) {
         this.logger.error(
-          `Failed to send regeneration notification for invoice ${invoice.invoiceNumber}`,
+          `Failed to queue regeneration notification for invoice ${invoice.invoiceNumber}`,
           notificationError,
         );
         // Don't fail the entire operation if notification fails
@@ -1058,75 +1063,5 @@ export class InvoicesService {
     );
 
     return pdfResult;
-  }
-
-  /**
-   * Send notification about PDF regeneration
-   */
-  private async sendPdfRegenerationNotification(
-    invoice: any,
-    pdfUrl: string,
-  ): Promise<void> {
-    const channels: any[] = [];
-
-    // Email content (HTML)
-    if (invoice.customer.email) {
-      const companyName =
-        this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics';
-      const emailContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Invoice PDF Updated - ${companyName}</h2>
-          <p>Dear ${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''},</p>
-          <p>Your invoice PDF has been updated with the latest information.</p>
-          <table style="border-collapse: collapse; width: 100%;">
-            <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
-            <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
-            <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
-          </table>
-          <p>You can <a href="${pdfUrl}" target="_blank">download the latest invoice PDF</a> to view the updated details.</p>
-          <p>If you have any questions, please contact our support team.</p>
-          <p>Thank you for choosing ${companyName}.</p>
-        </div>
-      `;
-      channels.push({
-        channel: 'EMAIL',
-        recipient: invoice.customer.email,
-        subject: `Invoice PDF Updated - ${companyName}`,
-        content: emailContent,
-      });
-    }
-
-    // SMS/WhatsApp content (short, plain)
-    if (invoice.customer.phoneNumber) {
-      const channel =
-        invoice.customer.preferredChannel === 'WHATSAPP'
-          ? 'WHATSAPP'
-          : invoice.customer.preferredChannel === 'SMS'
-            ? 'SMS'
-            : null;
-
-      if (channel) {
-        const content = `Hi ${invoice.customer.firstName}, your invoice ${invoice.invoiceNumber} PDF has been updated. Download: ${pdfUrl}`;
-        channels.push({
-          channel,
-          recipient: invoice.customer.phoneNumber,
-          content,
-        });
-      }
-    }
-
-    if (channels.length > 0) {
-      await this.notificationsService.sendNotification({
-        customer: invoice.customer,
-        type: 'INVOICE_ISSUED', // Reuse existing type
-        channels,
-        metadata: {
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          action: 'PDF_REGENERATED',
-          pdfUrl,
-        },
-      });
-    }
   }
 }

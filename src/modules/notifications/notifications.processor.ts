@@ -10,6 +10,7 @@ import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interf
 import {
   NotificationJobData,
   InvoiceNotificationJobData,
+  PaymentNotificationJobData,
 } from './notifications.queue';
 import { NotificationChannel, NotificationType } from '@prisma/client';
 
@@ -227,6 +228,209 @@ export class NotificationsProcessor {
 
     this.logger.log(
       `${channel} sent to ${data.customerPhoneNumber} for invoice ${data.invoiceNumber} - Success: ${result.success}`,
+    );
+
+    return {
+      channel,
+      recipient: data.customerPhoneNumber,
+      success: result.success,
+    };
+  }
+
+  @Process('send-payment-notification')
+  async handlePaymentNotification(job: Job<NotificationJobData>) {
+    this.logger.log(
+      `Processing payment notification job ${job.id} - Payment: ${(job.data.data as PaymentNotificationJobData).paymentCode}`,
+    );
+
+    const paymentData = job.data.data as PaymentNotificationJobData;
+
+    try {
+      // Fetch receipt PDF from S3 if available
+      let pdfBuffer: Buffer | null = null;
+      let pdfFilename: string | null = null;
+
+      if (paymentData.receiptPdfKey) {
+        try {
+          this.logger.log(
+            `Fetching receipt PDF from S3: ${paymentData.receiptPdfKey}`,
+          );
+          pdfBuffer = await this.s3Service.getFileBuffer(
+            paymentData.receiptPdfKey,
+          );
+          pdfFilename = `Receipt-${paymentData.paymentCode}.pdf`;
+          this.logger.log(`Receipt PDF fetched successfully: ${pdfFilename}`);
+        } catch (pdfError) {
+          this.logger.warn(
+            `Failed to fetch receipt PDF for payment ${paymentData.paymentCode}, sending without attachment`,
+            pdfError,
+          );
+          // Continue without PDF attachment
+        }
+      }
+
+      const results: any[] = [];
+
+      // Send Email with receipt PDF attachment
+      if (paymentData.customerEmail) {
+        const emailResult = await this.sendPaymentEmail(
+          paymentData,
+          pdfBuffer,
+          pdfFilename,
+        );
+        results.push(emailResult);
+      }
+
+      // Send SMS/WhatsApp (no attachment, just notification)
+      if (paymentData.customerPhoneNumber) {
+        const smsResult = await this.sendPaymentSmsOrWhatsApp(paymentData);
+        if (smsResult) {
+          results.push(smsResult);
+        }
+      }
+
+      this.logger.log(
+        `Payment notification job ${job.id} completed - Sent ${results.length} notification(s)`,
+      );
+
+      return {
+        success: true,
+        paymentCode: paymentData.paymentCode,
+        notificationsSent: results.length,
+        results,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Payment notification job ${job.id} failed: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  private async sendPaymentEmail(
+    data: PaymentNotificationJobData,
+    pdfBuffer: Buffer | null,
+    pdfFilename: string | null,
+  ) {
+    const customerName = `${data.customerFirstName}${data.customerLastName ? ' ' + data.customerLastName : ''}`;
+    const processedDate = new Date(data.processedAt).toLocaleDateString();
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Payment Received - AOSTP Logistics</h2>
+        <p>Dear ${customerName},</p>
+        <p>We have received your payment. Thank you for your prompt payment.</p>
+        <table style="border-collapse: collapse; width: 100%;">
+          <tr><td><strong>Payment Code:</strong></td><td>${data.paymentCode}</td></tr>
+          <tr><td><strong>Amount:</strong></td><td>${data.currency} ${data.amount}</td></tr>
+          <tr><td><strong>Payment Method:</strong></td><td>${data.paymentMethod}</td></tr>
+          <tr><td><strong>Date:</strong></td><td>${processedDate}</td></tr>
+        </table>
+        ${pdfBuffer ? '<p><strong>Your payment receipt is attached to this email.</strong></p>' : '<p>Please contact us if you need a copy of your receipt.</p>'}
+        <p>Thank you for choosing AOSTP Logistics.</p>
+      </div>
+    `;
+
+    const emailOptions: any = { html: true };
+
+    if (pdfBuffer && pdfFilename) {
+      emailOptions.attachments = [
+        {
+          filename: pdfFilename,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ];
+    }
+
+    const result = await this.emailProvider.sendEmail(
+      data.customerEmail!,
+      'Payment Received - AOSTP Logistics',
+      emailContent,
+      emailOptions,
+    );
+
+    // Save notification record
+    await this.prisma.notification.create({
+      data: {
+        customerId: data.customerId,
+        type: NotificationType.PAYMENT_RECEIVED,
+        channel: NotificationChannel.EMAIL,
+        recipient: data.customerEmail!,
+        subject: 'Payment Received - AOSTP Logistics',
+        content: emailContent,
+        metadata: {
+          paymentId: data.paymentId,
+          paymentCode: data.paymentCode,
+          hasReceiptAttachment: !!pdfBuffer,
+        },
+        status: result.success ? 'SENT' : 'FAILED',
+        sentAt: result.success ? new Date() : null,
+        failReason: result.success ? null : result.error,
+      },
+    });
+
+    this.logger.log(
+      `Email sent to ${data.customerEmail} for payment ${data.paymentCode} - Success: ${result.success}`,
+    );
+
+    return {
+      channel: 'EMAIL',
+      recipient: data.customerEmail,
+      success: result.success,
+      hasReceiptAttachment: !!pdfBuffer,
+    };
+  }
+
+  private async sendPaymentSmsOrWhatsApp(data: PaymentNotificationJobData) {
+    const channel =
+      data.customerPreferredChannel === 'WHATSAPP'
+        ? NotificationChannel.WHATSAPP
+        : data.customerPreferredChannel === 'SMS'
+          ? NotificationChannel.SMS
+          : null;
+
+    if (!channel) {
+      return null;
+    }
+
+    const content = `Hi ${data.customerFirstName}, payment of ${data.currency}${data.amount} (${data.paymentCode}) received. Thank you! Check your email for the receipt.`;
+
+    let result: { success: boolean; error?: string };
+
+    if (channel === NotificationChannel.WHATSAPP) {
+      result = await this.whatsAppProvider.sendMessage(
+        data.customerPhoneNumber!,
+        content,
+      );
+    } else {
+      result = await this.smsProvider.sendSms(
+        data.customerPhoneNumber!,
+        content,
+      );
+    }
+
+    // Save notification record
+    await this.prisma.notification.create({
+      data: {
+        customerId: data.customerId,
+        type: NotificationType.PAYMENT_RECEIVED,
+        channel,
+        recipient: data.customerPhoneNumber!,
+        content,
+        metadata: {
+          paymentId: data.paymentId,
+          paymentCode: data.paymentCode,
+        },
+        status: result.success ? 'SENT' : 'FAILED',
+        sentAt: result.success ? new Date() : null,
+        failReason: result.success ? null : result.error,
+      },
+    });
+
+    this.logger.log(
+      `${channel} sent to ${data.customerPhoneNumber} for payment ${data.paymentCode} - Success: ${result.success}`,
     );
 
     return {

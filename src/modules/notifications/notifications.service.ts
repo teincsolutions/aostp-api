@@ -419,60 +419,38 @@ export class NotificationsService {
   }
 
   async notifyPaymentReceived(payment: Payment & { customer: Customer }) {
-    const channels: NotificationChannelContent[] = [];
+    // Queue the notification job - it will fetch the receipt PDF and attach it to the email
+    this.logger.log(`Queueing payment notification for ${payment.paymentCode}`);
 
-    // Email content (HTML)
-    if (payment.customer.email) {
-      const emailContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Payment Received - AOSTP Logistics</h2>
-          <p>Dear ${payment.customer.firstName}${payment.customer.lastName ? ' ' + payment.customer.lastName : ''},</p>
-          <p>We have received your payment. Thank you for your prompt payment.</p>
-          <table style="border-collapse: collapse; width: 100%;">
-            <tr><td><strong>Payment Code:</strong></td><td>${payment.paymentCode}</td></tr>
-            <tr><td><strong>Amount:</strong></td><td>${payment.currency} ${payment.amount}</td></tr>
-            <tr><td><strong>Payment Method:</strong></td><td>${payment.paymentMethod}</td></tr>
-            <tr><td><strong>Date:</strong></td><td>${new Date(payment.processedAt).toLocaleDateString()}</td></tr>
-          </table>
-          <p>You can <a href="https://aostp.akomapacargo.com/receipts/${payment.paymentCode}" target="_blank">view your receipt</a> for details.</p>
-        </div>
-      `;
-      channels.push({
-        channel: NotificationChannel.EMAIL,
-        recipient: payment.customer.email,
-        subject: 'Payment Received - AOSTP Logistics',
-        content: emailContent,
-      });
-    }
-
-    // SMS/WhatsApp content (short, plain)
-    if (payment.customer.phoneNumber) {
-      const channel =
-        payment.customer.preferredChannel === NotificationChannel.WHATSAPP
-          ? NotificationChannel.WHATSAPP
-          : payment.customer.preferredChannel === NotificationChannel.SMS
-            ? NotificationChannel.SMS
-            : null;
-
-      if (channel) {
-        const content = `Hi ${payment.customer.firstName}, payment ${payment.currency}${payment.amount} for ${payment.paymentCode} received. Thank you! Receipt: https://aostp.akomapacargo.com/receipts/${payment.paymentCode}`;
-        channels.push({
-          channel,
-          recipient: payment.customer.phoneNumber,
-          content,
-        });
-      }
-    }
-
-    return this.sendNotification({
-      customer: payment.customer,
-      type: NotificationType.PAYMENT_RECEIVED,
-      channels,
-      metadata: {
+    try {
+      const jobId = await this.notificationsQueue.addPaymentNotificationJob({
         paymentId: payment.id,
         paymentCode: payment.paymentCode,
-      },
-    });
+        receiptPdfKey: payment.receiptKey,
+        customerId: payment.customerId,
+        customerFirstName: payment.customer.firstName,
+        customerLastName: payment.customer.lastName,
+        customerEmail: payment.customer.email,
+        customerPhoneNumber: payment.customer.phoneNumber,
+        customerPreferredChannel: payment.customer.preferredChannel,
+        amount: payment.amount,
+        currency: payment.currency,
+        paymentMethod: payment.paymentMethod,
+        processedAt: payment.processedAt.toISOString(),
+      });
+
+      this.logger.log(
+        `Payment notification queued for ${payment.paymentCode} - Job ID: ${jobId}`,
+      );
+
+      return { queued: true, jobId };
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue payment notification for ${payment.paymentCode}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async notifyShipmentUpdate(

@@ -18,9 +18,25 @@ export interface InvoiceNotificationJobData {
   dueDate: string;
 }
 
+export interface PaymentNotificationJobData {
+  paymentId: string;
+  paymentCode: string;
+  receiptPdfKey: string | null;
+  customerId: string;
+  customerFirstName: string;
+  customerLastName: string | null;
+  customerEmail: string | null;
+  customerPhoneNumber: string | null;
+  customerPreferredChannel: string | null;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  processedAt: string;
+}
+
 export interface NotificationJobData {
   type: 'INVOICE_ISSUED' | 'PAYMENT_RECEIVED' | 'SHIPMENT_UPDATE';
-  data: InvoiceNotificationJobData | Record<string, any>;
+  data: InvoiceNotificationJobData | PaymentNotificationJobData | Record<string, any>;
 }
 
 @Injectable()
@@ -60,6 +76,37 @@ export class NotificationsQueue {
     );
 
     this.logger.log(`Invoice notification job added with ID: ${job.id}`);
+    return job.id.toString();
+  }
+
+  /**
+   * Add a payment receipt notification job to the queue
+   */
+  async addPaymentNotificationJob(
+    jobData: PaymentNotificationJobData,
+  ): Promise<string> {
+    this.logger.log(
+      `Adding payment notification job to queue: ${jobData.paymentCode}`,
+    );
+
+    const job = await this.queue.add(
+      'send-payment-notification',
+      {
+        type: 'PAYMENT_RECEIVED',
+        data: jobData,
+      } as NotificationJobData,
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 3000, // 3 seconds initial delay
+        },
+        removeOnComplete: 100, // Keep last 100 completed jobs
+        removeOnFail: false, // Keep failed jobs for debugging
+      },
+    );
+
+    this.logger.log(`Payment notification job added with ID: ${job.id}`);
     return job.id.toString();
   }
 
