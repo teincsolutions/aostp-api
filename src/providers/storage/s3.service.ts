@@ -287,6 +287,39 @@ export class S3Service {
   }
 
   /**
+   * Download file as Buffer
+   */
+  async getFileBuffer(
+    key: string,
+    bucketName: string = this.defaultBucket,
+  ): Promise<Buffer> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
+
+      if (!response.Body) {
+        throw new Error('Empty response body');
+      }
+
+      // Convert stream to buffer
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+
+      this.logger.log(`Downloaded file buffer for key: ${key}`);
+      return Buffer.concat(chunks);
+    } catch (error) {
+      this.logger.error(`Failed to download file ${key}`, error);
+      throw new Error(`Failed to download file: ${error.message}`);
+    }
+  }
+
+  /**
    * Get file metadata
    */
   async getFileMetadata(key: string): Promise<any> {

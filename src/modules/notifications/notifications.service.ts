@@ -13,6 +13,7 @@ import {
 import type { SmsProvider } from '../../interfaces/sms-provider.interface';
 import type { EmailProvider } from '../../interfaces/email-provider.interface';
 import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
+import { NotificationsQueue } from './notifications.queue';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -37,6 +38,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly notificationsQueue: NotificationsQueue,
     @Inject('SMS_PROVIDER') private readonly smsProvider: SmsProvider,
     @Inject('EMAIL_PROVIDER') private readonly emailProvider: EmailProvider,
     @Inject('WHATSAPP_PROVIDER')
@@ -382,66 +384,38 @@ export class NotificationsService {
   }
 
   async notifyInvoiceIssued(invoice: Invoice & { customer: Customer; packingList?: { name: string } }) {
-    const channels: NotificationChannelContent[] = [];
+    // Queue the notification job - it will fetch the PDF and attach it to the email
+    this.logger.log(`Queueing invoice notification for ${invoice.invoiceNumber}`);
 
-    // Email content (HTML)
-    if (invoice.customer.email) {
-      const packingListRow = invoice.packingList?.name
-        ? `<tr><td><strong>Packing List:</strong></td><td>${invoice.packingList.name}</td></tr>`
-        : '';
-      
-      const emailContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Invoice Issued - AOSTP</h2>
-          <p>Dear ${invoice.customer.firstName}${invoice.customer.lastName ? ' ' + invoice.customer.lastName : ''},</p>
-          <p>An invoice has been issued for your shipment.</p>
-          <table style="border-collapse: collapse; width: 100%;">
-            <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
-            ${packingListRow}
-            <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
-            <tr><td><strong>Due Date:</strong></td><td>${new Date(invoice.dueDate).toLocaleDateString()}</td></tr>
-          </table>
-          <p>Please ensure payment is made before the due date.</p>
-          <p>You can <a href="https://aostp.akomapacargo.com/invoices/${invoice.id}" target="_blank">view your invoice</a> for details.</p>
-          <p>Thank you for your business.</p>
-        </div>
-      `;
-      channels.push({
-        channel: NotificationChannel.EMAIL,
-        recipient: invoice.customer.email,
-        subject: 'Invoice Issued - AOSTP Logistics',
-        content: emailContent,
-      });
-    }
-
-    // SMS/WhatsApp content (short, plain)
-    if (invoice.customer.phoneNumber) {
-      const channel =
-        invoice.customer.preferredChannel === NotificationChannel.WHATSAPP
-          ? NotificationChannel.WHATSAPP
-          : invoice.customer.preferredChannel === NotificationChannel.SMS
-            ? NotificationChannel.SMS
-            : null;
-
-      if (channel) {
-        const content = `Hi ${invoice.customer.firstName}, invoice ${invoice.invoiceNumber} for ${invoice.currency}${invoice.totalAmount} is due ${new Date(invoice.dueDate).toLocaleDateString()}. View: https://aostp.akomapacargo.com/invoices/${invoice.id}`;
-        channels.push({
-          channel,
-          recipient: invoice.customer.phoneNumber,
-          content,
-        });
-      }
-    }
-
-    return this.sendNotification({
-      customer: invoice.customer,
-      type: NotificationType.INVOICE_ISSUED,
-      channels,
-      metadata: {
+    try {
+      const jobId = await this.notificationsQueue.addInvoiceNotificationJob({
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
-      },
-    });
+        invoicePdfKey: invoice.invoicePdfKey,
+        customerId: invoice.customerId,
+        customerFirstName: invoice.customer.firstName,
+        customerLastName: invoice.customer.lastName,
+        customerEmail: invoice.customer.email,
+        customerPhoneNumber: invoice.customer.phoneNumber,
+        customerPreferredChannel: invoice.customer.preferredChannel,
+        packingListName: invoice.packingList?.name || null,
+        totalAmount: invoice.totalAmount,
+        currency: invoice.currency,
+        dueDate: invoice.dueDate.toISOString(),
+      });
+
+      this.logger.log(
+        `Invoice notification queued for ${invoice.invoiceNumber} - Job ID: ${jobId}`,
+      );
+
+      return { queued: true, jobId };
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue invoice notification for ${invoice.invoiceNumber}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async notifyPaymentReceived(payment: Payment & { customer: Customer }) {
