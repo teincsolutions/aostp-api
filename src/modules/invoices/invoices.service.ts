@@ -938,21 +938,12 @@ export class InvoicesService {
         `PDF regenerated for invoice ${invoice.invoiceNumber} - Key: ${result.key}`,
       );
 
-      // Send notification with the new PDF attached
+      // Send notification with the new PDF attached (non-blocking with timeout)
       // Re-fetch invoice to get updated invoicePdfKey
       const updatedInvoice = await this.findOne(id);
-      try {
-        await this.notificationsService.notifyInvoiceIssued(updatedInvoice as any);
-        this.logger.log(
-          `Regeneration notification queued for invoice ${invoice.invoiceNumber}`,
-        );
-      } catch (notificationError) {
-        this.logger.error(
-          `Failed to queue regeneration notification for invoice ${invoice.invoiceNumber}`,
-          notificationError,
-        );
-        // Don't fail the entire operation if notification fails
-      }
+      
+      // Queue notification in background - don't block the response
+      this.queueInvoiceNotificationWithTimeout(updatedInvoice, invoice.invoiceNumber);
 
       return result;
     } catch (error) {
@@ -964,6 +955,40 @@ export class InvoicesService {
         `Couldn't regenerate PDF for invoice ${invoice.invoiceNumber}`,
       );
     }
+  }
+
+  /**
+   * Queue invoice notification with timeout (non-blocking)
+   * This prevents the endpoint from hanging if Redis/queue is unavailable
+   */
+  private queueInvoiceNotificationWithTimeout(
+    invoice: any,
+    invoiceNumber: string,
+  ): void {
+    const QUEUE_TIMEOUT_MS = 5000; // 5 second timeout
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Queue operation timed out')),
+        QUEUE_TIMEOUT_MS,
+      ),
+    );
+
+    Promise.race([
+      this.notificationsService.notifyInvoiceIssued(invoice),
+      timeoutPromise,
+    ])
+      .then(() => {
+        this.logger.log(
+          `Regeneration notification queued for invoice ${invoiceNumber}`,
+        );
+      })
+      .catch((error) => {
+        this.logger.error(
+          `Failed to queue regeneration notification for invoice ${invoiceNumber}: ${error.message}`,
+        );
+        // Don't throw - this is fire-and-forget
+      });
   }
 
   /**
