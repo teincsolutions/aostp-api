@@ -59,26 +59,57 @@ export class NotificationsQueue {
     }
 
     try {
-      // Check if queue is ready by pinging Redis
-      const client = this.queue.client;
-      if (client && client.status === 'ready') {
+      // Set up event listeners
+      this.queue.on('ready', () => {
         this.isQueueReady = true;
-        this.logger.log('Notification queue initialized successfully');
-      } else {
-        // Wait for connection
-        this.queue.on('ready', () => {
-          this.isQueueReady = true;
-          this.logger.log('Notification queue connected to Redis');
-        });
+        this.logger.log('Notification queue connected to Redis');
+      });
 
-        this.queue.on('error', (error) => {
-          this.isQueueReady = false;
-          this.logger.warn(`Notification queue error: ${error.message}`);
-        });
+      this.queue.on('error', (error) => {
+        this.isQueueReady = false;
+        this.logger.warn(`Notification queue error: ${error.message}`);
+      });
+
+      // Check if already connected by trying to ping
+      const client = this.queue.client;
+      if (client) {
+        // Try to check connection status
+        if (client.status === 'ready') {
+          this.isQueueReady = true;
+          this.logger.log('Notification queue initialized successfully');
+        } else {
+          // Wait a bit and check again - Redis might be connecting
+          setTimeout(async () => {
+            try {
+              await this.queue!.isReady();
+              this.isQueueReady = true;
+              this.logger.log('Notification queue ready after delay');
+            } catch (err) {
+              this.logger.warn('Notification queue not ready after delay');
+            }
+          }, 2000);
+        }
       }
     } catch (error) {
       this.logger.warn(`Failed to initialize notification queue: ${error.message}`);
       this.isQueueReady = false;
+    }
+  }
+
+  /**
+   * Check if the queue is available and ready
+   * Also does a live check if not marked ready
+   */
+  async checkAndUpdateReadyState(): Promise<boolean> {
+    if (!this.queue) return false;
+    
+    try {
+      await this.queue.isReady();
+      this.isQueueReady = true;
+      return true;
+    } catch {
+      this.isQueueReady = false;
+      return false;
     }
   }
 
@@ -95,11 +126,15 @@ export class NotificationsQueue {
   async addInvoiceNotificationJob(
     jobData: InvoiceNotificationJobData,
   ): Promise<string | null> {
+    // Check if ready, if not try a live check
     if (!this.isAvailable()) {
-      this.logger.warn(
-        `Cannot queue invoice notification for ${jobData.invoiceNumber} - Redis unavailable`,
-      );
-      return null;
+      const isReady = await this.checkAndUpdateReadyState();
+      if (!isReady) {
+        this.logger.warn(
+          `Cannot queue invoice notification for ${jobData.invoiceNumber} - Redis unavailable`,
+        );
+        return null;
+      }
     }
 
     try {
@@ -140,11 +175,15 @@ export class NotificationsQueue {
   async addPaymentNotificationJob(
     jobData: PaymentNotificationJobData,
   ): Promise<string | null> {
+    // Check if ready, if not try a live check
     if (!this.isAvailable()) {
-      this.logger.warn(
-        `Cannot queue payment notification for ${jobData.paymentCode} - Redis unavailable`,
-      );
-      return null;
+      const isReady = await this.checkAndUpdateReadyState();
+      if (!isReady) {
+        this.logger.warn(
+          `Cannot queue payment notification for ${jobData.paymentCode} - Redis unavailable`,
+        );
+        return null;
+      }
     }
 
     try {

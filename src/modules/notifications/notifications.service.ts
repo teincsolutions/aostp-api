@@ -436,10 +436,14 @@ export class NotificationsService {
   ) {
     const customer = invoice.customer;
 
+    this.logger.log(
+      `Direct email attempt for invoice ${invoice.invoiceNumber} - Customer ID: ${customer?.id}, Email: ${customer?.email}`,
+    );
+
     // Always send email if customer has email address
-    if (!customer.email) {
+    if (!customer?.email) {
       this.logger.warn(
-        `Cannot send direct email for invoice ${invoice.invoiceNumber} - customer has no email`,
+        `Cannot send direct email for invoice ${invoice.invoiceNumber} - customer has no email (customer: ${JSON.stringify({ id: customer?.id, firstName: customer?.firstName, email: customer?.email })})`,
       );
       return { sent: false, reason: 'NO_EMAIL' };
     }
