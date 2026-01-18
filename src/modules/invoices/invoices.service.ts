@@ -942,7 +942,7 @@ export class InvoicesService {
       // Re-fetch invoice to get updated invoicePdfKey
       const updatedInvoice = await this.findOne(id);
       try {
-        await this.notificationsService.notifyInvoiceIssued(updatedInvoice);
+        await this.notificationsService.notifyInvoiceIssued(updatedInvoice as any);
         this.logger.log(
           `Regeneration notification queued for invoice ${invoice.invoiceNumber}`,
         );
