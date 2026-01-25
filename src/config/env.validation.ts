@@ -71,6 +71,11 @@ export class EnvironmentVariables {
   @IsString()
   CORS_ORIGIN: string;
 
+  // Frontend URL for public links
+  @IsString()
+  @IsOptional()
+  FRONTEND_URL?: string;
+
   // Rate Limiting
   @IsNumber()
   @IsOptional()

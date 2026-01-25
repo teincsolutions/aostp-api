@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bull';
 export interface InvoiceNotificationJobData {
   invoiceId: string;
   invoiceNumber: string;
+  invoiceAccessToken: string;
   invoicePdfKey: string | null;
   customerId: string;
   customerFirstName: string;

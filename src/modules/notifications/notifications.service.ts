@@ -391,6 +391,7 @@ export class NotificationsService {
       const jobId = await this.notificationsQueue.addInvoiceNotificationJob({
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
+        invoiceAccessToken: (invoice as any).accessToken,
         invoicePdfKey: invoice.invoicePdfKey,
         customerId: invoice.customerId,
         customerFirstName: invoice.customer.firstName,

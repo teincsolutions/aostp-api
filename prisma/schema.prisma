@@ -458,6 +458,7 @@ model PackingList {
 model Invoice {
   id            String        @id @default(uuid())
   invoiceNumber String        @unique
+  accessToken   String        @unique @default(uuid()) // Public access token for customer portal
   customerId    String
   customer      Customer      @relation(fields: [customerId], references: [id])
   packingListId String? // Optional - invoices can exist without packing lists
@@ -486,6 +487,7 @@ model Invoice {
   @@index([customerId])
   @@index([packageId])
   @@index([status])
+  @@index([accessToken])
 }
 
 model Payment {

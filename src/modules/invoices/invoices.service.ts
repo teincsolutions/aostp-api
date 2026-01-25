@@ -1089,4 +1089,149 @@ export class InvoicesService {
 
     return pdfResult;
   }
+
+  /**
+   * Get invoice by public access token (no authentication required)
+   */
+  async findByAccessToken(accessToken: string): Promise<any> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { accessToken },
+      include: {
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true,
+            email: true,
+          },
+        },
+        packingList: {
+          select: {
+            name: true,
+            eta: true,
+          },
+        },
+        package: {
+          select: {
+            trackingCode: true,
+            description: true,
+            weight: true,
+            cbm: true,
+            shippingMode: true,
+            quantity: true,
+          },
+        },
+        payments: {
+          select: {
+            id: true,
+            paymentCode: true,
+            amount: true,
+            currency: true,
+            localAmount: true,
+            paymentMethod: true,
+            processedAt: true,
+          },
+          orderBy: {
+            processedAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    // Return invoice without sensitive internal data
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      totalAmount: invoice.totalAmount,
+      currency: invoice.currency,
+      exchangeRate: invoice.exchangeRate,
+      localAmount: invoice.localAmount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidAmount: invoice.paidAmount,
+      balance: invoice.balance,
+      notes: invoice.notes,
+      createdAt: invoice.createdAt,
+      customer: invoice.customer,
+      packingList: invoice.packingList,
+      package: invoice.package,
+      payments: invoice.payments,
+    };
+  }
+
+  /**
+   * Get invoice PDF download URL by access token (public)
+   */
+  async downloadInvoicePdfByAccessToken(accessToken: string): Promise<string> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { accessToken },
+      include: {
+        customer: true,
+        packingList: {
+          include: {
+            container: {
+              include: {
+                departureCity: true,
+                destinationCity: true,
+              },
+            },
+          },
+        },
+        package: {
+          include: {
+            items: true,
+            warehouse: true,
+            destinationCity: true,
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const pkg = await this.prisma.package.findUnique({
+      where: { id: invoice.packageId || '' },
+    });
+
+    // If PDF key doesn't exist, generate PDF on-the-fly
+    if (!invoice.invoicePdfKey) {
+      try {
+        this.logger.log(
+          `Generating PDF on-demand for invoice ${invoice.invoiceNumber} (public access)`,
+        );
+
+        const result = await this.generateInvoicePdfData(
+          invoice,
+          pkg?.shippingRate || 0,
+        );
+        return result.url;
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate PDF on-demand for invoice ${invoice.invoiceNumber}`,
+          error,
+        );
+        throw new NotFoundException(
+          `Couldn't generate PDF for invoice ${invoice.invoiceNumber}`,
+        );
+      }
+    }
+
+    return this.pdfService.generateSignedDownloadUrl(invoice.invoicePdfKey);
+  }
+
+  /**
+   * Generate public invoice URL for SMS/notifications
+   */
+  getPublicInvoiceUrl(accessToken: string): string {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    return `${frontendUrl}/invoice/${accessToken}`;
+  }
 }
