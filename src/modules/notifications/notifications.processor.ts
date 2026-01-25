@@ -31,7 +31,8 @@ export class NotificationsProcessor {
   /**
    * Generate public invoice URL for customer access
    */
-  private getPublicInvoiceUrl(accessToken: string): string {
+  private getPublicInvoiceUrl(accessToken: string | null): string | null {
+    if (!accessToken) return null;
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     return `${frontendUrl}/invoice/${accessToken}`;
@@ -121,6 +122,10 @@ export class NotificationsProcessor {
     const dueDate = new Date(data.dueDate).toLocaleDateString();
     const invoiceUrl = this.getPublicInvoiceUrl(data.invoiceAccessToken);
 
+    const viewOnlineButton = invoiceUrl
+      ? `<p><a href="${invoiceUrl}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View Invoice Online</a></p>`
+      : '';
+
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>Invoice Issued - AOSTP</h2>
@@ -134,7 +139,7 @@ export class NotificationsProcessor {
         </table>
         <p>Please ensure payment is made before the due date.</p>
         ${pdfBuffer ? '<p><strong>Your invoice PDF is attached to this email.</strong></p>' : ''}
-        <p><a href="${invoiceUrl}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View Invoice Online</a></p>
+        ${viewOnlineButton}
         <p>Thank you for your business.</p>
       </div>
     `;
@@ -204,7 +209,9 @@ export class NotificationsProcessor {
 
     const dueDate = new Date(data.dueDate).toLocaleDateString();
     const invoiceUrl = this.getPublicInvoiceUrl(data.invoiceAccessToken);
-    const content = `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber} for ${data.currency}${data.totalAmount} is due ${dueDate}. View your invoice: ${invoiceUrl}`;
+    const content = invoiceUrl
+      ? `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber} for ${data.currency}${data.totalAmount} is due ${dueDate}. View your invoice: ${invoiceUrl}`
+      : `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber} for ${data.currency}${data.totalAmount} is due ${dueDate}. Check your email for details.`;
 
     let result: { success: boolean; error?: string };
 

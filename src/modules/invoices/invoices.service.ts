@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -1077,10 +1078,15 @@ export class InvoicesService {
     // Generate PDF
     const pdfResult = await this.pdfService.generateInvoicePDF(pdfData);
 
-    // Update invoice with PDF key in transaction
+    // Update invoice with PDF key and generate accessToken if not exists
+    const updateData: any = { invoicePdfKey: pdfResult.key };
+    if (!invoice.accessToken) {
+      updateData.accessToken = randomUUID();
+    }
+
     await this.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { invoicePdfKey: pdfResult.key },
+      data: updateData,
     });
 
     this.logger.log(
