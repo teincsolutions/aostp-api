@@ -111,7 +111,7 @@ export class InvoicesService {
 
       // Generate invoice number
       const invoiceNumber =
-        await this.idGeneratorService.generateInvoiceNumber();
+        this.idGeneratorService.generateInvoiceNumber();
 
       // Use container's ETA as due date, fallback to 30 days from now
       const dueDate = packingList.container?.eta
@@ -255,7 +255,7 @@ export class InvoicesService {
     }
 
     // Generate invoice number
-    const invoiceNumber = await this.idGeneratorService.generateInvoiceNumber();
+    const invoiceNumber = this.idGeneratorService.generateInvoiceNumber();
 
     // Calculate due date (30 days from now)
     const dueDate = new Date();

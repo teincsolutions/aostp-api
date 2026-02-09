@@ -11,6 +11,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import {
   PaymentStatus as GatewayPaymentStatus,
   PaymentResult,
@@ -126,8 +127,7 @@ export class PaymentsService {
     // For gateway payments, process through gateway first but DON'T update invoices yet
     let gatewayResult: PaymentResult | null = null;
     let gatewayTransactionId: string | null = null;
-
-    const paymentCode = await this.idGeneratorService.generateReceiptNumber();
+    let paymentCode = this.idGeneratorService.generateReceiptNumber();
 
     if (isGatewayPayment) {
       try {
@@ -178,102 +178,130 @@ export class PaymentsService {
       }
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Prepare payment notes with gateway info for gateway payments
-      let paymentNotes = notes;
-      if (isGatewayPayment && gatewayResult) {
-        const notesParts: string[] = [];
-        if (notes) notesParts.push(notes);
-        if (gatewayResult.paymentUrl) {
-          notesParts.push(`GATEWAY PAYMENT URL: ${gatewayResult.paymentUrl}`);
-        }
-        notesParts.push(`GATEWAY STATUS: PENDING`);
-        if (gatewayResult.gatewayTransactionId) {
-          notesParts.push(
-            `GATEWAY TRANSACTION ID: ${gatewayResult.gatewayTransactionId}`,
-          );
-        }
-        paymentNotes = notesParts.join('\n');
-      }
+    // Retry loop to handle extremely rare paymentCode collisions (P2002)
+    const MAX_RETRIES = 2;
+    let result: any;
 
-      // Create payment
-      const payment = await tx.payment.create({
-        data: {
-          paymentCode,
-          gatewayTransactionId,
-          customer: {
-            connect: { id: customerId },
-          },
-          amount: currency === 'USD' ? roundedAmount : 0,
-          currency,
-          exchangeRate: {
-            connect: { id: exchangeRateId },
-          },
-          localAmount: currency === 'GHS' ? localAmount : 0,
-          paymentMethod,
-          reference,
-          notes: paymentNotes,
-          paymentSource, // CR-02: Payment source field
-          referenceDocumentKey, // CR-01: Reference document key
-          gatewayStatus: isGatewayPayment
-            ? GatewayPaymentStatus.PENDING
-            : undefined,
-          processedBy: {
-            connect: { id: userId },
-          },
-          invoices: {
-            connect: invoiceIds ? invoiceIds.map((id) => ({ id })) : [],
-          },
-        },
-        include: {
-          customer: true,
-          exchangeRate: true,
-          processedBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        result = await this.prisma.$transaction(async (tx) => {
+          // Prepare payment notes with gateway info for gateway payments
+          let paymentNotes = notes;
+          if (isGatewayPayment && gatewayResult) {
+            const notesParts: string[] = [];
+            if (notes) notesParts.push(notes);
+            if (gatewayResult.paymentUrl) {
+              notesParts.push(`GATEWAY PAYMENT URL: ${gatewayResult.paymentUrl}`);
+            }
+            notesParts.push(`GATEWAY STATUS: PENDING`);
+            if (gatewayResult.gatewayTransactionId) {
+              notesParts.push(
+                `GATEWAY TRANSACTION ID: ${gatewayResult.gatewayTransactionId}`,
+              );
+            }
+            paymentNotes = notesParts.join('\n');
+          }
+
+          // Create payment
+          const payment = await tx.payment.create({
+            data: {
+              paymentCode,
+              gatewayTransactionId,
+              customer: {
+                connect: { id: customerId },
+              },
+              amount: currency === 'USD' ? roundedAmount : 0,
+              currency,
+              exchangeRate: {
+                connect: { id: exchangeRateId },
+              },
+              localAmount: currency === 'GHS' ? localAmount : 0,
+              paymentMethod,
+              reference,
+              notes: paymentNotes,
+              paymentSource, // CR-02: Payment source field
+              referenceDocumentKey, // CR-01: Reference document key
+              gatewayStatus: isGatewayPayment
+                ? GatewayPaymentStatus.PENDING
+                : undefined,
+              processedBy: {
+                connect: { id: userId },
+              },
+              invoices: {
+                connect: invoiceIds ? invoiceIds.map((id) => ({ id })) : [],
+              },
             },
-          },
-        },
-      });
+            include: {
+              customer: true,
+              exchangeRate: true,
+              processedBy: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+          });
 
-      // For non-gateway payments, apply payment to invoices immediately
-      if (invoiceIds && invoiceIds.length > 0 && !isGatewayPayment) {
-        // Apply payment to invoices - create relationship and update amounts
-        await this.applyPaymentToInvoices(
-          tx,
-          payment.id,
-          invoiceIds,
-          roundedAmount,
-          invoicesToPay,
-          currency,
-        );
+          // For non-gateway payments, apply payment to invoices immediately
+          if (invoiceIds && invoiceIds.length > 0 && !isGatewayPayment) {
+            // Apply payment to invoices - create relationship and update amounts
+            await this.applyPaymentToInvoices(
+              tx,
+              payment.id,
+              invoiceIds,
+              roundedAmount,
+              invoicesToPay,
+              currency,
+            );
+          }
+
+          // Log the action
+          await tx.auditLog.create({
+            data: {
+              userId,
+              action: 'CREATE',
+              entity: 'Payment',
+              entityId: payment.id,
+              after: payment as any,
+              metadata: {
+                customerCode: customer.customerCode,
+                invoiceCount: invoiceIds ? invoiceIds.length : 0,
+                localAmount,
+                paymentMethod,
+                isGatewayPayment,
+                paymentSource: paymentSource, // CR-02: Include payment source in audit log
+                hasReferenceDocument: !!referenceDocumentKey, // CR-01: Track if document was uploaded
+              },
+            },
+          });
+
+          return payment as any;
+        });
+
+        // Transaction succeeded, break out of retry loop
+        break;
+      } catch (error) {
+        const isUniqueViolation =
+          error instanceof PrismaClientKnownRequestError &&
+          error.code === 'P2002' &&
+          (error.meta?.target as string[])?.includes('paymentCode');
+
+        if (isUniqueViolation && attempt < MAX_RETRIES && !isGatewayPayment) {
+          // For non-gateway payments, regenerate code and retry
+          paymentCode = this.idGeneratorService.generateReceiptNumber();
+          this.logger.warn(
+            `paymentCode collision detected, retrying with new code: ${paymentCode} (attempt ${attempt + 1})`,
+          );
+          continue;
+        }
+
+        // For gateway payments or final attempt, throw the error
+        throw error;
       }
-
-      // Log the action
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'CREATE',
-          entity: 'Payment',
-          entityId: payment.id,
-          after: payment as any,
-          metadata: {
-            customerCode: customer.customerCode,
-            invoiceCount: invoiceIds ? invoiceIds.length : 0,
-            localAmount,
-            paymentMethod,
-            isGatewayPayment,
-            paymentSource: paymentSource, // CR-02: Include payment source in audit log
-            hasReferenceDocument: !!referenceDocumentKey, // CR-01: Track if document was uploaded
-          },
-        },
-      });
-
-      return payment as any;
-    });
+    }
 
     // Generate receipt for cash payments immediately
     if (!isGatewayPayment) {

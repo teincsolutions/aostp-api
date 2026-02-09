@@ -135,7 +135,7 @@ export class PackageDeliveryService {
 
         // Generate delivery ID
         const deliveryId =
-          await this.idGeneratorService.generatePackageDeliveryId();
+          this.idGeneratorService.generatePackageDeliveryId();
 
         // Create delivery record
         const created = await tx.packageDelivery.create({

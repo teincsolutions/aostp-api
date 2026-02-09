@@ -1,46 +1,57 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ID_FORMATS } from '../constants/id-formats';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class IdGeneratorService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Generate customer ID: CUST{YY}{MM}{SEQUENCE}
+   * Generate a short uppercase alphanumeric random suffix
+   * Uses crypto.randomBytes for better randomness than Math.random
    */
-  async generateCustomerId(): Promise<string> {
+  private generateRandomSuffix(length = 4): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const bytes = randomBytes(length);
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars[bytes[i] % chars.length];
+    }
+    return result;
+  }
+
+  /**
+   * Generate a millisecond-precision timestamp string: HHmmssSSS
+   */
+  private generateTimestamp(date = new Date()): string {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    const millis = date.getMilliseconds().toString().padStart(3, '0');
+    return `${hours}${minutes}${seconds}${millis}`;
+  }
+
+  /**
+   * Generate customer ID: CUST{YY}{MM}-{XXXX}
+   * Uses random suffix instead of DB count to avoid race conditions
+   */
+  generateCustomerId(): string {
     const config = ID_FORMATS.CUSTOMER;
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
 
     const prefix = `${config.PREFIX}${year}${month}`;
-
-    // Get the count of customers created this month
-    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-    const count = await this.prisma.customer.count({
-      where: {
-        createdAt: {
-          gte: startOfMonth,
-          lte: endOfMonth,
-        },
-      },
-    });
-
-    const sequence = (count + 1)
-      .toString()
-      .padStart(config.SEQUENCE_LENGTH, '0');
-    return `${prefix}${sequence}`;
+    const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
+    return `${prefix}-${suffix}`;
   }
 
   /**
-   * Generate package tracking code: PKG-YYYYMMDD-XXXX
-   * Format: PKG-20250821-0001
+   * Generate package tracking code: PKG-YYYYMMDD-HHmmssSSS-XXXX
+   * Uses timestamp + random suffix to avoid race conditions
    */
-  async generatePackageTrackingCode(): Promise<string> {
+  generatePackageTrackingCode(): string {
     const config = ID_FORMATS.PACKAGE_TRACKING;
     const date = new Date();
     const year = date.getFullYear();
@@ -48,24 +59,9 @@ export class IdGeneratorService {
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-
-    // Get the count of packages created today
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
-    const count = await this.prisma.package.count({
-      where: {
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
-    const sequence = (count + 1)
-      .toString()
-      .padStart(config.SEQUENCE_LENGTH, '0');
-    return `${config.PREFIX}-${dateStr}-${sequence}`;
+    const timestamp = this.generateTimestamp(date);
+    const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
+    return `${config.PREFIX}-${dateStr}-${timestamp}-${suffix}`;
   }
 
   /**
@@ -80,9 +76,10 @@ export class IdGeneratorService {
   }
 
   /**
-   * Generate invoice number: INV-YYYYMMDD-XXXX
+   * Generate invoice number: INV-YYYYMMDD-HHmmssSSS-XXXX
+   * Uses timestamp + random suffix to avoid race conditions
    */
-  async generateInvoiceNumber(): Promise<string> {
+  generateInvoiceNumber(): string {
     const config = ID_FORMATS.INVOICE;
     const date = new Date();
     const year = date.getFullYear();
@@ -90,31 +87,16 @@ export class IdGeneratorService {
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-    const prefix = `${config.PREFIX}-${dateStr}-`;
-
-    // Get the count of invoices created today
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
-    const count = await this.prisma.invoice.count({
-      where: {
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
-    const sequence = (count + 1)
-      .toString()
-      .padStart(config.SEQUENCE_LENGTH, '0');
-    return `${prefix}${sequence}`;
+    const timestamp = this.generateTimestamp(date);
+    const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
+    return `${config.PREFIX}-${dateStr}-${timestamp}-${suffix}`;
   }
 
   /**
-   * Generate receipt number: RCPT-YYYYMMDD-XXXX
+   * Generate receipt number: RCPT-YYYYMMDD-HHmmssSSS-XXXX
+   * Uses timestamp + random suffix to avoid race conditions
    */
-  async generateReceiptNumber(): Promise<string> {
+  generateReceiptNumber(): string {
     const config = ID_FORMATS.RECEIPT;
     const date = new Date();
     const year = date.getFullYear();
@@ -122,54 +104,25 @@ export class IdGeneratorService {
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-    const prefix = `${config.PREFIX}-${dateStr}-`;
-
-    // Get the count of payments created today
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
-    const count = await this.prisma.payment.count({
-      where: {
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
-    const sequence = (count + 1)
-      .toString()
-      .padStart(config.SEQUENCE_LENGTH, '0');
-    return `${prefix}${sequence}`;
+    const timestamp = this.generateTimestamp(date);
+    const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
+    return `${config.PREFIX}-${dateStr}-${timestamp}-${suffix}`;
   }
 
   /**
-   * Generate package delivery ID: DLV-YYYYMMDD-XXXX
+   * Generate package delivery ID: DLV-YYYYMMDD-HHmmssSSS-XXXX
+   * Uses timestamp + random suffix to avoid race conditions
    */
-  async generatePackageDeliveryId(): Promise<string> {
+  generatePackageDeliveryId(): string {
     const date = new Date();
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-    const prefix = `DLV-${dateStr}-`;
-
-    // Get the count of deliveries created today
-    const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-
-    const count = await this.prisma.packageDelivery.count({
-      where: {
-        releaseDate: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
-    const sequence = (count + 1).toString().padStart(4, '0');
-    return `${prefix}${sequence}`;
+    const timestamp = this.generateTimestamp(date);
+    const suffix = this.generateRandomSuffix(4);
+    return `DLV-${dateStr}-${timestamp}-${suffix}`;
   }
 
   /**
@@ -207,12 +160,15 @@ export class IdGeneratorService {
     // Check if it matches the auto-generated formats:
     // PKG-YYYYMMDD-XXXX (old format)
     const pkgPattern = /^PKG-\d{8}-\d{4}$/;
+    // PKG-YYYYMMDD-HHmmssSSS-XXXX (new format)
+    const pkgNewPattern = /^PKG-\d{8}-\d{9}-[A-Z0-9]{4}$/;
     // AOSTP-YYMM-XXXXXX (new consolidated/auto-gen format)
     const aostpPattern = /^AOSTP-\d{4}-[A-Z0-9]{6}$/;
 
     // Allow either auto-generated formats or any manual format (3+ characters)
     return (
       pkgPattern.test(trackingCode) ||
+      pkgNewPattern.test(trackingCode) ||
       aostpPattern.test(trackingCode) ||
       trackingCode.trim().length >= 3
     );
