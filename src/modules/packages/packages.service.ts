@@ -420,7 +420,7 @@ export class PackagesService {
       updatePackageDto.pickupCode &&
       updatePackageDto.pickupCode !== existingPackage.pickupCode
     ) {
-      const existingWithPickupCode = await this.prisma.package.findUnique({
+      const existingWithPickupCode = await this.prisma.package.findFirst({
         where: { pickupCode: updatePackageDto.pickupCode },
       });
 

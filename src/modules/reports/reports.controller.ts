@@ -17,7 +17,7 @@ import { PackingListReportResponseDto } from './dto/packing-list-report.dto';
 import { CustomerLeagueReportResponseDto } from './dto/customer-league-report.dto';
 import { ShippingMethodReportResponseDto } from './dto/shipping-method-report.dto';
 import { GeneralReportResponseDto } from './dto/general-report.dto';
-import { PickupReportResponseDto } from './dto/pickup-report.dto';
+import { PickupReportResponseDto, PickupReportQueryDto } from './dto/pickup-report.dto';
 import { WarehouseReportResponseDto } from './dto/warehouse-report.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -278,13 +278,73 @@ export class ReportsController {
     type: String,
     description: 'Filter by customer ID',
   })
+  @ApiQuery({
+    name: 'warehouseId',
+    required: false,
+    type: String,
+    description: 'Filter by warehouse ID',
+  })
+  @ApiQuery({
+    name: 'invoiceId',
+    required: false,
+    type: String,
+    description: 'Filter by invoice ID',
+  })
+  @ApiQuery({
+    name: 'packingListId',
+    required: false,
+    type: String,
+    description: 'Filter by packing list ID',
+  })
+  @ApiQuery({
+    name: 'trackingCode',
+    required: false,
+    type: String,
+    description: 'Filter by tracking code (partial match)',
+  })
+  @ApiQuery({
+    name: 'deliveryId',
+    required: false,
+    type: String,
+    description: 'Filter by delivery ID (partial match)',
+  })
+  @ApiQuery({
+    name: 'receiverName',
+    required: false,
+    type: String,
+    description: 'Filter by receiver name (partial match)',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    description: 'Field to sort by (default: releaseDate)',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    description: 'Sort order (default: desc)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Pickup report generated successfully',
     type: PickupReportResponseDto,
   })
   async getPickupReport(
-    @Query() query: ReportQueryDto,
+    @Query() query: PickupReportQueryDto,
   ): Promise<PickupReportResponseDto> {
     return this.reportsService.getPickupReport(query);
   }

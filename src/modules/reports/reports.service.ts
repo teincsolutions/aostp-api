@@ -29,6 +29,7 @@ import {
 import {
   PickupReportResponseDto,
   PickupItemDto,
+  PickupReportQueryDto,
 } from './dto/pickup-report.dto';
 import {
   WarehouseReportResponseDto,
@@ -829,9 +830,17 @@ export class ReportsService {
    * Package delivery records
    */
   async getPickupReport(
-    query: ReportQueryDto,
+    query: PickupReportQueryDto,
   ): Promise<PickupReportResponseDto> {
     this.logger.log('Generating pickup report');
+
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = 'releaseDate',
+      sortOrder = 'desc',
+    } = query;
+    const skip = (page - 1) * limit;
 
     const where: any = {};
 
@@ -849,45 +858,90 @@ export class ReportsService {
       where.customerId = query.customerId;
     }
 
-    // Fetch deliveries
-    const deliveries = await this.prisma.packageDelivery.findMany({
-      where,
-      select: {
-        deliveryId: true,
-        quantity: true,
-        releaseDate: true,
-        receiverName: true,
-        notes: true,
-        customer: {
-          select: {
-            customerCode: true,
-            firstName: true,
-            lastName: true,
-            warehouse: {
-              select: {
-                name: true,
+    if (query.invoiceId) {
+      where.invoiceId = query.invoiceId;
+    }
+
+    if (query.deliveryId) {
+      where.deliveryId = {
+        contains: query.deliveryId,
+        mode: 'insensitive',
+      };
+    }
+
+    if (query.receiverName) {
+      where.receiverName = {
+        contains: query.receiverName,
+        mode: 'insensitive',
+      };
+    }
+
+    if (query.trackingCode) {
+      where.package = {
+        trackingCode: {
+          contains: query.trackingCode,
+          mode: 'insensitive',
+        },
+      };
+    }
+
+    if (query.warehouseId) {
+      where.package = {
+        ...where.package,
+        warehouseId: query.warehouseId,
+      };
+    }
+
+    if (query.packingListId) {
+      where.invoice = {
+        packingListId: query.packingListId,
+      };
+    }
+
+    // Fetch deliveries with pagination
+    const [deliveries, total] = await Promise.all([
+      this.prisma.packageDelivery.findMany({
+        where,
+        select: {
+          deliveryId: true,
+          quantity: true,
+          releaseDate: true,
+          receiverName: true,
+          notes: true,
+          customer: {
+            select: {
+              customerCode: true,
+              firstName: true,
+              lastName: true,
+              warehouse: {
+                select: {
+                  name: true,
+                },
               },
             },
           },
-        },
-        invoice: {
-          select: {
-            invoiceNumber: true,
+          invoice: {
+            select: {
+              invoiceNumber: true,
+            },
+          },
+          package: {
+            select: {
+              pickupCode: true,
+              trackingCode: true,
+              description: true,
+              status: true,
+            },
           },
         },
-        package: {
-          select: {
-            pickupCode: true,
-            trackingCode: true,
-            description: true,
-            status: true,
-          },
+        orderBy: {
+          [sortBy]: sortOrder,
         },
-      },
-      orderBy: {
-        releaseDate: 'desc',
-      },
-    });
+        skip,
+        take: limit,
+      }),
+      this.prisma.packageDelivery.count({ where }),
+    ]);
 
     const pickups: PickupItemDto[] = deliveries.map((d) => ({
       customerCode: d.customer.customerCode,
@@ -905,9 +959,19 @@ export class ReportsService {
       notes: d.notes || '',
     }));
 
+    const totalPages = Math.ceil(total / limit);
+
     return {
       pickups,
-      totalCount: pickups.length,
+      totalCount: total,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
     };
   }
 

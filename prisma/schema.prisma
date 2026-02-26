@@ -309,7 +309,7 @@ model Package {
   paymentStatus PaymentStatus @default(PENDING)
 
   // Pickup code - unique and optional for package identification
-  pickupCode String? @unique
+  pickupCode String?
 
   // Receipt
   receiptKey String? // S3 key for package intake receipt PDF
