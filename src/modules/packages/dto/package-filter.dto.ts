@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { PackageStatus, PaymentStatus } from '@prisma/client';
@@ -18,7 +18,7 @@ export class PackageFilterDto extends PaginationDto {
     example: PackageStatus.RECEIVED,
   })
   @IsOptional()
-  @IsEnum(PackageStatus)
+  @IsString()
   status?: PackageStatus;
 
   @ApiPropertyOptional({
@@ -27,7 +27,7 @@ export class PackageFilterDto extends PaginationDto {
     example: 'SEA',
   })
   @IsOptional()
-  @IsEnum(['SEA', 'AIR'] as const)
+  @IsString()
   shippingMode?: 'SEA' | 'AIR';
 
   @ApiPropertyOptional({
@@ -44,7 +44,7 @@ export class PackageFilterDto extends PaginationDto {
     example: PaymentStatus.PAID,
   })
   @IsOptional()
-  @IsEnum(PaymentStatus)
+  @IsString()
   paymentStatus?: PaymentStatus;
 
   @ApiPropertyOptional({

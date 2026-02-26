@@ -339,37 +339,39 @@ const LAYOUT = {
 
   // header/company/date
   companyFont: 18, // larger for A5
-  addressFont: 9,
+  addressFont: 10, // increased from 9
   dateBoxW: 100, // wider for A5
   rateBoxW: 150,
   dateBoxH: 16,
   dateFont: 12,
-  rateFont: 10,
+  rateFont: 11, // increased from 10
+  invoiceNumberFont: 11, // new: dedicated font size for invoice number
+  invoiceNumberWidth: 150, // new: wider width for invoice number
 
   // colored band
   bandHeight: 20, // taller for A5
-  bandFont: 12,
+  bandFont: 13, // increased from 12
 
   // package slab
   pkgSlabH: 32,
-  pkgFont: 9,
+  pkgFont: 10, // increased from 9
 
   // table
   headH: 26,
-  headFont: 10, // larger fonts for A5
-  rowH: 14,
-  rowFont: 10,
+  headFont: 11, // increased from 10
+  rowH: 16, // increased from 14 to accommodate larger font
+  rowFont: 11, // increased from 10
 
   // totals + strips
-  pillW: 160, // wider for A5
-  pillH: 26,
-  pillFont: 12,
-  nbStripH: 12,
-  nbFont: 8,
-  bottomInfoFont: 9,
+  pillW: 180, // increased from 160 to accommodate larger font
+  pillH: 28, // increased from 26 for better spacing
+  pillFont: 13, // increased from 12
+  nbStripH: 14, // increased from 12 for larger font
+  nbFont: 9, // increased from 8
+  bottomInfoFont: 10, // increased from 9
 
   // reserved vertical block at bottom (pill + strips area)
-  bottomReserved: 76, // adjusted for larger elements
+  bottomReserved: 82, // increased from 76 to accommodate larger elements
 };
 
 // =====================
@@ -613,15 +615,16 @@ export class PDFService {
       'center',
     );
 
-    // Invoice number (above date box) - use smaller font to prevent truncation
-    doc.fillColor('#000').fontSize(9).font('Helvetica-Bold');
+    // Invoice number (above date box) - positioned to left of date box for more space
+    const invoiceNumberX = dateBoxX - LAYOUT.invoiceNumberWidth - 10;
+    doc.fillColor('#000').fontSize(LAYOUT.invoiceNumberFont).font('Helvetica-Bold');
     writeLineClamped(
       doc,
-      `Inv: ${data.invoice.number}`,
-      dateBoxX,
+      `Invoice: ${data.invoice.number}`,
+      invoiceNumberX,
       dateBoxY - 14,
-      LAYOUT.dateBoxW,
-      'center',
+      LAYOUT.invoiceNumberWidth,
+      'right',
     );
 
     // Date + address (right)
@@ -689,7 +692,7 @@ export class PDFService {
       doc,
       theme.bandLabel,
       L + 6,
-      bandY + 3,
+      bandY + 2.5, // adjusted from 3 to better center with larger font
       contentW - 12,
       'center',
     );
@@ -704,7 +707,7 @@ export class PDFService {
     customerY: number,
   ): number {
     // Customer details in two columns beneath the band
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(10); // increased from 9
     writeLineClamped(doc, 'CUSTOMER:', L, customerY, 100, 'left');
 
     const contact = data.customer?.phone || data.customer?.email || '';
@@ -723,7 +726,7 @@ export class PDFService {
         doc,
         `Dest. City: ${data.package.destinationCity.name}`,
         L + contentW * 0.7,
-        customerY + 18,
+        customerY + 20, // increased from 18
         120,
         'left',
       );
@@ -737,13 +740,13 @@ export class PDFService {
       doc,
       customerName,
       L,
-      customerY + 12,
+      customerY + 13, // increased from 12
       contentW * 0.5,
       'left',
     );
 
     // Add extra line spacing after customer name
-    return customerY + 12 + nameHeight + 14; // Return next Y position with extra line
+    return customerY + 13 + nameHeight + 14; // Return next Y position with extra line
   }
 
   private drawTableWithTotals(
@@ -799,7 +802,7 @@ export class PDFService {
       },
     ];
     cols.forEach((c) =>
-      writeLineClamped(doc, c.label, c.x, headY + 5, c.w, c.align),
+      writeLineClamped(doc, c.label, c.x, headY + 6, c.w, c.align), // adjusted from 5 to 6 for better centering
     );
 
     // Rows — height-limited to fit one page
@@ -887,9 +890,9 @@ export class PDFService {
     }
 
     // Payment instruction message
-    if (y + 30 <= maxY) {
-      y += 8; // Add some spacing
-      doc.font('Helvetica-Bold').fontSize(8).fillColor('#000');
+    if (y + 35 <= maxY) { // increased from 30 to account for larger font
+      y += 10; // increased from 8 for better spacing
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // increased from 8
       writeLineClamped(
         doc,
         'Kindly start making payments as soon you receive your invoice to the momo account below',
@@ -898,8 +901,8 @@ export class PDFService {
         contentW - 12,
         'left',
       );
-      y += 10;
-      doc.font('Helvetica-Bold').fontSize(8);
+      y += 12; // increased from 10
+      doc.font('Helvetica-Bold').fontSize(9); // increased from 8
       writeLineClamped(
         doc,
         `MOMO NUMBER: ${safe(this.companyInfo.momoNumber)}`,
@@ -908,7 +911,7 @@ export class PDFService {
         contentW - 12,
         'left',
       );
-      y += 10;
+      y += 12; // increased from 10
       writeLineClamped(
         doc,
         `NAME: ${safe(this.companyInfo.momoName)}`,
@@ -933,7 +936,7 @@ export class PDFService {
     const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
     const pillX = R - LAYOUT.pillW;
-    const pillY = H - doc.page.margins.bottom - 70;
+    const pillY = H - doc.page.margins.bottom - 74; // adjusted from 70 for larger pill
     doc
       .roundedRect(pillX, pillY, LAYOUT.pillW, LAYOUT.pillH, 3)
       .fill(theme.totalsBg);
@@ -945,26 +948,26 @@ export class PDFService {
       doc,
       `TOTAL: ${currency} ${fmt(data.totals.total)}`,
       pillX + 8,
-      pillY + 4,
+      pillY + 5, // adjusted from 4 for better centering
       LAYOUT.pillW - 16,
       'center',
     );
 
     // NB strip
-    const nbY = H - doc.page.margins.bottom - 40;
+    const nbY = H - doc.page.margins.bottom - 44; // adjusted from 40 for larger strip
     doc.rect(L, nbY, contentW, LAYOUT.nbStripH).fill(theme.nbStrip);
     doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(LAYOUT.nbFont);
     writeLineClamped(
       doc,
       `NB: ETA values are estimates and can be affected by unforeseen circumstances.`,
       L + 5,
-      nbY + 2,
+      nbY + 2.5, // adjusted for better centering with larger font
       contentW - 10,
       'left',
     );
 
     // Arrival / MoMo strip (single line) - ensure it stays within page bounds
-    const bottomY = H - doc.page.margins.bottom - 24;
+    const bottomY = H - doc.page.margins.bottom - 26; // adjusted from 24 for larger font
     doc
       .font('Helvetica-Bold')
       .fontSize(LAYOUT.bottomInfoFont)
