@@ -4,8 +4,8 @@ FROM node:20-alpine AS build
 # Set working directory
 WORKDIR /app
 
-# Build argument for DATABASE_URL
-ARG DATABASE_URL
+# Build argument for DATABASE_URL (fallback allows prisma generate without a real DB)
+ARG DATABASE_URL=postgresql://postgres:postgres@localhost:5432/build_placeholder
 
 # Set environment variable for Prisma generation
 ENV DATABASE_URL=$DATABASE_URL

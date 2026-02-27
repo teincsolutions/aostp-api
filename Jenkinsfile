@@ -40,16 +40,19 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                withDockerRegistry([ credentialsId: 'docker-hub-credentials', url: '' ]) {
-                    echo '🐳 Building Docker image...'
-                    sh """
-                    docker build --network=host --target production \\
-                        --tag "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}" \\
-                        --tag "${DOCKER_IMAGE_NAME}:latest" \\
-                        --build-arg NODE_ENV=production \\
-                        .
-                    docker images "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
-                """
+                withCredentials([string(credentialsId: 'database-url-prod', variable: 'DATABASE_URL')]) {
+                    withDockerRegistry([ credentialsId: 'docker-hub-credentials', url: '' ]) {
+                        echo '🐳 Building Docker image...'
+                        sh """
+                        docker build --network=host --target production \\
+                            --tag "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}" \\
+                            --tag "${DOCKER_IMAGE_NAME}:latest" \\
+                            --build-arg NODE_ENV=production \\
+                            --build-arg DATABASE_URL="${DATABASE_URL}" \\
+                            .
+                        docker images "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    """
+                    }
                 }
             }
         }
