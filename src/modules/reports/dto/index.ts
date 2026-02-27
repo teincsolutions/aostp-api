@@ -10,3 +10,4 @@ export * from './general-report.dto';
 export * from './pickup-report.dto';
 export * from './warehouse-report.dto';
 export * from './debtors-report.dto';
+export * from './eod-report.dto';

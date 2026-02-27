@@ -20,6 +20,10 @@ import { GeneralReportResponseDto } from './dto/general-report.dto';
 import { PickupReportResponseDto, PickupReportQueryDto } from './dto/pickup-report.dto';
 import { WarehouseReportResponseDto } from './dto/warehouse-report.dto';
 import { DebtorsReportResponseDto } from './dto/debtors-report.dto';
+import {
+  EodReportQueryDto,
+  EodReportResponseDto,
+} from './dto/eod-report.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -834,5 +838,63 @@ export class ReportsController {
     @Query() query: ReportQueryDto,
   ): Promise<DebtorsReportResponseDto> {
     return this.reportsService.getDebtorsReport(query);
+  }
+
+  @Get('end-of-day')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.FINANCE_MANAGER,
+    UserRole.OPERATIONS_CLERK,
+  )
+  @ApiOperation({
+    summary: 'Get end-of-day report',
+    description:
+      'Returns total payments received per warehouse (GHS, USD, by method), ' +
+      'total pickups with quantities per warehouse, and a full activity summary ' +
+      'for the day. Filterable by date, warehouse, and staff user.',
+  })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    type: String,
+    description:
+      'Report date (YYYY-MM-DD). Defaults to today (UTC). Ignored when fromDate/toDate are provided.',
+    example: '2026-02-27',
+  })
+  @ApiQuery({
+    name: 'fromDate',
+    required: false,
+    type: String,
+    description: 'Override range start (ISO 8601). Takes precedence over date.',
+    example: '2026-02-27T00:00:00Z',
+  })
+  @ApiQuery({
+    name: 'toDate',
+    required: false,
+    type: String,
+    description: 'Override range end (ISO 8601). Takes precedence over date.',
+    example: '2026-02-27T23:59:59Z',
+  })
+  @ApiQuery({
+    name: 'warehouseId',
+    required: false,
+    type: String,
+    description: 'Filter by warehouse ID',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: String,
+    description: 'Filter all activities by a specific staff user ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'End-of-day report generated successfully',
+    type: EodReportResponseDto,
+  })
+  async getEndOfDayReport(
+    @Query() query: EodReportQueryDto,
+  ): Promise<EodReportResponseDto> {
+    return this.reportsService.getEndOfDayReport(query);
   }
 }

@@ -43,6 +43,19 @@ import {
   DebtorPackingListDto,
   DebtorsSummaryDto,
 } from './dto/debtors-report.dto';
+import {
+  EodReportQueryDto,
+  EodReportResponseDto,
+  EodWarehouseBreakdownDto,
+  EodWarehousePaymentsDto,
+  EodWarehousePickupsDto,
+  EodWarehouseIntakesDto,
+  EodPaymentMethodDto,
+  EodUserPickupDto,
+  EodUserIntakeDto,
+  EodUserActivityDto,
+  EodOverallSummaryDto,
+} from './dto/eod-report.dto';
 import { ShippingMode, InvoiceStatus, PackageStatus } from '@prisma/client';
 
 @Injectable()
@@ -2264,6 +2277,437 @@ export class ReportsService {
       debtors,
       summary,
       totalCount: debtors.length,
+    };
+  }
+
+  /**
+   * J. END OF DAY REPORT
+   * Total payments (GHS/USD, by method) per warehouse, total pickups per warehouse,
+   * and a summary of all day activities filterable by user and warehouse.
+   */
+  async getEndOfDayReport(
+    query: EodReportQueryDto,
+  ): Promise<EodReportResponseDto> {
+    this.logger.log('Generating end-of-day report');
+
+    // ── Date range ──────────────────────────────────────────────────────────
+    const dateStr =
+      query.date || new Date().toISOString().split('T')[0];
+    const fromDate = query.fromDate
+      ? new Date(query.fromDate)
+      : new Date(`${dateStr}T00:00:00.000Z`);
+    const toDate = query.toDate
+      ? new Date(query.toDate)
+      : new Date(`${dateStr}T23:59:59.999Z`);
+
+    // ── Build optional filters ───────────────────────────────────────────────
+    const customerWarehouseFilter = query.warehouseId
+      ? { customer: { warehouseId: query.warehouseId } }
+      : {};
+    const directWarehouseFilter = query.warehouseId
+      ? { warehouseId: query.warehouseId }
+      : {};
+    const paymentUserFilter = query.userId
+      ? { processedById: query.userId }
+      : {};
+    const packageUserFilter = query.userId
+      ? { createdById: query.userId }
+      : {};
+    const deliveryUserFilter = query.userId
+      ? { createdById: query.userId }
+      : {};
+
+    // ── Parallel data fetch ──────────────────────────────────────────────────
+    const [payments, deliveries, packages, invoices] = await Promise.all([
+      // Payments processed today
+      this.prisma.payment.findMany({
+        where: {
+          processedAt: { gte: fromDate, lte: toDate },
+          ...paymentUserFilter,
+          ...customerWarehouseFilter,
+        },
+        select: {
+          amount: true,
+          localAmount: true,
+          currency: true,
+          paymentMethod: true,
+          processedById: true,
+          processedBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+              role: true,
+              warehouse: { select: { name: true } },
+            },
+          },
+          customer: {
+            select: {
+              warehouseId: true,
+              warehouse: { select: { id: true, name: true } },
+            },
+          },
+        },
+      }),
+
+      // Pickups / deliveries released today
+      this.prisma.packageDelivery.findMany({
+        where: {
+          releaseDate: { gte: fromDate, lte: toDate },
+          ...deliveryUserFilter,
+          ...directWarehouseFilter,
+        },
+        select: {
+          warehouseId: true,
+          quantity: true,
+          createdById: true,
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+              role: true,
+              warehouse: { select: { name: true } },
+            },
+          },
+        },
+      }),
+
+      // Package intakes received today
+      this.prisma.package.findMany({
+        where: {
+          receivedDate: { gte: fromDate, lte: toDate },
+          ...packageUserFilter,
+          ...directWarehouseFilter,
+        },
+        select: {
+          warehouseId: true,
+          quantity: true,
+          createdById: true,
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+              role: true,
+              warehouse: { select: { name: true } },
+            },
+          },
+        },
+      }),
+
+      // Invoices created today (overall only; no createBy on Invoice)
+      this.prisma.invoice.aggregate({
+        where: {
+          createdAt: { gte: fromDate, lte: toDate },
+          ...(query.warehouseId
+            ? { customer: { warehouseId: query.warehouseId } }
+            : {}),
+        },
+        _count: { id: true },
+        _sum: { totalAmount: true },
+      }),
+    ]);
+
+    // ── warehouse name map ───────────────────────────────────────────────────
+    // Collect unique warehouses from all records
+    const warehouseMap = new Map<string, string>(); // id → name
+    payments.forEach((p) => {
+      if (p.customer.warehouse) {
+        warehouseMap.set(
+          p.customer.warehouse.id,
+          p.customer.warehouse.name,
+        );
+      }
+    });
+    deliveries.forEach((d) => {
+      if (d.warehouseId) {
+        // warehouseId but no name; we'll back-fill from payments or a lookup
+      }
+    });
+
+    // Resolve warehouse names for deliveries & intakes that may be missing from paymentMap
+    const missingWarehouseIds = [
+      ...new Set([
+        ...deliveries.map((d) => d.warehouseId).filter(Boolean),
+        ...packages.map((p) => p.warehouseId).filter(Boolean),
+      ]),
+    ].filter((id) => !warehouseMap.has(id!)) as string[];
+
+    if (missingWarehouseIds.length > 0) {
+      const warehouses = await this.prisma.warehouse.findMany({
+        where: { id: { in: missingWarehouseIds } },
+        select: { id: true, name: true },
+      });
+      warehouses.forEach((w) => warehouseMap.set(w.id, w.name));
+    }
+
+    // ── Group payments by warehouse ─────────────────────────────────────────
+    type WarehousePaymentAcc = {
+      totalUsd: number;
+      totalGhs: number;
+      methods: Map<string, { count: number; totalGhs: number; totalUsd: number }>;
+      count: number;
+    };
+    const paymentsByWarehouse = new Map<string, WarehousePaymentAcc>();
+
+    payments.forEach((p) => {
+      const wid = p.customer.warehouse?.id;
+      if (!wid) return;
+      const acc = paymentsByWarehouse.get(wid) ?? {
+        totalUsd: 0,
+        totalGhs: 0,
+        methods: new Map(),
+        count: 0,
+      };
+      acc.count++;
+      acc.totalUsd += p.currency === 'USD' ? p.amount : 0;
+      acc.totalGhs += p.localAmount ?? 0;
+
+      const method = p.paymentMethod;
+      const m = acc.methods.get(method) ?? {
+        count: 0,
+        totalGhs: 0,
+        totalUsd: 0,
+      };
+      m.count++;
+      m.totalGhs += p.localAmount ?? 0;
+      m.totalUsd += p.currency === 'USD' ? p.amount : 0;
+      acc.methods.set(method, m);
+      paymentsByWarehouse.set(wid, acc);
+    });
+
+    // ── Group deliveries (pickups) by warehouse ──────────────────────────────
+    type WarehousePickupAcc = {
+      count: number;
+      totalQuantity: number;
+      users: Map<string, { name: string; count: number; totalQuantity: number }>;
+    };
+    const pickupsByWarehouse = new Map<string, WarehousePickupAcc>();
+
+    deliveries.forEach((d) => {
+      const wid = d.warehouseId;
+      if (!wid) return;
+      const acc = pickupsByWarehouse.get(wid) ?? {
+        count: 0,
+        totalQuantity: 0,
+        users: new Map(),
+      };
+      acc.count++;
+      acc.totalQuantity += d.quantity ?? 0;
+
+      const uid = d.createdById;
+      const uName = `${d.createdBy.firstName}${d.createdBy.lastName ? ' ' + d.createdBy.lastName : ''}`;
+      const u = acc.users.get(uid) ?? { name: uName, count: 0, totalQuantity: 0 };
+      u.count++;
+      u.totalQuantity += d.quantity ?? 0;
+      acc.users.set(uid, u);
+      pickupsByWarehouse.set(wid, acc);
+    });
+
+    // ── Group intakes by warehouse ───────────────────────────────────────────
+    type WarehouseIntakeAcc = {
+      count: number;
+      totalQuantity: number;
+      users: Map<string, { name: string; count: number; totalQuantity: number }>;
+    };
+    const intakesByWarehouse = new Map<string, WarehouseIntakeAcc>();
+
+    packages.forEach((pkg) => {
+      const wid = pkg.warehouseId;
+      if (!wid) return;
+      const acc = intakesByWarehouse.get(wid) ?? {
+        count: 0,
+        totalQuantity: 0,
+        users: new Map(),
+      };
+      acc.count++;
+      acc.totalQuantity += pkg.quantity ?? 0;
+
+      const uid = pkg.createdById;
+      const uName = `${pkg.createdBy.firstName}${pkg.createdBy.lastName ? ' ' + pkg.createdBy.lastName : ''}`;
+      const u = acc.users.get(uid) ?? { name: uName, count: 0, totalQuantity: 0 };
+      u.count++;
+      u.totalQuantity += pkg.quantity ?? 0;
+      acc.users.set(uid, u);
+      intakesByWarehouse.set(wid, acc);
+    });
+
+    // ── Build per-warehouse breakdown ────────────────────────────────────────
+    const allWarehouseIds = new Set([
+      ...paymentsByWarehouse.keys(),
+      ...pickupsByWarehouse.keys(),
+      ...intakesByWarehouse.keys(),
+    ]);
+
+    const warehouses: EodWarehouseBreakdownDto[] = Array.from(
+      allWarehouseIds,
+    ).map((wid) => {
+      const wName = warehouseMap.get(wid) ?? 'Unknown';
+
+      // Payments
+      const pa = paymentsByWarehouse.get(wid);
+      const byMethod: EodPaymentMethodDto[] = pa
+        ? Array.from(pa.methods.entries()).map(([method, m]) => ({
+            method,
+            count: m.count,
+            totalGhs: Math.round(m.totalGhs * 100) / 100,
+            totalUsd: Math.round(m.totalUsd * 100) / 100,
+          }))
+        : [];
+      const warehousePayments: EodWarehousePaymentsDto = {
+        count: pa?.count ?? 0,
+        totalUsd: Math.round((pa?.totalUsd ?? 0) * 100) / 100,
+        totalGhs: Math.round((pa?.totalGhs ?? 0) * 100) / 100,
+        byMethod,
+      };
+
+      // Pickups
+      const pk = pickupsByWarehouse.get(wid);
+      const byUserPickup: EodUserPickupDto[] = pk
+        ? Array.from(pk.users.entries()).map(([userId, u]) => ({
+            userId,
+            userName: u.name,
+            count: u.count,
+            totalQuantity: u.totalQuantity,
+          }))
+        : [];
+      const warehousePickups: EodWarehousePickupsDto = {
+        count: pk?.count ?? 0,
+        totalQuantity: pk?.totalQuantity ?? 0,
+        byUser: byUserPickup,
+      };
+
+      // Intakes
+      const ia = intakesByWarehouse.get(wid);
+      const byUserIntake: EodUserIntakeDto[] = ia
+        ? Array.from(ia.users.entries()).map(([userId, u]) => ({
+            userId,
+            userName: u.name,
+            count: u.count,
+            totalQuantity: u.totalQuantity,
+          }))
+        : [];
+      const warehouseIntakes: EodWarehouseIntakesDto = {
+        count: ia?.count ?? 0,
+        totalQuantity: ia?.totalQuantity ?? 0,
+        byUser: byUserIntake,
+      };
+
+      return {
+        warehouseId: wid,
+        warehouseName: wName,
+        payments: warehousePayments,
+        pickups: warehousePickups,
+        intakes: warehouseIntakes,
+      };
+    });
+
+    // ── Overall summary ──────────────────────────────────────────────────────
+    const overall: EodOverallSummaryDto = {
+      totalPayments: payments.length,
+      totalRevenueUsd:
+        Math.round(
+          payments
+            .filter((p) => p.currency === 'USD')
+            .reduce((s, p) => s + p.amount, 0) * 100,
+        ) / 100,
+      totalRevenueGhs:
+        Math.round(
+          payments.reduce((s, p) => s + (p.localAmount ?? 0), 0) * 100,
+        ) / 100,
+      totalPickups: deliveries.length,
+      totalPickupQuantity: deliveries.reduce(
+        (s, d) => s + (d.quantity ?? 0),
+        0,
+      ),
+      totalIntakes: packages.length,
+      totalIntakeQuantity: packages.reduce(
+        (s, p) => s + (p.quantity ?? 0),
+        0,
+      ),
+      totalInvoicesCreated: invoices._count.id,
+      totalInvoiceAmount:
+        Math.round((invoices._sum.totalAmount ?? 0) * 100) / 100,
+    };
+
+    // ── Activity by user ─────────────────────────────────────────────────────
+    type UserAcc = {
+      userName: string;
+      role: string;
+      warehouse?: string;
+      paymentsProcessed: number;
+      paymentsTotalGhs: number;
+      paymentsTotalUsd: number;
+      packagesReceived: number;
+      intakeQuantity: number;
+      pickupsReleased: number;
+      pickupQuantity: number;
+    };
+    const userAccMap = new Map<string, UserAcc>();
+
+    const getOrCreateUser = (uid: string, u: { firstName: string; lastName: string | null; role: string; warehouse: { name: string } | null }): UserAcc => {
+      const existing = userAccMap.get(uid);
+      if (existing) return existing;
+      const acc: UserAcc = {
+        userName: `${u.firstName}${u.lastName ? ' ' + u.lastName : ''}`,
+        role: u.role,
+        warehouse: u.warehouse?.name,
+        paymentsProcessed: 0,
+        paymentsTotalGhs: 0,
+        paymentsTotalUsd: 0,
+        packagesReceived: 0,
+        intakeQuantity: 0,
+        pickupsReleased: 0,
+        pickupQuantity: 0,
+      };
+      userAccMap.set(uid, acc);
+      return acc;
+    };
+
+    payments.forEach((p) => {
+      const acc = getOrCreateUser(p.processedById, p.processedBy as any);
+      acc.paymentsProcessed++;
+      acc.paymentsTotalGhs += p.localAmount ?? 0;
+      acc.paymentsTotalUsd += p.currency === 'USD' ? p.amount : 0;
+      userAccMap.set(p.processedById, acc);
+    });
+
+    packages.forEach((pkg) => {
+      const acc = getOrCreateUser(pkg.createdById, pkg.createdBy as any);
+      acc.packagesReceived++;
+      acc.intakeQuantity += pkg.quantity ?? 0;
+      userAccMap.set(pkg.createdById, acc);
+    });
+
+    deliveries.forEach((d) => {
+      const acc = getOrCreateUser(d.createdById, d.createdBy as any);
+      acc.pickupsReleased++;
+      acc.pickupQuantity += d.quantity ?? 0;
+      userAccMap.set(d.createdById, acc);
+    });
+
+    const activityByUser: EodUserActivityDto[] = Array.from(
+      userAccMap.entries(),
+    ).map(([userId, acc]) => ({
+      userId,
+      userName: acc.userName,
+      role: acc.role,
+      warehouse: acc.warehouse,
+      paymentsProcessed: acc.paymentsProcessed,
+      paymentsTotalGhs: Math.round(acc.paymentsTotalGhs * 100) / 100,
+      paymentsTotalUsd: Math.round(acc.paymentsTotalUsd * 100) / 100,
+      packagesReceived: acc.packagesReceived,
+      intakeQuantity: acc.intakeQuantity,
+      pickupsReleased: acc.pickupsReleased,
+      pickupQuantity: acc.pickupQuantity,
+    }));
+
+    return {
+      reportDate: dateStr,
+      fromDate,
+      toDate,
+      warehouses,
+      overall,
+      activityByUser,
+      generatedAt: new Date(),
     };
   }
 }
