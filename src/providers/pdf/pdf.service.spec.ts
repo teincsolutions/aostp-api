@@ -16,6 +16,19 @@ describe('PDFService', () => {
         {
           provide: ConfigService,
           useFactory: () => ({
+            get: jest.fn((key: string) => {
+              const config = {
+                AWS_S3_BUCKET_NAME: 'test-bucket',
+                COMPANY_NAME: 'AOSTP Test Company',
+                COMPANY_PHONE: '053 777 6709',
+                COMPANY_BRANCHES: 'Accra | Kumasi | Takoradi',
+                COMPANY_EMAIL: 'info@aostp.com',
+                COMPANY_ADDRESS: '123 Test Street, Accra',
+                COMPANY_MOMO_NUMBER: '0537776709',
+                COMPANY_MOMO_NAME: 'AOSTP LTD',
+              };
+              return config[key];
+            }),
             getOrThrow: jest.fn().mockReturnValue('test-bucket'),
           }),
         },
@@ -76,6 +89,138 @@ describe('PDFService', () => {
       };
 
       await service.generateInvoicePDF(invoiceData);
+    });
+
+    it('should generate comprehensive invoice PDF with dummy data', async function (): Promise<void> {
+      const invoiceData: InvoiceData = {
+        company: {
+          name: 'AOSTP Logistics Ltd',
+          address: '123 Main Street, Accra, Ghana',
+          phone: '+233-24-123-4567',
+          email: 'info@aostp.com',
+        },
+        invoice: {
+          number: 'INV-2026-00123',
+          date: '2026-02-26',
+          dueDate: '2026-03-15',
+          status: 'PENDING',
+          shippingRate: 45.50,
+        },
+        customer: {
+          code: 'CUST-001',
+          name: 'John Kwame Mensah',
+          address: 'P.O. Box 123, Kumasi, Ghana',
+          phone: '+233-50-987-6543',
+          email: 'john.mensah@email.com',
+        },
+        package: {
+          trackingCode: 'PKG-2026-00456',
+          description: 'Electronics and household items',
+          shippingMode: 'SEA',
+          quantity: 3,
+          weightKg: 125.5,
+          cbm: 2.5,
+          shippingRate: 45.50,
+          destinationCity: {
+            id: 'city-1',
+            name: 'Kumasi',
+            country: 'Ghana',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          warehouse: 'Main Warehouse - Accra',
+          pickupCode: 'PICK-2026-789',
+        },
+        items: [
+          {
+            description: 'Laptop Computer - Dell XPS 15',
+            quantity: 1,
+            unitPrice: 1200.00,
+            total: 1200.00,
+          },
+          {
+            description: 'Kitchen Appliances Set (Blender, Mixer, Toaster)',
+            quantity: 1,
+            unitPrice: 350.00,
+            total: 350.00,
+          },
+          {
+            description: 'Clothing and Accessories (5 boxes)',
+            quantity: 5,
+            unitPrice: 50.00,
+            total: 250.00,
+          },
+        ],
+        totals: {
+          subtotal: 1800.00,
+          tax: 0.00,
+          total: 1800.00,
+          paid: 500.00,
+          balance: 1300.00,
+        },
+        currency: 'USD',
+        notes: 'Please ensure all items are properly packaged. Contact us for any clarifications.',
+      };
+
+      const result = await service.generateInvoicePDF(invoiceData);
+
+      expect(result).toBeDefined();
+      expect(result.key).toContain('INV-2026-00123');
+      expect(s3Service.uploadFileWithBucket).toHaveBeenCalled();
+    });
+
+    it('should generate AIR EXPRESS invoice PDF with dummy data', async function (): Promise<void> {
+      const invoiceData: InvoiceData = {
+        company: {
+          name: 'AOSTP Express Shipping',
+          address: '456 Airport Road, Accra, Ghana',
+          phone: '+233-30-555-1234',
+          email: 'express@aostp.com',
+        },
+        invoice: {
+          number: 'INV-2026-00789',
+          date: '2026-02-26',
+          dueDate: '2026-03-01',
+          status: 'PAID',
+          shippingRate: 125.00,
+        },
+        customer: {
+          code: 'CUST-VIP-002',
+          name: 'Ama Osei-Bonsu',
+          phone: '+233-54-222-3333',
+          email: 'ama.osei@company.com',
+        },
+        package: {
+          trackingCode: 'AIR-EXPRESS-2026-999',
+          description: 'Urgent business documents and electronics',
+          shippingMode: 'AIR',
+          airType: 'EXPRESS_AIR',
+          quantity: 1,
+          weightKg: 15.0,
+          shippingRate: 125.00,
+          destinationCity: {
+            id: 'city-2',
+            name: 'Takoradi',
+            country: 'Ghana',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          warehouse: 'Airport Warehouse',
+          pickupCode: 'EXPRESS-PICK-456',
+        },
+        totals: {
+          subtotal: 125.00,
+          total: 125.00,
+          paid: 125.00,
+          balance: 0.00,
+        },
+        currency: 'USD',
+      };
+
+      const result = await service.generateInvoicePDF(invoiceData);
+
+      expect(result).toBeDefined();
+      expect(result.key).toContain('INV-2026-00789');
     });
   });
 

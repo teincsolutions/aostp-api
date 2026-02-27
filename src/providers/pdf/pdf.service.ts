@@ -615,15 +615,16 @@ export class PDFService {
       'center',
     );
 
-    // Invoice number (above date box) - positioned to left of date box for more space
-    const invoiceNumberX = dateBoxX - LAYOUT.invoiceNumberWidth - 10;
+    // Invoice number (above date box) - right-aligned at page right edge, wide enough to show full number
+    const invoiceNumW = 220;
+    const invoiceNumberX = R - invoiceNumW;
     doc.fillColor('#000').fontSize(LAYOUT.invoiceNumberFont).font('Helvetica-Bold');
     writeLineClamped(
       doc,
       `Invoice: ${data.invoice.number}`,
       invoiceNumberX,
       dateBoxY - 14,
-      LAYOUT.invoiceNumberWidth,
+      invoiceNumW,
       'right',
     );
 
@@ -716,7 +717,7 @@ export class PDFService {
       `CONTACT: ${contact}`,
       L + contentW * 0.7,
       customerY + 6,
-      120,
+      140,
       'left',
     );
 
@@ -727,7 +728,7 @@ export class PDFService {
         `Dest. City: ${data.package.destinationCity.name}`,
         L + contentW * 0.7,
         customerY + 20, // increased from 18
-        120,
+        140,
         'left',
       );
     }
@@ -761,58 +762,44 @@ export class PDFService {
     const theme = THEMES[resolveThemeFromData(data)];
     const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
-    // Divider
-    doc
-      .moveTo(L, tableY)
-      .lineTo(R, tableY)
-      .strokeColor('#CCCCCC')
-      .lineWidth(LAYOUT.line)
-      .stroke();
+    // Space reserved at the bottom of EVERY page for the strip (pill + NB + bottom info)
+    const stripReserved = LAYOUT.bottomReserved + 30;
+    // Extra space for notice + momo on the LAST page (3 lines + momo = ~80pt)
+    const noticeH = 14 + 12 + 12 + 12 + 14 + 12 + 12; // spacing + 3 notice lines + gap + 2 momo lines
+    const lastPageReserved = stripReserved + noticeH + 20;
 
-    // Table header
-    const headY = tableY + 4;
-    doc.rect(L, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
-
-    // 4 columns: description+trackingCode, weight/cbm (SEA only), qty, amount
-    const cols = [
-      {
-        x: L + 6,
-        w: contentW * 0.5,
-        label: 'DESCRIPTION',
-        align: 'left' as const,
-      },
-      {
-        x: L + contentW * 0.55 + 6,
-        w: contentW * 0.15,
-        label: data.package?.shippingMode === 'SEA' ? 'CBM' : 'WEIGHT (KG)',
-        align: 'left' as const,
-      },
-      {
-        x: L + contentW * 0.65 + 6,
-        w: contentW * 0.15,
-        label: 'QTY',
-        align: 'center' as const,
-      },
-      {
-        x: L + contentW * 0.75 + 6,
-        w: contentW * 0.22,
-        label: `AMOUNT (USD)`,
-        align: 'right' as const,
-      },
+    // ── helper: build column definitions ──────────────────────────────────────
+    const buildCols = () => [
+      { x: L + 6,                      w: contentW * 0.50, label: 'DESCRIPTION',                                           align: 'left'   as const },
+      { x: L + contentW * 0.55 + 6,   w: contentW * 0.15, label: data.package?.shippingMode === 'SEA' ? 'CBM' : 'WEIGHT (KG)', align: 'left'   as const },
+      { x: L + contentW * 0.65 + 6,   w: contentW * 0.15, label: 'QTY',                                                   align: 'center' as const },
+      { x: L + contentW * 0.75 + 6,   w: contentW * 0.22, label: `AMOUNT (${currency})`,                                  align: 'right'  as const },
     ];
-    cols.forEach((c) =>
-      writeLineClamped(doc, c.label, c.x, headY + 6, c.w, c.align), // adjusted from 5 to 6 for better centering
-    );
 
-    // Rows — height-limited to fit one page
-    let y = headY + LAYOUT.headH + 5;
-    const bottomReserved = LAYOUT.bottomReserved + 30; // Extra space for totals pill
-    const maxY = H - doc.page.margins.bottom - bottomReserved;
-    const availableRows = Math.max(0, Math.floor((maxY - y) / LAYOUT.rowH));
+    // ── helper: draw divider + column header row ───────────────────────────────
+    const drawTableHeader = (startY: number, isContinuation = false) => {
+      doc.moveTo(L, startY).lineTo(R, startY).strokeColor('#CCCCCC').lineWidth(LAYOUT.line).stroke();
+      const headY = startY + 4;
+      const cols = buildCols();
+      if (isContinuation) {
+        // Slim continuation band
+        doc.rect(L, headY, contentW, LAYOUT.bandHeight).fill(theme.band);
+        doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(10);
+        writeLineClamped(doc, `${theme.bandLabel} (continued)`, L + 6, headY + 4, contentW - 12, 'center');
+        const colHeadY = headY + LAYOUT.bandHeight + 2;
+        doc.rect(L, colHeadY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
+        doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
+        cols.forEach((c) => writeLineClamped(doc, c.label, c.x, colHeadY + 6, c.w, c.align));
+        return colHeadY + LAYOUT.headH + 5;
+      } else {
+        doc.rect(L, headY, contentW, LAYOUT.headH).fill(theme.tableHeadBg);
+        doc.fillColor('#000').font('Helvetica-Bold').fontSize(LAYOUT.headFont);
+        cols.forEach((c) => writeLineClamped(doc, c.label, c.x, headY + 6, c.w, c.align));
+        return headY + LAYOUT.headH + 5;
+      }
+    };
 
-    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
-
+    // ── build rows ─────────────────────────────────────────────────────────────
     const rows: InvoiceItem[] =
       (data.items?.length ?? 0) > 0
         ? data.items!.map((item) => ({
@@ -823,104 +810,63 @@ export class PDFService {
             {
               description: `${data.package?.description || ''}${data.package?.trackingCode ? `\nTracking: ${data.package.trackingCode}` : ''}${data.package?.pickupCode ? `\nPickup Code: ${data.package.pickupCode}` : ''}`,
               quantity: data.package?.quantity ?? 1,
-              unitPrice:
-                (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
+              unitPrice: (data.totals?.total ?? 0) / (data.package?.quantity ?? 1),
               total: data.totals?.total ?? 0,
             },
           ];
 
-    const showCount = Math.min(rows.length, availableRows);
-    const overflow = rows.length - showCount;
+    // ── first page table header ────────────────────────────────────────────────
+    let y = drawTableHeader(tableY, false);
+    const cols = buildCols();
 
-    for (let i = 0; i < showCount; i++) {
+    doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
+
+    // Bottom boundary for normal rows (leaves room for the strip at page bottom)
+    const maxY = H - doc.page.margins.bottom - stripReserved;
+    // Bottom boundary for the last row (also leaves room for notice + momo)
+    const lastRowMaxY = H - doc.page.margins.bottom - lastPageReserved;
+
+    // ── iterate all rows, paginating as needed ─────────────────────────────────
+    for (let i = 0; i < rows.length; i++) {
       const it = rows[i];
+      const isLastRow = i === rows.length - 1;
 
-      // Use writeTextWrapped for description to allow multi-line text
-      const descHeight = writeTextWrapped(
-        doc,
-        it.description || '',
-        cols[0].x,
-        y,
-        cols[0].w,
-        'left',
-      );
+      // Calculate how much space this row needs
+      const descH = doc.heightOfString(it.description || '', { width: cols[0].w, lineBreak: true });
+      const rowH = Math.max(descH, LAYOUT.rowH);
 
-      // Weight/cbm for SEA, empty for AIR
-      let weightCbmText = '';
-      if (data.package?.shippingMode === 'SEA') {
-        weightCbmText = `${data.package.cbm}`;
-      } else {
-        weightCbmText = `${data.package?.weightKg}`;
+      // Determine page break threshold depending on whether this is the last row
+      const rowMaxY = isLastRow ? lastRowMaxY : maxY;
+
+      // If this row won't fit on the current page, start a new page
+      if (y + rowH > rowMaxY) {
+        doc.addPage();
+        y = drawTableHeader(LAYOUT.topY, true);
+        doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
       }
-      writeLineClamped(doc, weightCbmText, cols[1].x, y, cols[1].w, 'left');
 
-      writeLineClamped(
-        doc,
-        String(it.quantity ?? 0),
-        cols[2].x,
-        y,
-        cols[2].w,
-        'center',
-      );
-      writeLineClamped(
-        doc,
-        fmt(it.total ?? 0),
-        cols[3].x,
-        y,
-        cols[3].w,
-        'right',
-      );
+      // Draw description (multiline)
+      writeTextWrapped(doc, it.description || '', cols[0].x, y, cols[0].w, 'left');
 
-      // Use the actual height of the description or minimum row height
-      const rowActualHeight = Math.max(descHeight, LAYOUT.rowH);
-      y += rowActualHeight;
+      // Weight / CBM
+      const weightCbmText = data.package?.shippingMode === 'SEA'
+        ? `${data.package.cbm ?? ''}`
+        : `${data.package?.weightKg ?? ''}`;
+      writeLineClamped(doc, weightCbmText,           cols[1].x, y, cols[1].w, 'left');
+      writeLineClamped(doc, String(it.quantity ?? 0), cols[2].x, y, cols[2].w, 'center');
+      writeLineClamped(doc, fmt(it.total ?? 0),        cols[3].x, y, cols[3].w, 'right');
+
+      y += rowH;
     }
 
-    if (overflow > 0 && y <= maxY) {
-      doc.font('Helvetica-Oblique').fontSize(LAYOUT.rowFont);
-      writeLineClamped(
-        doc,
-        `(+${overflow} more items)`,
-        cols[0].x,
-        y,
-        contentW - 12,
-        'left',
-      );
-      y += LAYOUT.rowH;
-    }
-
-    // Payment instruction message
-    if (y + 35 <= maxY) { // increased from 30 to account for larger font
-      y += 10; // increased from 8 for better spacing
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // increased from 8
-      writeLineClamped(
-        doc,
-        'Kindly start making payments as soon you receive your invoice to the momo account below',
-        L + 6,
-        y,
-        contentW - 12,
-        'left',
-      );
-      y += 12; // increased from 10
-      doc.font('Helvetica-Bold').fontSize(9); // increased from 8
-      writeLineClamped(
-        doc,
-        `MOMO NUMBER: ${safe(this.companyInfo.momoNumber)}`,
-        L + 6,
-        y,
-        contentW - 12,
-        'left',
-      );
-      y += 12; // increased from 10
-      writeLineClamped(
-        doc,
-        `NAME: ${safe(this.companyInfo.momoName)}`,
-        L + 6,
-        y,
-        contentW - 12,
-        'left',
-      );
-    }
+    // ── payment notice + momo (always drawn on last page after rows) ───────────
+    y += 10;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+    writeLineClamped(doc, 'YOU ARE REQUIRED TO MAKE PAYMENT AS SOON AS YOU RECEIVE THIS INVOICE.',           L + 6, y, contentW - 12, 'left'); y += 12;
+    writeLineClamped(doc, 'CUSTOMERS ARE TO PAY FULL SHIPPING BEFORE PICKING UP PACKAGES FROM WAREHOUSE.',   L + 6, y, contentW - 12, 'left'); y += 12;
+    writeLineClamped(doc, 'ALL PACKAGES MUST BE PICKED UP WITHIN 3 DAYS FROM THE DATE OF ARRIVAL.',          L + 6, y, contentW - 12, 'left'); y += 14;
+    writeLineClamped(doc, `MOMO NUMBER: ${safe(this.companyInfo.momoNumber)}`, L + 6, y, contentW - 12, 'left'); y += 12;
+    writeLineClamped(doc, `NAME: ${safe(this.companyInfo.momoName)}`,          L + 6, y, contentW - 12, 'left');
   }
 
   private drawStrip(

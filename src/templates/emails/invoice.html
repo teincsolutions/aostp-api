@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Issued - AOSTP Logistics</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 0;">
+
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #1a3c6e 0%, #0d2244 100%); padding: 36px 24px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0 0 6px 0; font-size: 26px; font-weight: bold; letter-spacing: 1px;">INVOICE ISSUED</h1>
+            <p style="color: #a8c4e8; margin: 0; font-size: 15px;">AOSTP International Logistics</p>
+        </div>
+
+        <!-- Greeting -->
+        <div style="padding: 32px 30px 0 30px;">
+            <p style="color: #333333; font-size: 17px; line-height: 1.6; margin: 0 0 10px 0;">
+                Dear <strong>{{customerName}}</strong>,
+            </p>
+            <p style="color: #555555; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
+                An invoice has been issued for your shipment. Please find the details below.
+                {{#if hasPdf}}<strong>Your invoice PDF is attached to this email.</strong>{{/if}}
+            </p>
+        </div>
+
+        <!-- Invoice Details Card -->
+        <div style="margin: 0 30px 24px 30px; border: 1px solid #dce3ec; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #f0f4f9; padding: 12px 18px; border-bottom: 1px solid #dce3ec;">
+                <p style="margin: 0; font-size: 13px; font-weight: bold; color: #1a3c6e; text-transform: uppercase; letter-spacing: 0.5px;">Invoice Details</p>
+            </div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #eef1f5;">
+                    <td style="padding: 12px 18px; color: #666666; font-size: 14px; width: 45%;">Invoice Number</td>
+                    <td style="padding: 12px 18px; color: #222222; font-size: 14px; font-weight: bold;">{{invoiceNumber}}</td>
+                </tr>
+                {{#if packingListName}}
+                <tr style="border-bottom: 1px solid #eef1f5;">
+                    <td style="padding: 12px 18px; color: #666666; font-size: 14px;">Packing List</td>
+                    <td style="padding: 12px 18px; color: #222222; font-size: 14px;">{{packingListName}}</td>
+                </tr>
+                {{/if}}
+                <tr style="border-bottom: 1px solid #eef1f5;">
+                    <td style="padding: 12px 18px; color: #666666; font-size: 14px;">Total Amount</td>
+                    <td style="padding: 12px 18px; color: #222222; font-size: 14px; font-weight: bold;">{{currency}} {{totalAmount}}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px 18px; color: #666666; font-size: 14px;">Due Date / Est. Arrival</td>
+                    <td style="padding: 12px 18px; color: #222222; font-size: 14px;">{{dueDate}}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Payment Notice -->
+        <div style="margin: 0 30px 24px 30px; background-color: #fff4e5; border-left: 4px solid #e07b00; border-radius: 4px; padding: 16px 18px;">
+            <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold; color: #b35c00;">⚠ IMPORTANT PAYMENT NOTICE</p>
+            <ul style="margin: 0; padding-left: 18px; color: #7a3e00; font-size: 13px; line-height: 2;">
+                <li>YOU ARE REQUIRED TO MAKE PAYMENT AS SOON AS YOU RECEIVE THIS INVOICE.</li>
+                <li>CUSTOMERS ARE TO PAY FULL SHIPPING BEFORE PICKING UP PACKAGES FROM WAREHOUSE.</li>
+                <li>ALL PACKAGES MUST BE PICKED UP WITHIN 3 DAYS FROM THE DATE OF ARRIVAL.</li>
+            </ul>
+        </div>
+
+        <!-- MoMo Payment Info -->
+        <div style="margin: 0 30px 28px 30px; background-color: #f0f9f0; border: 1px solid #b2dab2; border-radius: 8px; padding: 16px 18px;">
+            <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: bold; color: #1a5c1a; text-transform: uppercase; letter-spacing: 0.5px;">Mobile Money Payment</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="color: #333; font-size: 13px; padding: 4px 0; width: 40%;">MoMo Number:</td>
+                    <td style="color: #1a5c1a; font-size: 14px; font-weight: bold; padding: 4px 0;">{{momoNumber}}</td>
+                </tr>
+                <tr>
+                    <td style="color: #333; font-size: 13px; padding: 4px 0;">Account Name:</td>
+                    <td style="color: #1a5c1a; font-size: 14px; font-weight: bold; padding: 4px 0;">{{momoName}}</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- View Online Button -->
+        {{#if invoiceUrl}}
+        <div style="text-align: center; margin: 0 30px 28px 30px;">
+            <a href="{{invoiceUrl}}"
+               style="display: inline-block; background-color: #1a3c6e; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 6px; font-size: 15px; font-weight: bold; letter-spacing: 0.3px;">
+                View Invoice Online
+            </a>
+        </div>
+        {{/if}}
+
+        <!-- Footer -->
+        <div style="background-color: #f8f9fa; padding: 24px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+            <p style="color: #6c757d; font-size: 13px; margin: 0 0 6px 0;">
+                Questions? Contact us at
+                <a href="mailto:{{companyEmail}}" style="color: #1a3c6e; text-decoration: none;">{{companyEmail}}</a>
+                &nbsp;|&nbsp; {{companyPhone}}
+            </p>
+            <p style="color: #adb5bd; font-size: 12px; margin: 0;">
+                &copy; {{year}} AOSTP International Logistics. All rights reserved.
+            </p>
+        </div>
+
+    </div>
+</body>
+</html>

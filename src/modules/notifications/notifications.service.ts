@@ -458,21 +458,40 @@ export class NotificationsService {
     const invoiceLink = `${frontendUrl}/invoices/${invoice.id}`;
 
     const emailContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Invoice Issued - AOSTP</h2>
-        <p>Dear ${customerName},</p>
-        <p>An invoice has been issued for your shipment.</p>
-        <table style="border-collapse: collapse; width: 100%;">
-          <tr><td><strong>Invoice Number:</strong></td><td>${invoice.invoiceNumber}</td></tr>
-          ${packingListRow}
-          <tr><td><strong>Total Amount:</strong></td><td>${invoice.currency} ${invoice.totalAmount}</td></tr>
-          <tr><td><strong>Due Date:</strong></td><td>${dueDate}</td></tr>
-        </table>
-        <p style="margin-top: 20px;">
-          <a href="${invoiceLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Invoice</a>
-        </p>
-        <p>Please ensure payment is made before the due date.</p>
-        <p>Thank you for your business.</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <div style="background: linear-gradient(135deg, #1a3c6e 0%, #0d2244 100%); padding: 36px 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0 0 6px 0; font-size: 26px; font-weight: bold;">INVOICE ISSUED</h1>
+          <p style="color: #a8c4e8; margin: 0; font-size: 15px;">AOSTP International Logistics</p>
+        </div>
+        <div style="padding: 28px 30px 0 30px;">
+          <p style="color: #333; font-size: 16px;">Dear <strong>${customerName}</strong>,</p>
+          <p style="color: #555; font-size: 14px;">An invoice has been issued for your shipment.</p>
+        </div>
+        <div style="margin: 0 30px 20px 30px; border: 1px solid #dce3ec; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #f0f4f9; padding: 10px 18px; border-bottom: 1px solid #dce3ec;">
+            <p style="margin: 0; font-size: 12px; font-weight: bold; color: #1a3c6e; text-transform: uppercase;">Invoice Details</p>
+          </div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="border-bottom: 1px solid #eef1f5;"><td style="padding: 10px 18px; color: #666; font-size: 14px; width: 45%;">Invoice Number</td><td style="padding: 10px 18px; color: #222; font-weight: bold; font-size: 14px;">${invoice.invoiceNumber}</td></tr>
+            ${packingListRow}
+            <tr style="border-bottom: 1px solid #eef1f5;"><td style="padding: 10px 18px; color: #666; font-size: 14px;">Total Amount</td><td style="padding: 10px 18px; color: #222; font-weight: bold; font-size: 14px;">${invoice.currency} ${invoice.totalAmount}</td></tr>
+            <tr><td style="padding: 10px 18px; color: #666; font-size: 14px;">Due Date / Est. Arrival</td><td style="padding: 10px 18px; color: #222; font-size: 14px;">${dueDate}</td></tr>
+          </table>
+        </div>
+        <div style="margin: 0 30px 20px 30px; background-color: #fff4e5; border-left: 4px solid #e07b00; border-radius: 4px; padding: 14px 18px;">
+          <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: bold; color: #b35c00;">⚠ IMPORTANT PAYMENT NOTICE</p>
+          <ul style="margin: 0; padding-left: 18px; color: #7a3e00; font-size: 13px; line-height: 2;">
+            <li>YOU ARE REQUIRED TO MAKE PAYMENT AS SOON AS YOU RECEIVE THIS INVOICE.</li>
+            <li>CUSTOMERS ARE TO PAY FULL SHIPPING BEFORE PICKING UP PACKAGES FROM WAREHOUSE.</li>
+            <li>ALL PACKAGES MUST BE PICKED UP WITHIN 3 DAYS FROM THE DATE OF ARRIVAL.</li>
+          </ul>
+        </div>
+        <div style="text-align: center; margin: 0 30px 28px 30px;">
+          <a href="${invoiceLink}" style="display: inline-block; background-color: #1a3c6e; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-size: 15px; font-weight: bold;">View Invoice Online</a>
+        </div>
+        <div style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+          <p style="color: #adb5bd; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} AOSTP International Logistics</p>
+        </div>
       </div>
     `;
 
