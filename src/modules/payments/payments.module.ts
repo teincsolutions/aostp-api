@@ -5,7 +5,7 @@ import { WebhookController } from './webhook.controller';
 import { PaymentGatewayModule } from '../../providers/payment-gateway/payment-gateway.module';
 import { StorageModule } from '../../providers/storage/storage.module';
 import { PDFService } from '../../providers/pdf/pdf.service';
-import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
+import { CallbackTokenService } from '../../providers/payment-gateway/callback-token.service';
 import { JwtService } from '@nestjs/jwt';
 
 @Module({

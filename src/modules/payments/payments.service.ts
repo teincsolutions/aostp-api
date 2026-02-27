@@ -20,9 +20,9 @@ import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PaymentGatewayService } from '../../providers/payment-gateway/payment-gateway.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { S3Service } from '../../providers/storage/s3.service';
-import { CallbackTokenService } from 'src/providers/payment-gateway/callback-token.service';
+import { CallbackTokenService } from '../../providers/payment-gateway/callback-token.service';
 import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
-import { HubtelCallbackData } from 'src/providers/payment-gateway/providers/hubtel.provider';
+import { HubtelCallbackData } from '../../providers/payment-gateway/providers/hubtel.provider';
 
 @Injectable()
 export class PaymentsService {
