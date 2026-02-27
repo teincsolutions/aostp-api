@@ -9,3 +9,4 @@ export * from './shipping-method-report.dto';
 export * from './general-report.dto';
 export * from './pickup-report.dto';
 export * from './warehouse-report.dto';
+export * from './debtors-report.dto';

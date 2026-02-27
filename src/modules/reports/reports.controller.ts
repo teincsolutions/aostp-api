@@ -19,6 +19,7 @@ import { ShippingMethodReportResponseDto } from './dto/shipping-method-report.dt
 import { GeneralReportResponseDto } from './dto/general-report.dto';
 import { PickupReportResponseDto, PickupReportQueryDto } from './dto/pickup-report.dto';
 import { WarehouseReportResponseDto } from './dto/warehouse-report.dto';
+import { DebtorsReportResponseDto } from './dto/debtors-report.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -789,5 +790,49 @@ export class ReportsController {
   })
   async getRecentPickups(@Query() query: RecentItemsQueryDto) {
     return this.reportsService.getRecentPickups(query);
+  }
+
+  @Get('debtors')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @ApiOperation({
+    summary: 'Get debtors list report',
+    description:
+      'Returns customers with outstanding invoice balances, sorted by highest outstanding amount. Includes per-customer packing list breakdown and invoice count.',
+  })
+  @ApiQuery({
+    name: 'fromDate',
+    required: false,
+    type: String,
+    description: 'Filter by invoice creation start date (ISO 8601)',
+    example: '2025-01-01T00:00:00Z',
+  })
+  @ApiQuery({
+    name: 'toDate',
+    required: false,
+    type: String,
+    description: 'Filter by invoice creation end date (ISO 8601)',
+    example: '2025-12-31T23:59:59Z',
+  })
+  @ApiQuery({
+    name: 'warehouseId',
+    required: false,
+    type: String,
+    description: 'Filter by warehouse ID',
+  })
+  @ApiQuery({
+    name: 'customerId',
+    required: false,
+    type: String,
+    description: 'Filter by specific customer ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Debtors list report generated successfully',
+    type: DebtorsReportResponseDto,
+  })
+  async getDebtorsReport(
+    @Query() query: ReportQueryDto,
+  ): Promise<DebtorsReportResponseDto> {
+    return this.reportsService.getDebtorsReport(query);
   }
 }

@@ -36,6 +36,13 @@ import {
   WarehouseStatsDto,
   WarehousePackingListDto,
 } from './dto/warehouse-report.dto';
+import {
+  DebtorsReportResponseDto,
+  DebtorItemDto,
+  DebtorInvoiceDto,
+  DebtorPackingListDto,
+  DebtorsSummaryDto,
+} from './dto/debtors-report.dto';
 import { ShippingMode, InvoiceStatus, PackageStatus } from '@prisma/client';
 
 @Injectable()
@@ -2035,6 +2042,228 @@ export class ReportsService {
       items: mappedItems,
       total: resultItems.length,
       nextCursor,
+    };
+  }
+
+  /**
+   * I. DEBTORS LIST REPORT
+   * Customers with outstanding balances, sorted by highest outstanding amount.
+   * Includes packing list breakdown and invoice count per debtor.
+   */
+  async getDebtorsReport(
+    query: ReportQueryDto,
+  ): Promise<DebtorsReportResponseDto> {
+    this.logger.log('Generating debtors list report');
+
+    const invoiceWhere: any = {
+      status: {
+        in: [InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID],
+      },
+      balance: {
+        gt: 0,
+      },
+    };
+
+    if (query.fromDate || query.toDate) {
+      invoiceWhere.createdAt = {};
+      if (query.fromDate) {
+        invoiceWhere.createdAt.gte = new Date(query.fromDate);
+      }
+      if (query.toDate) {
+        invoiceWhere.createdAt.lte = new Date(query.toDate);
+      }
+    }
+
+    if (query.customerId) {
+      invoiceWhere.customerId = query.customerId;
+    }
+
+    if (query.warehouseId) {
+      invoiceWhere.customer = { warehouseId: query.warehouseId };
+    }
+
+    // Fetch all outstanding invoices with related customer and packing list data
+    const invoices = await this.prisma.invoice.findMany({
+      where: invoiceWhere,
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        totalAmount: true,
+        paidAmount: true,
+        balance: true,
+        currency: true,
+        dueDate: true,
+        createdAt: true,
+        customerId: true,
+        packingListId: true,
+        packingList: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        customer: {
+          select: {
+            customerCode: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true,
+            email: true,
+            warehouse: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        balance: 'desc',
+      },
+    });
+
+    // Group invoices by customer
+    const customerMap = new Map<
+      string,
+      {
+        customer: (typeof invoices)[0]['customer'];
+        invoiceList: typeof invoices;
+      }
+    >();
+
+    invoices.forEach((invoice) => {
+      const existing = customerMap.get(invoice.customerId);
+      if (existing) {
+        existing.invoiceList.push(invoice);
+      } else {
+        customerMap.set(invoice.customerId, {
+          customer: invoice.customer,
+          invoiceList: [invoice],
+        });
+      }
+    });
+
+    // Build debtors list, then sort by outstanding balance descending
+    const debtors: DebtorItemDto[] = Array.from(customerMap.values())
+      .map(({ customer, invoiceList }) => {
+        const totalInvoiceAmount = invoiceList.reduce(
+          (sum, inv) => sum + inv.totalAmount,
+          0,
+        );
+        const totalPaidAmount = invoiceList.reduce(
+          (sum, inv) => sum + inv.paidAmount,
+          0,
+        );
+        const outstandingBalance = invoiceList.reduce(
+          (sum, inv) => sum + inv.balance,
+          0,
+        );
+
+        // Aggregate packing list breakdown
+        const packingListMap = new Map<
+          string,
+          {
+            id: string;
+            name: string;
+            invoiceCount: number;
+            outstandingBalance: number;
+          }
+        >();
+
+        invoiceList.forEach((inv) => {
+          if (inv.packingListId && inv.packingList) {
+            const existing = packingListMap.get(inv.packingListId);
+            if (existing) {
+              existing.invoiceCount++;
+              existing.outstandingBalance += inv.balance;
+            } else {
+              packingListMap.set(inv.packingListId, {
+                id: inv.packingList.id,
+                name: inv.packingList.name,
+                invoiceCount: 1,
+                outstandingBalance: inv.balance,
+              });
+            }
+          }
+        });
+
+        const packingLists: DebtorPackingListDto[] = Array.from(
+          packingListMap.values(),
+        ).map((pl) => ({
+          ...pl,
+          outstandingBalance: Math.round(pl.outstandingBalance * 100) / 100,
+        }));
+
+        const lastInvoiceDate = invoiceList.reduce(
+          (latest, inv) =>
+            inv.createdAt > latest ? inv.createdAt : latest,
+          invoiceList[0].createdAt,
+        );
+
+        const invoiceDtos: DebtorInvoiceDto[] = invoiceList.map((inv) => ({
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status,
+          totalAmount: inv.totalAmount,
+          paidAmount: inv.paidAmount,
+          balance: Math.round(inv.balance * 100) / 100,
+          currency: inv.currency,
+          dueDate: inv.dueDate,
+          createdAt: inv.createdAt,
+          packingListName: inv.packingList?.name,
+          packingListId: inv.packingListId ?? undefined,
+        }));
+
+        return {
+          customerCode: customer.customerCode,
+          customerName: `${customer.firstName}${customer.lastName ? ' ' + customer.lastName : ''}`,
+          phoneNumber: customer.phoneNumber,
+          email: customer.email ?? undefined,
+          warehouse: customer.warehouse?.name || 'N/A',
+          totalInvoiceAmount: Math.round(totalInvoiceAmount * 100) / 100,
+          totalPaidAmount: Math.round(totalPaidAmount * 100) / 100,
+          outstandingBalance: Math.round(outstandingBalance * 100) / 100,
+          invoiceCount: invoiceList.length,
+          packingListCount: packingListMap.size,
+          packingLists,
+          invoices: invoiceDtos,
+          lastInvoiceDate,
+          rank: 0,
+        };
+      })
+      .sort((a, b) => b.outstandingBalance - a.outstandingBalance)
+      .map((debtor, index) => ({ ...debtor, rank: index + 1 }));
+
+    // Compute summary
+    const totalOutstanding = debtors.reduce(
+      (sum, d) => sum + d.outstandingBalance,
+      0,
+    );
+    const totalInvoiceAmount = debtors.reduce(
+      (sum, d) => sum + d.totalInvoiceAmount,
+      0,
+    );
+    const totalPaidAmount = debtors.reduce(
+      (sum, d) => sum + d.totalPaidAmount,
+      0,
+    );
+    const collectionRate =
+      totalInvoiceAmount > 0
+        ? (totalPaidAmount / totalInvoiceAmount) * 100
+        : 0;
+
+    const summary: DebtorsSummaryDto = {
+      totalDebtors: debtors.length,
+      totalOutstanding: Math.round(totalOutstanding * 100) / 100,
+      totalInvoiceAmount: Math.round(totalInvoiceAmount * 100) / 100,
+      totalPaidAmount: Math.round(totalPaidAmount * 100) / 100,
+      collectionRate: Math.round(collectionRate * 100) / 100,
+    };
+
+    return {
+      debtors,
+      summary,
+      totalCount: debtors.length,
     };
   }
 }
