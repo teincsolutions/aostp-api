@@ -35,6 +35,7 @@ import {
   WarehouseReportResponseDto,
   WarehouseStatsDto,
   WarehousePackingListDto,
+  DestinationCityStatsDto,
 } from './dto/warehouse-report.dto';
 import {
   DebtorsReportResponseDto,
@@ -1034,6 +1035,13 @@ export class ReportsService {
             quantity: true,
             weight: true,
             cbm: true,
+            destinationCityId: true,
+            destinationCity: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
             invoice: {
               select: {
                 status: true,
@@ -1066,6 +1074,19 @@ export class ReportsService {
     let totalCustomers = 0;
     let totalWeight = 0;
     let totalCBM = 0;
+
+    // Track overall destination city totals across all warehouses
+    const overallCityStats: Map<
+      string | null,
+      {
+        cityId: string | null;
+        cityName: string | null;
+        totalWeight: number;
+        totalCBM: number;
+        totalAmount: number;
+        totalPackages: number;
+      }
+    > = new Map();
 
     const warehouseStats: WarehouseStatsDto[] = warehouses.map((wh) => {
       const whPackageCount = wh.packages.reduce(
@@ -1102,6 +1123,63 @@ export class ReportsService {
         }),
       );
 
+      // Group packages by destination city within this warehouse
+      const cityStatsMap: Map<
+        string | null,
+        {
+          cityId: string | null;
+          cityName: string | null;
+          totalWeight: number;
+          totalCBM: number;
+          totalAmount: number;
+          totalPackages: number;
+        }
+      > = new Map();
+
+      for (const pkg of wh.packages) {
+        const cityKey = pkg.destinationCityId || null;
+        const cityName = pkg.destinationCity?.name || null;
+
+        if (!cityStatsMap.has(cityKey)) {
+          cityStatsMap.set(cityKey, {
+            cityId: cityKey,
+            cityName: cityName,
+            totalWeight: 0,
+            totalCBM: 0,
+            totalAmount: 0,
+            totalPackages: 0,
+          });
+        }
+
+        const cityStat = cityStatsMap.get(cityKey)!;
+        cityStat.totalWeight += pkg.weight || 0;
+        cityStat.totalCBM += pkg.cbm || 0;
+        cityStat.totalAmount += pkg.invoice?.balance || 0;
+        cityStat.totalPackages += pkg.quantity || 0;
+
+        // Aggregate to overall city stats
+        if (!overallCityStats.has(cityKey)) {
+          overallCityStats.set(cityKey, {
+            cityId: cityKey,
+            cityName: cityName,
+            totalWeight: 0,
+            totalCBM: 0,
+            totalAmount: 0,
+            totalPackages: 0,
+          });
+        }
+
+        const overallCityStat = overallCityStats.get(cityKey)!;
+        overallCityStat.totalWeight += pkg.weight || 0;
+        overallCityStat.totalCBM += pkg.cbm || 0;
+        overallCityStat.totalAmount += pkg.invoice?.balance || 0;
+        overallCityStat.totalPackages += pkg.quantity || 0;
+      }
+
+      const destinationCities: DestinationCityStatsDto[] = Array.from(
+        cityStatsMap.values(),
+      ).sort((a, b) => b.totalPackages - a.totalPackages);
+
       return {
         id: wh.id,
         name: wh.name,
@@ -1112,8 +1190,14 @@ export class ReportsService {
         outstandingInvoices,
         outstandingAmount,
         packingLists,
+        destinationCities,
       };
     });
+
+    // Convert overall city stats to array and sort by total packages
+    const destinationCityTotals: DestinationCityStatsDto[] = Array.from(
+      overallCityStats.values(),
+    ).sort((a, b) => b.totalPackages - a.totalPackages);
 
     return {
       warehouses: warehouseStats,
@@ -1121,6 +1205,7 @@ export class ReportsService {
       totalCustomers,
       totalWeight,
       totalCBM,
+      destinationCityTotals,
     };
   }
 

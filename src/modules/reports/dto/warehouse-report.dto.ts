@@ -1,6 +1,34 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InvoiceStatsDto } from './packing-list-report.dto';
 
+export class DestinationCityStatsDto {
+  @ApiProperty({
+    description: 'City ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    nullable: true,
+  })
+  cityId: string | null;
+
+  @ApiProperty({
+    description: 'City name',
+    example: 'Accra',
+    nullable: true,
+  })
+  cityName: string | null;
+
+  @ApiProperty({ description: 'Total weight in KG for this city', example: 1500.0 })
+  totalWeight: number;
+
+  @ApiProperty({ description: 'Total CBM for this city', example: 45.5 })
+  totalCBM: number;
+
+  @ApiProperty({ description: 'Total outstanding amount for this city', example: 12000.0 })
+  totalAmount: number;
+
+  @ApiProperty({ description: 'Total packages for this city', example: 50 })
+  totalPackages: number;
+}
+
 export class WarehousePackingListDto {
   @ApiProperty({
     description: 'Packing list ID',
@@ -48,6 +76,12 @@ export class WarehouseStatsDto {
     type: [WarehousePackingListDto],
   })
   packingLists: WarehousePackingListDto[];
+
+  @ApiProperty({
+    description: 'Statistics grouped by destination city',
+    type: [DestinationCityStatsDto],
+  })
+  destinationCities: DestinationCityStatsDto[];
 }
 
 export class WarehouseReportResponseDto {
@@ -68,4 +102,10 @@ export class WarehouseReportResponseDto {
 
   @ApiProperty({ description: 'Overall total CBM', example: 600.5 })
   totalCBM: number;
+
+  @ApiProperty({
+    description: 'Overall statistics grouped by destination city across all warehouses',
+    type: [DestinationCityStatsDto],
+  })
+  destinationCityTotals: DestinationCityStatsDto[];
 }
