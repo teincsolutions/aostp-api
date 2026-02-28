@@ -15,6 +15,7 @@ import {
   InvoiceStatus,
   ShippingMode,
   AirShippingType,
+  PackageStatus,
 } from '@prisma/client';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { PDFService } from '../../providers/pdf/pdf.service';
@@ -716,6 +717,9 @@ export class InvoicesService {
     const where: Prisma.InvoiceWhereInput = {
       package: {
         delivery: null, // Package has no delivery record
+        status: {
+          not: PackageStatus.RELEASED, // Exclude already picked-up packages
+        },
       },
     };
 
