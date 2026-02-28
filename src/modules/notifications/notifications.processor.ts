@@ -116,7 +116,7 @@ export class NotificationsProcessor {
   ) {
     const customerName = `${data.customerFirstName}${data.customerLastName ? ' ' + data.customerLastName : ''}`;
     const packingListRow = data.packingListName
-      ? `<tr><td><strong>Packing List:</strong></td><td>${data.packingListName}</td></tr>`
+      ? `<tr style="border-bottom: 1px solid #eef1f5;"><td style="padding: 10px 18px; color: #666; font-size: 14px;">Packing List</td><td style="padding: 10px 18px; color: #222; font-size: 14px;">${data.packingListName}</td></tr>`
       : '';
 
     const dueDate = new Date(data.dueDate).toLocaleDateString();
@@ -227,9 +227,10 @@ export class NotificationsProcessor {
 
     const dueDate = new Date(data.dueDate).toLocaleDateString();
     const invoiceUrl = this.getPublicInvoiceUrl(data.invoiceAccessToken);
+    const packingListInfo = data.packingListName ? ` (${data.packingListName})` : '';
     const content = invoiceUrl
-      ? `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber} for ${data.currency}${data.totalAmount} is due ${dueDate}. View your invoice: ${invoiceUrl}`
-      : `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber} for ${data.currency}${data.totalAmount} is due ${dueDate}. Check your email for details.`;
+      ? `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber}${packingListInfo} for ${data.currency}${data.totalAmount} is due ${dueDate}. View your invoice: ${invoiceUrl}`
+      : `Hi ${data.customerFirstName}, invoice ${data.invoiceNumber}${packingListInfo} for ${data.currency}${data.totalAmount} is due ${dueDate}. Check your email for details.`;
 
     let result: { success: boolean; error?: string };
 

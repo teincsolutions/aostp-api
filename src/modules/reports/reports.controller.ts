@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -86,7 +86,12 @@ export class ReportsController {
   })
   async getPaymentsReport(
     @Query() query: ReportQueryDto,
+    @Request() req,
   ): Promise<PaymentsReportResponseDto> {
+    // Filter by user's assigned warehouse if they have one
+    if (req.user.warehouseId) {
+      query.warehouseId = req.user.warehouseId;
+    }
     return this.reportsService.getPaymentsReport(query);
   }
 
