@@ -79,6 +79,12 @@ export class ReportsController {
     type: String,
     description: 'Filter by customer ID',
   })
+  @ApiQuery({
+    name: 'processedById',
+    required: false,
+    type: String,
+    description: 'Filter by the staff user ID who processed the payments',
+  })
   @ApiResponse({
     status: 200,
     description: 'Payments report generated successfully',

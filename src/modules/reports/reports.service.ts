@@ -106,6 +106,11 @@ export class ReportsService {
       };
     }
 
+    // Filter by the staff member who processed the payment
+    if (query.processedById) {
+      where.processedById = query.processedById;
+    }
+
     // Fetch payments with related data
     const payments = await this.prisma.payment.findMany({
       where,

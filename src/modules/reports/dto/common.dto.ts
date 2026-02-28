@@ -44,4 +44,12 @@ export class ReportQueryDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter payments by the staff user who processed them',
+    example: '7f858ae2-8757-42bb-9cd8-282400a86ff5',
+  })
+  @IsOptional()
+  @IsUUID()
+  processedById?: string;
 }
