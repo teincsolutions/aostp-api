@@ -763,10 +763,10 @@ export class PDFService {
     const currency = (data.currency || theme.currencyFallback).toUpperCase();
 
     // Space reserved at the bottom of EVERY page for the strip (pill + NB + bottom info)
-    const stripReserved = LAYOUT.bottomReserved + 30;
-    // Extra space for notice + momo on the LAST page (3 lines + momo = ~80pt)
-    const noticeH = 14 + 12 + 12 + 12 + 14 + 12 + 12; // spacing + 3 notice lines + gap + 2 momo lines
-    const lastPageReserved = stripReserved + noticeH + 20;
+    // LAYOUT.bottomReserved already accounts for the pill/NB/info height — no extra buffer needed
+    const stripReserved = LAYOUT.bottomReserved;
+    // Actual height consumed by the notice block (3 lines at 12/14pt advance + 2 momo lines)
+    const noticeH = 12 + 12 + 14 + 12 + 12; // = 62pt
 
     // ── helper: build column definitions ──────────────────────────────────────
     const buildCols = () => [
@@ -821,25 +821,19 @@ export class PDFService {
 
     doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
 
-    // Bottom boundary for normal rows (leaves room for the strip at page bottom)
+    // Bottom boundary: leave room for the totals strip at the page bottom
     const maxY = H - doc.page.margins.bottom - stripReserved;
-    // Bottom boundary for the last row (also leaves room for notice + momo)
-    const lastRowMaxY = H - doc.page.margins.bottom - lastPageReserved;
 
     // ── iterate all rows, paginating as needed ─────────────────────────────────
     for (let i = 0; i < rows.length; i++) {
       const it = rows[i];
-      const isLastRow = i === rows.length - 1;
 
       // Calculate how much space this row needs
       const descH = doc.heightOfString(it.description || '', { width: cols[0].w, lineBreak: true });
       const rowH = Math.max(descH, LAYOUT.rowH);
 
-      // Determine page break threshold depending on whether this is the last row
-      const rowMaxY = isLastRow ? lastRowMaxY : maxY;
-
       // If this row won't fit on the current page, start a new page
-      if (y + rowH > rowMaxY) {
+      if (y + rowH > maxY) {
         doc.addPage();
         y = drawTableHeader(LAYOUT.topY, true);
         doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
@@ -859,8 +853,14 @@ export class PDFService {
       y += rowH;
     }
 
-    // ── payment notice + momo (always drawn on last page after rows) ───────────
+    // ── payment notice + momo (always on last page, paginate only if needed) ────
     y += 10;
+    if (y + noticeH > maxY) {
+      doc.addPage();
+      y = drawTableHeader(LAYOUT.topY, true);
+      doc.font('Helvetica').fontSize(LAYOUT.rowFont).fillColor('#000');
+      y += 10;
+    }
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
     writeLineClamped(doc, 'YOU ARE REQUIRED TO MAKE PAYMENT AS SOON AS YOU RECEIVE THIS INVOICE.',           L + 6, y, contentW - 12, 'left'); y += 12;
     writeLineClamped(doc, 'CUSTOMERS ARE TO PAY FULL SHIPPING BEFORE PICKING UP PACKAGES FROM WAREHOUSE.',   L + 6, y, contentW - 12, 'left'); y += 12;
