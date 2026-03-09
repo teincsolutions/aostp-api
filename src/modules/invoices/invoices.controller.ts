@@ -37,7 +37,7 @@ export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
   @Post('generate/:packingListId')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Generate invoices from packing list' })
   @ApiResponse({ status: 201, description: 'Invoices generated successfully' })
   @ApiResponse({ status: 404, description: 'Packing list not found' })
@@ -58,7 +58,6 @@ export class InvoicesController {
 
   @Get()
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
@@ -82,7 +81,6 @@ export class InvoicesController {
 
   @Get('pending-delivery')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
@@ -111,7 +109,6 @@ export class InvoicesController {
 
   @Get('customer/:customerId')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
@@ -129,7 +126,6 @@ export class InvoicesController {
 
   @Get(':id')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
@@ -144,7 +140,6 @@ export class InvoicesController {
 
   @Patch(':id')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
   )
@@ -161,7 +156,6 @@ export class InvoicesController {
 
   @Get(':id/download-pdf')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
@@ -177,7 +171,6 @@ export class InvoicesController {
 
   @Post(':id/regenerate-pdf')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
     UserRole.PAYMENT_CLERK,

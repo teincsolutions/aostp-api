@@ -59,7 +59,6 @@ export class ShippingRatesController {
 
   @Get()
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
   )
@@ -72,7 +71,6 @@ export class ShippingRatesController {
 
   @Get('active')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
   )
@@ -83,7 +81,6 @@ export class ShippingRatesController {
 
   @Get('current/:shippingMode')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
   )
@@ -108,7 +105,6 @@ export class ShippingRatesController {
 
   @Get(':id')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
     UserRole.SUPER_ADMIN,
   )

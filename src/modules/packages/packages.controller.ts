@@ -40,7 +40,7 @@ export class PackagesController {
   constructor(private readonly packagesService: PackagesService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Create a new package' })
   @ApiResponse({ status: 201, description: 'Package created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -54,7 +54,6 @@ export class PackagesController {
     UserRole.SUPER_ADMIN,
     UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
-    UserRole.PAYMENT_CLERK,
   )
   @ApiOperation({ summary: 'Get all packages with pagination and filters' })
   findAll(@Query() filterDto: PackageFilterDto) {
@@ -78,7 +77,7 @@ export class PackagesController {
   }
 
   @Get('warehouse')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({
     summary: 'Get packages in warehouse with pagination and filters',
   })
@@ -106,7 +105,7 @@ export class PackagesController {
   }
 
   @Post('update-warehouse-days')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Update warehouse days for all packages' })
   @HttpCode(HttpStatus.OK)
   updateWarehouseDays() {
@@ -129,7 +128,7 @@ export class PackagesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Update package' })
   @ApiParam({ name: 'id', description: 'Package ID' })
   update(
@@ -141,7 +140,7 @@ export class PackagesController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Update package status' })
   @ApiParam({ name: 'id', description: 'Package ID' })
   @ApiQuery({ name: 'status', enum: PackageStatus, required: true })
@@ -154,7 +153,7 @@ export class PackagesController {
   }
 
   @Post(':id/photos')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Add photo to package' })
   @ApiParam({ name: 'id', description: 'Package ID' })
   addPhoto(
@@ -166,7 +165,7 @@ export class PackagesController {
   }
 
   @Delete(':id/photos/:photoId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER)
   @ApiOperation({ summary: 'Remove photo from package' })
   @ApiParam({ name: 'id', description: 'Package ID' })
   @ApiParam({ name: 'photoId', description: 'Photo ID' })

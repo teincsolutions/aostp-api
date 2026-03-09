@@ -40,7 +40,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get payments report',
@@ -142,7 +141,7 @@ export class ReportsController {
   }
 
   @Get('customer-league')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER, UserRole.OPERATIONS_CLERK)
   @ApiOperation({
     summary: 'Get customer league report',
     description:
@@ -187,7 +186,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get shipping method report',
@@ -269,7 +267,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get pickup report',
@@ -366,7 +363,7 @@ export class ReportsController {
   }
 
   @Get('warehouses')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER, UserRole.OPERATIONS_CLERK)
   @ApiOperation({
     summary: 'Get warehouse report',
     description:
@@ -409,7 +406,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get invoices by month graph data',
@@ -439,7 +435,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get payments by month graph data (AIR vs SEA)',
@@ -470,7 +465,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get intakes by month graph data',
@@ -501,7 +495,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get pickups by month graph data',
@@ -552,7 +545,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get shipping mode summary',
@@ -635,7 +627,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get recent intakes',
@@ -671,7 +662,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get recent invoices with payment status',
@@ -708,7 +698,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get recent aged packages',
@@ -745,7 +734,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get recent packing lists',
@@ -781,7 +769,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get recent pickups',
@@ -855,7 +842,6 @@ export class ReportsController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.FINANCE_MANAGER,
-    UserRole.OPERATIONS_CLERK,
   )
   @ApiOperation({
     summary: 'Get end-of-day report',

@@ -36,9 +36,8 @@ export class PackageDeliveryController {
   ) {}
 
   @Get()
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Get all package deliveries with filters and pagination',
     description:
       'Retrieves all package delivery records with advanced filtering by customer, invoice, package, warehouse, packing list, date range, and more.',
   })
@@ -94,9 +93,8 @@ export class PackageDeliveryController {
   }
 
   @Post()
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Create package pickup records for multiple invoices',
     description:
       'Records when packages are picked up by the customer. Can handle multiple invoices and packages in a single pickup. If trackingCodes are not provided, all packages from the specified invoices will be picked up. Creates delivery records, updates package statuses to RELEASED, and sends pickup notifications.',
   })
@@ -150,9 +148,8 @@ export class PackageDeliveryController {
   }
 
   @Get('by-invoice/:invoiceId')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Get all deliveries for an invoice',
     description:
       'Retrieves all package deliveries associated with a specific invoice',
   })
@@ -203,9 +200,8 @@ export class PackageDeliveryController {
   }
 
   @Get('by-customer/:customerId')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Get all deliveries for a customer',
     description:
       'Retrieves all package item deliveries for a specific customer across all invoices',
   })
@@ -260,9 +256,8 @@ export class PackageDeliveryController {
   }
 
   @Get('by-id/:deliveryId')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.OPERATIONS_CLERK, UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Get delivery details by delivery ID',
     description:
       'Retrieves detailed information for a specific delivery record',
   })

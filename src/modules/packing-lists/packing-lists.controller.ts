@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Request,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,16 +27,19 @@ import { AddPackagesToPackingListDto } from './dto/add-packages.dto';
 import { GetPackingListsQueryDto } from './dto/get-packing-lists-query.dto';
 import { RemovePackagesDto } from './dto/remove-packages.dto';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { RolesGuard } from '../../shared/guards/roles.guard';
 import { UserRole } from '@prisma/client';
 
 @ApiTags('Packing Lists')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('packing-lists')
 export class PackingListsController {
   constructor(private readonly packingListsService: PackingListsService) {}
 
   @Post()
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new packing list' })
   @ApiResponse({
@@ -59,8 +63,8 @@ export class PackingListsController {
 
   @Get()
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
@@ -76,8 +80,8 @@ export class PackingListsController {
 
   @Get(':id')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({ summary: 'Get packing list by ID' })
@@ -96,8 +100,8 @@ export class PackingListsController {
 
   @Get('by-name/:name')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({ summary: 'Get packing list by name' })
@@ -116,8 +120,8 @@ export class PackingListsController {
 
   @Get(':id/summary')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
@@ -138,8 +142,8 @@ export class PackingListsController {
 
   @Get(':id/export')
   @Roles(
-    UserRole.OPERATIONS_CLERK,
     UserRole.FINANCE_MANAGER,
+    UserRole.PAYMENT_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
@@ -159,7 +163,7 @@ export class PackingListsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update packing list' })
   @ApiParam({ name: 'id', description: 'Packing list UUID' })
   @ApiResponse({
@@ -187,7 +191,7 @@ export class PackingListsController {
   }
 
   @Post(':id/packages')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Add packages to packing list' })
   @ApiParam({ name: 'id', description: 'Packing list UUID' })
@@ -216,7 +220,7 @@ export class PackingListsController {
   }
 
   @Delete(':id/packages')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove packages from packing list' })
   @ApiParam({ name: 'id', description: 'Packing list UUID' })
@@ -255,7 +259,7 @@ export class PackingListsController {
   }
 
   @Post(':id/finalize')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Finalize packing list and generate invoices' })
   @ApiParam({ name: 'id', description: 'Packing list UUID' })
@@ -302,7 +306,7 @@ export class PackingListsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.OPERATIONS_CLERK, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete packing list' })
   @ApiParam({ name: 'id', description: 'Packing list UUID' })
   @ApiResponse({
