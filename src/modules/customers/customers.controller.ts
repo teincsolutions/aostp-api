@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +24,7 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerFilterDto } from './dto/customer-filter.dto';
+import { ForceDeleteCustomerDto } from './dto/force-delete-customer.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -281,6 +284,59 @@ export class CustomersController {
     @Request() req: any,
   ) {
     return this.customersService.update(id, updateCustomerDto, req.user?.id);
+  }
+
+  @Delete(':id/force')
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Force delete a customer and all related data',
+    description:
+      'Permanently and irreversibly deletes a customer along with all associated records ' +
+      '(packages, package items, invoices, payments, deliveries, notifications). ' +
+      'Requires the caller to confirm the customer full name in the request body. ' +
+      'Restricted to SUPER_ADMIN only.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Customer unique identifier',
+    type: 'string',
+  })
+  @ApiBody({ type: ForceDeleteCustomerDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Customer and all related records permanently deleted',
+    schema: {
+      type: 'object',
+      properties: {
+        deleted: { type: 'boolean', example: true },
+        summary: {
+          type: 'object',
+          properties: {
+            packageDeliveries: { type: 'number', example: 3 },
+            payments: { type: 'number', example: 5 },
+            notifications: { type: 'number', example: 12 },
+            invoices: { type: 'number', example: 4 },
+            packageItems: { type: 'number', example: 8 },
+            packages: { type: 'number', example: 4 },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Confirmation name does not match' })
+  @ApiResponse({ status: 404, description: 'Customer not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - SUPER_ADMIN only' })
+  forceDelete(
+    @Param('id') id: string,
+    @Body() forceDeleteDto: ForceDeleteCustomerDto,
+    @Request() req: any,
+  ) {
+    return this.customersService.forceDelete(
+      id,
+      forceDeleteDto.confirmName,
+      req.user?.id,
+    );
   }
 
   @Delete(':id')

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -434,6 +435,109 @@ export class CustomersService {
     }
 
     return result;
+  }
+
+  async forceDelete(
+    id: string,
+    confirmName: string,
+    userId?: string,
+  ): Promise<{ deleted: boolean; summary: Record<string, number> }> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    // Build expected confirmation name
+    const fullName = customer.lastName
+      ? `${customer.firstName} ${customer.lastName}`
+      : customer.firstName;
+
+    if (confirmName.trim() !== fullName.trim()) {
+      throw new BadRequestException(
+        `Confirmation name does not match. Expected: "${fullName}"`,
+      );
+    }
+
+    // Collect counts before deletion for the summary
+    const [
+      packageDeliveryCount,
+      paymentCount,
+      notificationCount,
+      invoiceCount,
+      packageItemCount,
+      packageCount,
+    ] = await Promise.all([
+      this.prisma.packageDelivery.count({ where: { customerId: id } }),
+      this.prisma.payment.count({ where: { customerId: id } }),
+      this.prisma.notification.count({ where: { customerId: id } }),
+      this.prisma.invoice.count({ where: { customerId: id } }),
+      this.prisma.packageItem.count({ where: { customerId: id } }),
+      this.prisma.package.count({ where: { customerId: id } }),
+    ]);
+
+    // Cascade delete in dependency order within a single transaction
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Deliveries reference Invoice + Package + Customer — delete first
+      await tx.packageDelivery.deleteMany({ where: { customerId: id } });
+
+      // 2. Payments — deleting rows cascades the implicit Payment<->Invoice join table
+      await tx.payment.deleteMany({ where: { customerId: id } });
+
+      // 3. Notifications
+      await tx.notification.deleteMany({ where: { customerId: id } });
+
+      // 4. Invoices — safe now that deliveries and payment-join rows are gone
+      await tx.invoice.deleteMany({ where: { customerId: id } });
+
+      // 5. PackageItems — cascades PackageItemPhotos; must precede Package deletion
+      await tx.packageItem.deleteMany({ where: { customerId: id } });
+
+      // 6. Packages — cascades PackagePhotos
+      await tx.package.deleteMany({ where: { customerId: id } });
+
+      // 7. Customer itself
+      await tx.customer.delete({ where: { id } });
+    });
+
+    // Audit log recorded after the transaction succeeds
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'FORCE_DELETE',
+          entity: 'Customer',
+          entityId: id,
+          before: customer as any,
+          metadata: {
+            customerCode: customer.customerCode,
+            confirmedName: confirmName,
+            deletedRecords: {
+              packageDeliveries: packageDeliveryCount,
+              payments: paymentCount,
+              notifications: notificationCount,
+              invoices: invoiceCount,
+              packageItems: packageItemCount,
+              packages: packageCount,
+            },
+          },
+        },
+      });
+    }
+
+    return {
+      deleted: true,
+      summary: {
+        packageDeliveries: packageDeliveryCount,
+        payments: paymentCount,
+        notifications: notificationCount,
+        invoices: invoiceCount,
+        packageItems: packageItemCount,
+        packages: packageCount,
+      },
+    };
   }
 
   async getCustomerStats(id: string) {
