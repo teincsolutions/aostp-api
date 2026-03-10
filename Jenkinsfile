@@ -151,13 +151,13 @@ pipeline {
             steps {
                 echo '🚀 Deploying to test environment...'
                 withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
-                                            string(credentialsId: 's3-bucket-url-test', variable: 'AWS_S3_ENDPOINT'),
+                                            string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT'),
                                             string(credentialsId: 's3-region-prod', variable: 'AWS_REGION'),
                                             string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
                                             string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
-                                            string(credentialsId: 's3-packages-bucket-prod', variable: 'AWS_PACKAGES_BUCKET_NAME'),
-                                            string(credentialsId: 's3-users-bucket-prod', variable: 'AWS_USERS_BUCKET_NAME'),
-                                            string(credentialsId: 's3-logs-bucket-prod', variable: 'AWS_LOGS_BUCKET_NAME'),
+                                            string(credentialsId: 's3-packages-bucket-test', variable: 'AWS_PACKAGES_BUCKET_NAME'),
+                                            string(credentialsId: 's3-users-bucket-test', variable: 'AWS_USERS_BUCKET_NAME'),
+                                            string(credentialsId: 's3-logs-bucket-test', variable: 'AWS_LOGS_BUCKET_NAME'),
                                             string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
                                             string(credentialsId: 'jwt-refresh-secret-prod', variable: 'JWT_REFRESH_SECRET'),
                                             string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY'),
