@@ -144,6 +144,60 @@ pipeline {
             }
         }
 
+        stage('Deploy to Test Environment') {
+            when {
+                branch 'test'
+            }
+            steps {
+                echo '🚀 Deploying to test environment...'
+                withCredentials(bindings: [string(credentialsId: 'database-url-test', variable: 'DATABASE_URL'),
+                                            string(credentialsId: 's3-bucket-url-prod', variable: 'AWS_S3_ENDPOINT'),
+                                            string(credentialsId: 's3-region-prod', variable: 'AWS_REGION'),
+                                            string(credentialsId: 's3-access-key-id-prod', variable: 'AWS_ACCESS_KEY_ID'),
+                                            string(credentialsId: 's3-secret-access-key-prod', variable: 'AWS_SECRET_ACCESS_KEY'),
+                                            string(credentialsId: 's3-packages-bucket-test', variable: 'AWS_PACKAGES_BUCKET_NAME'),
+                                            string(credentialsId: 's3-users-bucket-test', variable: 'AWS_USERS_BUCKET_NAME'),
+                                            string(credentialsId: 's3-logs-bucket-test', variable: 'AWS_LOGS_BUCKET_NAME'),
+                                            string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
+                                            string(credentialsId: 'jwt-refresh-secret-prod', variable: 'JWT_REFRESH_SECRET'),
+                                            string(credentialsId: 'encryption-key-prod', variable: 'ENCRYPTION_KEY'),
+                                            string(credentialsId: 'hubtel-api-id-prod', variable: 'HUBTEL_API_ID'),
+                                            string(credentialsId: 'hubtel-api-key-prod', variable: 'HUBTEL_API_KEY'),
+                                            string(credentialsId: 'hubtel-pos-sales-id-prod', variable: 'HUBTEL_POS_SALES_ID'),
+                                            string(credentialsId: 'sms-online-gh-api-key', variable: 'SMS_ONLINE_GH_API_KEY'),
+                                            string(credentialsId: 'hubtel-client-id-prod', variable: 'HUBTEL_CLIENT_ID'),
+                                            string(credentialsId: 'hubtel-client-secret-prod', variable: 'HUBTEL_CLIENT_SECRET'),
+                                            string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
+                                            string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
+                    sh '''
+                        if [ -f .env.example ]; then
+                            envsubst < .env.example > .env.test
+                        fi
+
+                        docker compose -f docker-compose.test.yml down || true
+                        docker compose -f docker-compose.test.yml up -d
+
+                        sleep 10
+                        # Run migrations if script exists
+                        if [ -f scripts/migrate.sh ]; then
+                            docker exec aostp-api-test ./scripts/migrate.sh
+                        fi
+
+                        # Wait and health check
+                        for i in {1..10}; do
+                            if curl -f http://localhost:3001/api/v1/health; then
+                                echo "✅ Test health check passed"
+                                break
+                            fi
+                            echo "Retry $i/10..."
+                            sleep 5
+                        done
+                        rm -f .env.test
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to Production Environment') {
             when {
                 branch 'main'
