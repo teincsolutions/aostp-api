@@ -16,7 +16,7 @@ export class PrismaService
       },
       transactionOptions: {
         maxWait: 10000,
-        timeout: 15000,
+        timeout: 10000,
       },
       log:
         configService.get('NODE_ENV') === 'development'

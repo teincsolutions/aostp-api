@@ -79,9 +79,9 @@ export class ExchangeRatesService {
           action: 'CREATE',
           entity: 'ExchangeRate',
           entityId: newRate.id,
-          after: newRate as any,
           metadata: {
             currencyPair: `${fromCurrency}/${toCurrency}`,
+            rate: roundedRate,
             previousRateId: existingActiveRate?.id,
           },
         },
@@ -266,8 +266,9 @@ export class ExchangeRatesService {
           action: 'UPDATE',
           entity: 'ExchangeRate',
           entityId: id,
-          before: existingRate as any,
-          after: updatedRate as any,
+          metadata: {
+            currencyPair: `${existingRate.fromCurrency}/${existingRate.toCurrency}`,
+          },
         },
       });
 
@@ -329,10 +330,9 @@ export class ExchangeRatesService {
           action: 'UPDATE',
           entity: 'ExchangeRate',
           entityId: id,
-          before: existingRate as any,
-          after: deactivatedRate as any,
           metadata: {
             action: 'DEACTIVATED',
+            currencyPair: `${existingRate.fromCurrency}/${existingRate.toCurrency}`,
           },
         },
       });
@@ -448,7 +448,10 @@ export class ExchangeRatesService {
           action: 'DELETE',
           entity: 'ExchangeRate',
           entityId: id,
-          before: existingRate as any,
+          metadata: {
+            currencyPair: `${existingRate.fromCurrency}/${existingRate.toCurrency}`,
+            rate: existingRate.rate,
+          },
         },
       });
 

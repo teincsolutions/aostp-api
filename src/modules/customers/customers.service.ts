@@ -91,7 +91,6 @@ export class CustomersService {
           action: 'CREATE',
           entity: 'Customer',
           entityId: customer.id,
-          after: customer as any,
           metadata: {
             customerCode: customer.customerCode,
           },
@@ -362,8 +361,6 @@ export class CustomersService {
           action: 'UPDATE',
           entity: 'Customer',
           entityId: id,
-          before: customer as any,
-          after: updatedCustomer as any,
           metadata: {
             customerCode: customer.customerCode,
             changedFields: Object.keys(updateCustomerDto),
@@ -425,7 +422,6 @@ export class CustomersService {
           action,
           entity: 'Customer',
           entityId: id,
-          before: customer as any,
           metadata: {
             customerCode: customer.customerCode,
             hardDelete: action === 'DELETE',
@@ -510,7 +506,6 @@ export class CustomersService {
           action: 'FORCE_DELETE',
           entity: 'Customer',
           entityId: id,
-          before: customer as any,
           metadata: {
             customerCode: customer.customerCode,
             confirmedName: confirmName,

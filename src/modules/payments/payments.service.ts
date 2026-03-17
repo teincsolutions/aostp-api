@@ -265,15 +265,17 @@ export class PaymentsService {
               action: 'CREATE',
               entity: 'Payment',
               entityId: payment.id,
-              after: payment as any,
               metadata: {
+                paymentCode: payment.paymentCode,
                 customerCode: customer.customerCode,
+                amount: roundedAmount,
+                currency,
                 invoiceCount: invoiceIds ? invoiceIds.length : 0,
                 localAmount,
                 paymentMethod,
                 isGatewayPayment,
-                paymentSource: paymentSource, // CR-02: Include payment source in audit log
-                hasReferenceDocument: !!referenceDocumentKey, // CR-01: Track if document was uploaded
+                paymentSource,
+                hasReferenceDocument: !!referenceDocumentKey,
               },
             },
           });
@@ -579,8 +581,9 @@ export class PaymentsService {
           action: 'UPDATE',
           entity: 'Payment',
           entityId: id,
-          before: existingPayment as any,
-          after: updatedPayment as any,
+          metadata: {
+            paymentCode: existingPayment.paymentCode,
+          },
         },
       });
 
@@ -606,8 +609,11 @@ export class PaymentsService {
           action: 'DELETE',
           entity: 'Payment',
           entityId: id,
-          before: existingPayment as any,
-          after: {} as any,
+          metadata: {
+            paymentCode: existingPayment.paymentCode,
+            amount: existingPayment.amount,
+            currency: existingPayment.currency,
+          },
         },
       });
 

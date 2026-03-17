@@ -94,7 +94,10 @@ export class PackingListsService {
           action: 'CREATE',
           entity: 'PackingList',
           entityId: packingList.id,
-          after: packingList as any,
+          metadata: {
+            name: packingList.name,
+            containerId,
+          },
         },
       });
 
@@ -343,8 +346,10 @@ export class PackingListsService {
           action: 'UPDATE',
           entity: 'PackingList',
           entityId: id,
-          before: existingPackingList,
-          after: updatedPackingList as any,
+          metadata: {
+            name: updatedPackingList.name,
+            changedFields: Object.keys(updatePackingListDto),
+          },
         },
       });
 
@@ -574,7 +579,9 @@ export class PackingListsService {
           action: 'DELETE',
           entity: 'PackingList',
           entityId: id,
-          before: existingPackingList,
+          metadata: {
+            name: existingPackingList.name,
+          },
         },
       });
     });
@@ -692,45 +699,32 @@ export class PackingListsService {
       throw new BadRequestException('Packing list is not finalized');
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const unfinalizedPackingList = await tx.packingList.update({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.packingList.update({
         where: { id },
         data: {
           status: 'DRAFT',
         },
-        include: {
-          container: true,
-          packages: {
-            include: {
-              customer: true,
-            },
-          },
-          invoices: {
-            include: {
-              customer: true,
-            },
-          },
-        },
       });
 
-      // Log the unfinalization action
+      // Store only the fields that changed
       await tx.auditLog.create({
         data: {
           userId,
           action: 'UPDATE',
           entity: 'PackingList',
           entityId: id,
-          before: packingList,
-          after: unfinalizedPackingList as any,
+          before: { status: packingList.status },
+          after: { status: 'DRAFT' },
           metadata: {
             action: 'UNFINALIZED',
             existingInvoiceCount: packingList.invoices.length,
           },
         },
       });
-
-      return unfinalizedPackingList;
     });
+
+    const result = await this.findOne(id);
 
     this.logger.log(
       `Packing list '${packingList.name}' unfinalized by user ${userId}`,
@@ -814,42 +808,36 @@ export class PackingListsService {
     }
 
     // Update packing list as finalized (no further edits allowed)
-    const result = await this.prisma.$transaction(
-      async (tx) => {
-      const finalizedPackingList = await tx.packingList.update({
+    // Keep transaction lean: only the status update + a lightweight audit log entry.
+    // Heavy relation loading is done after the transaction commits.
+    const finalizeTimestamp = new Date().toISOString();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.packingList.update({
         where: { id },
         data: {
           status: 'FINALIZED',
           notes: packingList.notes
-            ? `${packingList.notes}\nFINALIZED on ${new Date().toISOString()}`
-            : `FINALIZED on ${new Date().toISOString()}`,
-        },
-        include: {
-          container: true,
-          packages: {
-            include: {
-              customer: true,
-            },
-          },
-          invoices: {
-            include: {
-              customer: true,
-            },
-          },
+            ? `${packingList.notes}\nFINALIZED on ${finalizeTimestamp}`
+            : `FINALIZED on ${finalizeTimestamp}`,
         },
       });
 
-      // Log the finalization action
+      // Store only the fields that changed — not the entire nested object graph
       await tx.auditLog.create({
         data: {
           userId,
           action: 'FINALIZE',
           entity: 'PackingList',
           entityId: id,
-          before: packingList,
-          after: finalizedPackingList as any,
+          before: { status: packingList.status, notes: packingList.notes },
+          after: {
+            status: 'FINALIZED',
+            notes: packingList.notes
+              ? `${packingList.notes}\nFINALIZED on ${finalizeTimestamp}`
+              : `FINALIZED on ${finalizeTimestamp}`,
+          },
           metadata: {
-            newInvoiceCount: newInvoiceCount,
+            newInvoiceCount,
             totalInvoiceCount: invoices.length,
             packageCount: packingList.packages.length,
             packagesWithoutInvoices: packagesWithoutInvoices.length,
@@ -857,11 +845,10 @@ export class PackingListsService {
           },
         },
       });
+    });
 
-      return finalizedPackingList;
-    },
-      { timeout: 30000 },
-    );
+    // Reload with full relations after the transaction has committed
+    const result = await this.findOne(id);
 
     const message =
       newInvoiceCount > 0

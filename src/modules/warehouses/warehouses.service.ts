@@ -51,9 +51,9 @@ export class WarehousesService {
         action: 'CREATE',
         entity: 'Warehouse',
         entityId: warehouse.id,
-        after: warehouse,
         metadata: {
-          action: 'WAREHOUSE_CREATED',
+          warehouseId: warehouse.warehouseId,
+          name: warehouse.name,
         },
       },
     });
@@ -153,10 +153,10 @@ export class WarehousesService {
         action: 'UPDATE',
         entity: 'Warehouse',
         entityId: id,
-        before: existingWarehouse,
-        after: updatedWarehouse,
         metadata: {
-          action: 'WAREHOUSE_UPDATED',
+          warehouseId: existingWarehouse.warehouseId,
+          name: updatedWarehouse.name,
+          changedFields: Object.keys(updateWarehouseDto),
         },
       },
     });
@@ -192,9 +192,9 @@ export class WarehousesService {
         action: 'DELETE',
         entity: 'Warehouse',
         entityId: id,
-        before: warehouse,
         metadata: {
-          action: 'WAREHOUSE_DELETED',
+          warehouseId: warehouse.warehouseId,
+          name: warehouse.name,
         },
       },
     });

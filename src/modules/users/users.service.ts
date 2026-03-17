@@ -105,7 +105,6 @@ export class UsersService {
           action: 'CREATE',
           entity: 'User',
           entityId: user.id,
-          after: user as any,
           metadata: {
             createdUserEmail: email,
             createdUserRole: role,
@@ -380,8 +379,10 @@ export class UsersService {
           action: 'UPDATE',
           entity: 'User',
           entityId: id,
-          before: existingUser,
-          after: updatedUser,
+          metadata: {
+            updatedUserEmail: existingUser.email,
+            changedFields: Object.keys(updateUserDto),
+          },
         },
       });
 
@@ -454,10 +455,9 @@ export class UsersService {
           action: 'UPDATE',
           entity: 'User',
           entityId: id,
-          before: existingUser,
-          after: deactivatedUser,
           metadata: {
             action: 'DEACTIVATED',
+            userEmail: existingUser.email,
           },
         },
       });
@@ -510,10 +510,9 @@ export class UsersService {
           action: 'UPDATE',
           entity: 'User',
           entityId: id,
-          before: existingUser,
-          after: activatedUser,
           metadata: {
             action: 'ACTIVATED',
+            userEmail: existingUser.email,
           },
         },
       });
@@ -643,7 +642,10 @@ export class UsersService {
           action: 'DELETE',
           entity: 'User',
           entityId: id,
-          before: existingUser,
+          metadata: {
+            deletedUserEmail: existingUser.email,
+            deletedUserRole: existingUser.role,
+          },
         },
       });
 

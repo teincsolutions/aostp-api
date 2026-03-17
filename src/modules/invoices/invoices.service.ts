@@ -171,12 +171,14 @@ export class InvoicesService {
             action: 'CREATE',
             entity: 'Invoice',
             entityId: invoice.id,
-            after: invoice as any,
             metadata: {
+              invoiceNumber: invoice.invoiceNumber,
               packingListId,
               packageId: pkg.id,
               packageTrackingCode: pkg.trackingCode,
               customerCode: pkg.customer.customerCode,
+              totalAmount: invoice.totalAmount,
+              currency: invoice.currency,
               generatedFromPackingList: true,
             },
           },
@@ -305,11 +307,13 @@ export class InvoicesService {
           action: 'CREATE',
           entity: 'Invoice',
           entityId: invoice.id,
-          after: invoice as any,
           metadata: {
+            invoiceNumber: invoice.invoiceNumber,
             packageId: pkg.id,
             packageTrackingCode: pkg.trackingCode,
             customerCode: pkg.customer.customerCode,
+            totalAmount: invoice.totalAmount,
+            currency: invoice.currency,
             generatedFromPackage: true,
           },
         },
@@ -603,8 +607,9 @@ export class InvoicesService {
           action: 'UPDATE',
           entity: 'Invoice',
           entityId: id,
-          before: existingInvoice as any,
-          after: updatedInvoice as any,
+          metadata: {
+            invoiceNumber: existingInvoice.invoiceNumber,
+          },
         },
       });
 
@@ -801,10 +806,9 @@ export class InvoicesService {
           action: 'UPDATE',
           entity: 'Invoice',
           entityId: id,
-          before: invoice as any,
-          after: updatedInvoice as any,
           metadata: {
             action: 'MARKED_AS_PAID',
+            invoiceNumber: invoice.invoiceNumber,
           },
         },
       });
@@ -860,7 +864,9 @@ export class InvoicesService {
           action: 'DELETE',
           entity: 'Invoice',
           entityId: id,
-          before: existingInvoice as any,
+          metadata: {
+            invoiceNumber: existingInvoice.invoiceNumber,
+          },
         },
       });
 

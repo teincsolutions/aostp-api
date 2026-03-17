@@ -494,8 +494,10 @@ export class PackagesService {
           action: 'UPDATE',
           entity: 'Package',
           entityId: id,
-          before: existingPackage as any,
-          after: updatedPackage as any,
+          metadata: {
+            trackingCode: existingPackage.trackingCode,
+            changedFields: Object.keys(updatePackageDto),
+          },
         },
       });
 
