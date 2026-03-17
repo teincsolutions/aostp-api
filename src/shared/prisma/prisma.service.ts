@@ -14,6 +14,10 @@ export class PrismaService
           url: configService.get('DATABASE_URL'),
         },
       },
+      transactionOptions: {
+        maxWait: 10000,
+        timeout: 15000,
+      },
       log:
         configService.get('NODE_ENV') === 'development'
           ? ['query', 'error', 'warn']

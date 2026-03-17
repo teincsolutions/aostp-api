@@ -814,7 +814,8 @@ export class PackingListsService {
     }
 
     // Update packing list as finalized (no further edits allowed)
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(
+      async (tx) => {
       const finalizedPackingList = await tx.packingList.update({
         where: { id },
         data: {
@@ -858,7 +859,9 @@ export class PackingListsService {
       });
 
       return finalizedPackingList;
-    });
+    },
+      { timeout: 30000 },
+    );
 
     const message =
       newInvoiceCount > 0
