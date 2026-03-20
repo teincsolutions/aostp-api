@@ -14,23 +14,15 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
 
-  // Enable CORS with support for multiple origins
+  // Enable CORS with origins from CORS_ORIGIN env variable
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '');
   const allowedOrigins = corsOrigin
-    ? corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean)
-    : [];
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, origin);
-      }
-      callback(new Error(`Origin ${origin} not allowed by CORS`));
-    },
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-correlation-id'],
