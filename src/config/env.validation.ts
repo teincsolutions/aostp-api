@@ -127,6 +127,19 @@ export class EnvironmentVariables {
   @IsOptional()
   TWILIO_PHONE_NUMBER?: string;
 
+  // WhatsApp Cloud API (Optional)
+  @IsString()
+  @IsOptional()
+  WHATSAPP_ACCESS_TOKEN?: string;
+
+  @IsString()
+  @IsOptional()
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  WHATSAPP_VERIFY_TOKEN?: string;
+
   // Payment Gateway (Optional)
   @IsString()
   @IsOptional()

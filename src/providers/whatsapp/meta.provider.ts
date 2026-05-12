@@ -94,7 +94,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       } else {
         throw new Error('No message ID returned from Meta API');
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to send WhatsApp message to ${phone}:`,
         error.response?.data || error.message,

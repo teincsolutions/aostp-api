@@ -18,6 +18,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ShippingRatesModule } from './modules/shipping-rates/shipping-rates.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
+import { WhatsAppWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ConsolidationModule } from './modules/consolidation/consolidation.module';
 import { PackageDeliveryModule } from './modules/package-delivery/package-delivery.module';
@@ -82,6 +83,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     PackageDeliveryModule,
     WarehousesModule,
     ReportsModule,
+    WhatsAppWebhookModule,
   ],
   providers: [
     {
