@@ -21,6 +21,10 @@ pipeline {
         EMAIL_PROVIDER = 'nodemailer'
         SMTP_SECURE = true
         EMAIL_FROM = 'info@akomapacargo.com'
+
+        WHATSAPP_ACCESS_TOKEN = credentials('whatsapp-access-token-prod')
+        WHATSAPP_PHONE_NUMBER_ID = credentials('whatsapp-phone-number-id-prod')
+        WHATSAPP_VERIFY_TOKEN = credentials('whatsapp-verify-token-prod')
     }
 
     stages {
@@ -168,7 +172,10 @@ pipeline {
                                             string(credentialsId: 'hubtel-client-id-prod', variable: 'HUBTEL_CLIENT_ID'),
                                             string(credentialsId: 'hubtel-client-secret-prod', variable: 'HUBTEL_CLIENT_SECRET'),
                                             string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
-                                            string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
+                                             string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS'),
+                                             string(credentialsId: 'whatsapp-access-token-prod', variable: 'WHATSAPP_ACCESS_TOKEN'),
+                                             string(credentialsId: 'whatsapp-phone-number-id-prod', variable: 'WHATSAPP_PHONE_NUMBER_ID'),
+                                             string(credentialsId: 'whatsapp-verify-token-prod', variable: 'WHATSAPP_VERIFY_TOKEN')]) {
                     sh '''
                         if [ -f .env.example ]; then
                             envsubst < .env.example > .env.test
@@ -222,7 +229,10 @@ pipeline {
                                             string(credentialsId: 'hubtel-client-id-prod', variable: 'HUBTEL_CLIENT_ID'),
                                             string(credentialsId: 'hubtel-client-secret-prod', variable: 'HUBTEL_CLIENT_SECRET'),
                                             string(credentialsId: 'smtp-user', variable: 'SMTP_USER'),
-                                            string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS')]) {
+                                             string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS'),
+                                             string(credentialsId: 'whatsapp-access-token-prod', variable: 'WHATSAPP_ACCESS_TOKEN'),
+                                             string(credentialsId: 'whatsapp-phone-number-id-prod', variable: 'WHATSAPP_PHONE_NUMBER_ID'),
+                                             string(credentialsId: 'whatsapp-verify-token-prod', variable: 'WHATSAPP_VERIFY_TOKEN')]) {
                     sh '''
                         if [ -f .env.example ]; then
                               envsubst < .env.example > .env.production
