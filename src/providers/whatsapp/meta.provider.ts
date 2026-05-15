@@ -5,15 +5,23 @@ import { firstValueFrom } from 'rxjs';
 import {
   WhatsAppProvider,
   WhatsAppResponse,
+  TemplateMessage,
 } from '../../interfaces/whatsapp-provider.interface';
 
-interface MetaWhatsAppMessageRequest {
+interface MetaTextRequest {
   messaging_product: 'whatsapp';
   to: string;
   type: 'text';
   text: {
     body: string;
   };
+}
+
+interface MetaTemplateRequest {
+  messaging_product: 'whatsapp';
+  to: string;
+  type: 'template';
+  template: TemplateMessage;
 }
 
 interface MetaWhatsAppMessageResponse {
@@ -52,58 +60,36 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   async sendMessage(phone: string, message: string): Promise<WhatsAppResponse> {
     try {
-      if (!this.accessToken || !this.phoneNumberId) {
-        throw new Error('Meta WhatsApp credentials not configured');
-      }
-
-      // Format phone number (remove + and ensure it's in international format)
+      this.ensureCredentials();
       const formattedPhone = this.formatPhoneNumber(phone);
-
-      const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
-      const payload: MetaWhatsAppMessageRequest = {
+      const payload: MetaTextRequest = {
         messaging_product: 'whatsapp',
         to: formattedPhone,
         type: 'text',
-        text: {
-          body: message,
-        },
+        text: { body: message },
       };
-
-      const headers = {
-        Authorization: `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json',
-      };
-
-      this.logger.debug(`Sending WhatsApp message to ${formattedPhone}`);
-
-      const response = await firstValueFrom(
-        this.httpService.post<MetaWhatsAppMessageResponse>(url, payload, {
-          headers,
-        }),
-      );
-
-      if (response.data.messages && response.data.messages.length > 0) {
-        const messageId = response.data.messages[0].id;
-        this.logger.debug(
-          `WhatsApp message sent successfully with ID: ${messageId}`,
-        );
-        return {
-          success: true,
-          messageId,
-        };
-      } else {
-        throw new Error('No message ID returned from Meta API');
-      }
+      return this.postToMeta(payload, formattedPhone);
     } catch (error: any) {
-      this.logger.error(
-        `Failed to send WhatsApp message to ${phone}:`,
-        error.response?.data || error.message,
-      );
+      return this.handleError(phone, error);
+    }
+  }
 
-      return {
-        success: false,
-        error: error.response?.data?.error?.message || error.message,
+  async sendTemplateMessage(
+    phone: string,
+    template: TemplateMessage,
+  ): Promise<WhatsAppResponse> {
+    try {
+      this.ensureCredentials();
+      const formattedPhone = this.formatPhoneNumber(phone);
+      const payload: MetaTemplateRequest = {
+        messaging_product: 'whatsapp',
+        to: formattedPhone,
+        type: 'template',
+        template,
       };
+      return this.postToMeta(payload, formattedPhone);
+    } catch (error: any) {
+      return this.handleError(phone, error);
     }
   }
 
@@ -111,20 +97,60 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     return 'Meta WhatsApp Cloud API';
   }
 
-  private formatPhoneNumber(phone: string): string {
-    // Remove any non-numeric characters except +
-    let cleaned = phone.replace(/[^\d+]/g, '');
+  private async postToMeta(
+    payload: MetaTextRequest | MetaTemplateRequest,
+    formattedPhone: string,
+  ): Promise<WhatsAppResponse> {
+    const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+    };
 
-    // If starts with +, remove it and ensure international format
+    this.logger.debug(`Sending WhatsApp message to ${formattedPhone}`);
+
+    const response = await firstValueFrom(
+      this.httpService.post<MetaWhatsAppMessageResponse>(url, payload, {
+        headers,
+      }),
+    );
+
+    if (response.data.messages && response.data.messages.length > 0) {
+      const messageId = response.data.messages[0].id;
+      this.logger.debug(
+        `WhatsApp message sent successfully with ID: ${messageId}`,
+      );
+      return { success: true, messageId };
+    }
+
+    throw new Error('No message ID returned from Meta API');
+  }
+
+  private ensureCredentials(): void {
+    if (!this.accessToken || !this.phoneNumberId) {
+      throw new Error('Meta WhatsApp credentials not configured');
+    }
+  }
+
+  private formatPhoneNumber(phone: string): string {
+    let cleaned = phone.replace(/[^\d+]/g, '');
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
-
-    // Ensure it starts with country code (basic validation)
     if (cleaned.length < 10) {
       throw new Error(`Invalid phone number format: ${phone}`);
     }
-
     return cleaned;
+  }
+
+  private handleError(phone: string, error: any): WhatsAppResponse {
+    this.logger.error(
+      `Failed to send WhatsApp message to ${phone}:`,
+      error.response?.data || error.message,
+    );
+    return {
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+    };
   }
 }
