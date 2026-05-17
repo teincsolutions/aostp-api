@@ -215,7 +215,7 @@ describe('WhatsAppWebhookService', () => {
       expect(chatService.saveMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           direction: 'OUTBOUND',
-          text: '🔍 Please send your tracking code, invoice number, or intake code and I will look it up.',
+          text: '🔍 Please send your tracking code or intake code and I will look it up.',
         }),
       );
     });

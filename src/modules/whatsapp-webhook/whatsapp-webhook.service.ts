@@ -39,9 +39,13 @@ export class WhatsAppWebhookService {
 
     const prompts: Record<string, string> = {
       TRACK:
-        '🔍 Please send your tracking code, invoice number, or intake code and I will look it up.',
+        '🔍 Please send your tracking code or intake code and I will look it up.',
       PHONE:
         '📋 Please send your phone number so I can find your pending shipments.',
+      INVOICE:
+        '📄 Please send an invoice number to look up.\n\nExample: INV-2026-001',
+      PAYMENT:
+        '💳 Please send one or more invoice numbers to check payment status.\n\nExample: INV-2026-001 or INV-2026-001, INV-2026-002',
     };
 
     const prompt = prompts[replyId];
@@ -186,12 +190,27 @@ export class WhatsAppWebhookService {
                 {
                   id: 'TRACK',
                   title: 'Track Package',
-                  description: 'Look up by tracking code or invoice',
+                  description: 'Look up package by tracking code',
                 },
                 {
                   id: 'PHONE',
                   title: 'My Shipments',
                   description: 'View pending shipments by phone',
+                },
+              ],
+            },
+            {
+              title: 'Billing',
+              rows: [
+                {
+                  id: 'INVOICE',
+                  title: 'View Invoices',
+                  description: 'Look up invoice details',
+                },
+                {
+                  id: 'PAYMENT',
+                  title: 'Check Payment',
+                  description: 'Check payment status for invoices',
                 },
               ],
             },

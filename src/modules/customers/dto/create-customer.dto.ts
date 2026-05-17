@@ -42,7 +42,9 @@ export class CreateCustomerDto {
     example: 'john.doe@example.com',
     format: 'email',
   })
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail()
   @IsOptional()
   email?: string;
@@ -61,6 +63,7 @@ export class CreateCustomerDto {
   })
   @IsString()
   @IsOptional()
+  @IsNotEmpty({ message: 'alternatePhone must not be empty if provided' })
   alternatePhone?: string;
 
   @ApiPropertyOptional({
@@ -79,6 +82,7 @@ export class CreateCustomerDto {
   })
   @IsString()
   @IsOptional()
+  @IsNotEmpty({ message: 'warehouseId must not be empty if provided' })
   warehouseId?: string;
 
   @ApiPropertyOptional({
@@ -87,6 +91,7 @@ export class CreateCustomerDto {
   })
   @IsString()
   @IsOptional()
+  @IsNotEmpty({ message: 'cityId must not be empty if provided' })
   cityId?: string;
 
   @ApiPropertyOptional({

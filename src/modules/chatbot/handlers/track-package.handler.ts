@@ -21,7 +21,7 @@ export class TrackPackageHandler implements ChatbotHandler {
     }
     if (upper === 'TRACK') return false;
 
-    if (upper.includes('INV')) return true;
+    if (upper.startsWith('INV')) return false;
     if (
       /[a-zA-Z]/.test(input.text) &&
       /\d/.test(input.text) &&
@@ -55,7 +55,6 @@ export class TrackPackageHandler implements ChatbotHandler {
         OR: [
           { trackingCode: code },
           { items: { some: { intakeTrackingCode: code } } },
-          { invoice: { invoiceNumber: code } },
         ],
       },
       include: {

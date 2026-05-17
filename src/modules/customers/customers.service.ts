@@ -15,7 +15,10 @@ import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
 export class CustomersService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createCustomerDto: CreateCustomerDto, userId?: string): Promise<Customer> {
+  async create(
+    createCustomerDto: CreateCustomerDto,
+    userId?: string,
+  ): Promise<Customer> {
     // Check if customer with same phone number exists
     const existingCustomer = await this.prisma.customer.findFirst({
       where: { phoneNumber: createCustomerDto.phoneNumber },
@@ -80,6 +83,11 @@ export class CustomersService {
       data: {
         ...createCustomerDto,
         customerCode,
+        ...(createCustomerDto.cityId === '' && { cityId: undefined }),
+        ...(createCustomerDto.warehouseId === '' && { warehouseId: undefined }),
+        ...(createCustomerDto.alternatePhone === '' && {
+          alternatePhone: undefined,
+        }),
       },
     });
 
@@ -348,9 +356,18 @@ export class CustomersService {
       }
     }
 
+    const data = {
+      ...updateCustomerDto,
+      ...(updateCustomerDto.cityId === '' && { cityId: undefined }),
+      ...(updateCustomerDto.warehouseId === '' && { warehouseId: undefined }),
+      ...(updateCustomerDto.alternatePhone === '' && {
+        alternatePhone: undefined,
+      }),
+    };
+
     const updatedCustomer = await this.prisma.customer.update({
       where: { id },
-      data: updateCustomerDto,
+      data,
     });
 
     // Create audit log if userId is provided
