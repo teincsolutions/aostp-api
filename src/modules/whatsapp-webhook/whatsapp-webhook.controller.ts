@@ -60,24 +60,37 @@ export class WhatsAppWebhookController {
       }
 
       const message = messages[0];
-
-      if (message?.type !== 'text') {
-        this.logger.debug(
-          `Ignoring non-text message of type: ${message?.type}`,
-        );
-        return { status: 'ok' };
-      }
-
       const from = message.from as string;
-      const text = message.text?.body as string;
       const messageId = message.id as string;
 
-      this.logger.debug(
-        `Incoming WhatsApp message from ${from}: ${text?.substring(0, 100)}`,
-      );
-
       await this.whatsAppWebhookService.markAsRead(messageId);
-      await this.whatsAppWebhookService.handleTextMessage(from, text);
+
+      switch (message?.type) {
+        case 'text': {
+          const text = message.text?.body as string;
+          this.logger.debug(
+            `Incoming WhatsApp text from ${from}: ${text?.substring(0, 100)}`,
+          );
+          await this.whatsAppWebhookService.handleTextMessage(from, text);
+          break;
+        }
+        case 'interactive': {
+          if (message.interactive?.type === 'list_reply') {
+            const replyId = message.interactive.list_reply.id as string;
+            this.logger.debug(
+              `Incoming WhatsApp list reply from ${from}: ${replyId}`,
+            );
+            await this.whatsAppWebhookService.handleInteractiveReply(
+              from,
+              replyId,
+              message,
+            );
+          }
+          break;
+        }
+        default:
+          this.logger.debug(`Ignoring message of type: ${message?.type}`);
+      }
 
       return { status: 'ok' };
     } catch (error: any) {

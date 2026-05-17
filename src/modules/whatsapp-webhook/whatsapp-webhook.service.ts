@@ -30,6 +30,47 @@ export class WhatsAppWebhookService {
     }
   }
 
+  async handleInteractiveReply(
+    from: string,
+    replyId: string,
+    rawMessage?: any,
+  ): Promise<void> {
+    const conversationId = this.normalizePhone(from);
+
+    const prompts: Record<string, string> = {
+      TRACK:
+        '🔍 Please send your tracking code, invoice number, or intake code and I will look it up.',
+      PHONE:
+        '📋 Please send your phone number so I can find your pending shipments.',
+    };
+
+    const prompt = prompts[replyId];
+
+    await this.chatService.saveMessage({
+      conversationId,
+      fromNumber: from,
+      toNumber: this.phoneNumberId || 'business',
+      direction: 'INBOUND',
+      messageType: 'interactive',
+      text: `List reply: ${replyId}`,
+      content: rawMessage?.interactive,
+    });
+
+    if (!prompt) {
+      return;
+    }
+
+    const waId = await this.sendReply(from, prompt);
+    await this.chatService.saveMessage({
+      conversationId,
+      fromNumber: this.phoneNumberId || 'business',
+      toNumber: from,
+      direction: 'OUTBOUND',
+      text: prompt,
+      waMessageId: waId,
+    });
+  }
+
   async handleTextMessage(from: string, text: string): Promise<void> {
     const conversationId = this.normalizePhone(from);
 

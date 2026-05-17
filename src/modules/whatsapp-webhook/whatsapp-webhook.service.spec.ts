@@ -199,6 +199,64 @@ describe('WhatsAppWebhookService', () => {
     });
   });
 
+  describe('handleInteractiveReply', () => {
+    it('should send TRACK prompt and persist both messages', async () => {
+      await service.handleInteractiveReply('233537776709', 'TRACK');
+
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          direction: 'INBOUND',
+          messageType: 'interactive',
+          text: 'List reply: TRACK',
+        }),
+      );
+
+      expect(httpService.post).toHaveBeenCalled();
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          direction: 'OUTBOUND',
+          text: '🔍 Please send your tracking code, invoice number, or intake code and I will look it up.',
+        }),
+      );
+    });
+
+    it('should send PHONE prompt and persist both messages', async () => {
+      await service.handleInteractiveReply('233537776709', 'PHONE');
+
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          direction: 'INBOUND',
+          text: 'List reply: PHONE',
+        }),
+      );
+
+      expect(httpService.post).toHaveBeenCalled();
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          direction: 'OUTBOUND',
+          text: '📋 Please send your phone number so I can find your pending shipments.',
+        }),
+      );
+    });
+
+    it('should persist inbound but not send reply for unknown replyId', async () => {
+      await service.handleInteractiveReply('233537776709', 'UNKNOWN');
+
+      expect(chatService.saveMessage).toHaveBeenCalledTimes(1);
+      expect(httpService.post).not.toHaveBeenCalled();
+    });
+
+    it('should normalize phone number', async () => {
+      await service.handleInteractiveReply('0537776709', 'TRACK');
+
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: '233537776709',
+        }),
+      );
+    });
+  });
+
   describe('markAsRead', () => {
     it('should send read receipt via Meta API', async () => {
       await service.markAsRead('wa_message_id_123');
