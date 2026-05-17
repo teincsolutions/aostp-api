@@ -47,9 +47,9 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     private readonly httpService: HttpService,
   ) {
     this.accessToken =
-      this.configService.get<string>('META_WHATSAPP_ACCESS_TOKEN') || '';
+      this.configService.get<string>('WHATSAPP_ACCESS_TOKEN') || '';
     this.phoneNumberId =
-      this.configService.get<string>('META_WHATSAPP_PHONE_NUMBER_ID') || '';
+      this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID') || '';
 
     if (!this.accessToken || !this.phoneNumberId) {
       this.logger.warn(
