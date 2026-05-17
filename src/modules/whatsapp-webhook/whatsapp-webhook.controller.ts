@@ -70,15 +70,17 @@ export class WhatsAppWebhookController {
 
       const from = message.from as string;
       const text = message.text?.body as string;
+      const messageId = message.id as string;
 
       this.logger.debug(
         `Incoming WhatsApp message from ${from}: ${text?.substring(0, 100)}`,
       );
 
+      await this.whatsAppWebhookService.markAsRead(messageId);
       await this.whatsAppWebhookService.handleTextMessage(from, text);
 
       return { status: 'ok' };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error('Error processing incoming webhook:', error.message);
       return { status: 'ok' };
     }

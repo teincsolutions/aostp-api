@@ -276,6 +276,30 @@ export class WhatsAppWebhookService {
     }
   }
 
+  async markAsRead(messageId: string): Promise<void> {
+    if (!this.accessToken || !this.phoneNumberId) return;
+
+    const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
+    const payload = {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+    };
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      await firstValueFrom(this.httpService.post(url, payload, { headers }));
+    } catch (error) {
+      this.logger.debug(
+        `Failed to mark message ${messageId} as read:`,
+        error.response?.data || error.message,
+      );
+    }
+  }
+
   private async sendReply(to: string, text: string): Promise<void> {
     if (!this.accessToken || !this.phoneNumberId) {
       this.logger.warn(
