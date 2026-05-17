@@ -8,12 +8,11 @@ import {
   HttpStatus,
   HttpException,
   Logger,
-  Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Public } from '../../shared/decorators/public.decorator';
 import { WhatsAppWebhookService } from './whatsapp-webhook.service';
-import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
+import { MetaWhatsAppProvider } from '../../providers/whatsapp/meta.provider';
 
 @Controller('webhook/whatsapp')
 export class WhatsAppWebhookController {
@@ -22,8 +21,7 @@ export class WhatsAppWebhookController {
   constructor(
     private readonly configService: ConfigService,
     private readonly whatsAppWebhookService: WhatsAppWebhookService,
-    @Inject('WHATSAPP_PROVIDER')
-    private readonly whatsAppProvider: WhatsAppProvider,
+    private readonly metaWhatsAppProvider: MetaWhatsAppProvider,
   ) {}
 
   @Public()
@@ -61,7 +59,7 @@ export class WhatsAppWebhookController {
       return { success: false, error: 'phone query param is required' };
     }
 
-    const result = await this.whatsAppProvider.sendTemplateMessage(phone, {
+    const result = await this.metaWhatsAppProvider.sendTemplateMessage(phone, {
       name: template,
       language: { code: 'en_US' },
       components: [

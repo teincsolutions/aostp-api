@@ -33,6 +33,6 @@ import { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
       inject: [ConfigService, ConsoleWhatsAppProvider, MetaWhatsAppProvider],
     },
   ],
-  exports: ['WHATSAPP_PROVIDER'],
+  exports: ['WHATSAPP_PROVIDER', MetaWhatsAppProvider],
 })
 export class WhatsAppModule {}
