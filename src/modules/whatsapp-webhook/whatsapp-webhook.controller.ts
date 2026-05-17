@@ -8,10 +8,12 @@ import {
   HttpStatus,
   HttpException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Public } from '../../shared/decorators/public.decorator';
 import { WhatsAppWebhookService } from './whatsapp-webhook.service';
+import type { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
 
 @Controller('webhook/whatsapp')
 export class WhatsAppWebhookController {
@@ -20,6 +22,8 @@ export class WhatsAppWebhookController {
   constructor(
     private readonly configService: ConfigService,
     private readonly whatsAppWebhookService: WhatsAppWebhookService,
+    @Inject('WHATSAPP_PROVIDER')
+    private readonly whatsAppProvider: WhatsAppProvider,
   ) {}
 
   @Public()
@@ -43,6 +47,39 @@ export class WhatsAppWebhookController {
       `Webhook verification failed — mode: ${mode}, token mismatch: ${token !== verifyToken}`,
     );
     throw new HttpException('Verification failed', HttpStatus.FORBIDDEN);
+  }
+
+  @Public()
+  @Get('test/send-template')
+  async testSendTemplate(
+    @Query('phone') phone: string,
+    @Query('template') template: string = 'package_received',
+  ): Promise<any> {
+    this.logger.warn(`[TEST] Sending template "${template}" to ${phone}`);
+
+    if (!phone) {
+      return { success: false, error: 'phone query param is required' };
+    }
+
+    const result = await this.whatsAppProvider.sendTemplateMessage(phone, {
+      name: template,
+      language: { code: 'en_US' },
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: 'Test' },
+            { type: 'text', text: 'China Main' },
+            { type: 'text', text: 'AOSTP-123' },
+            { type: 'text', text: 'Test package' },
+          ],
+        },
+      ],
+    });
+
+    this.logger.warn(`[TEST] Result for ${phone}: ${JSON.stringify(result)}`);
+
+    return result;
   }
 
   @Public()
