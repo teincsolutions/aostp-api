@@ -78,7 +78,7 @@ export class WhatsAppWebhookController {
       await this.whatsAppWebhookService.handleTextMessage(from, text);
 
       return { status: 'ok' };
-    } catch (error) {
+    } catch (error:any) {
       this.logger.error('Error processing incoming webhook:', error.message);
       return { status: 'ok' };
     }
