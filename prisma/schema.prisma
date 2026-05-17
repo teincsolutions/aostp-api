@@ -11,6 +11,11 @@ datasource db {
 }
 
 // Enums
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
 enum UserRole {
   SUPER_ADMIN
   FINANCE_MANAGER
@@ -108,6 +113,29 @@ enum PackingListStatus {
 }
 
 // Models
+
+model ChatMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  fromNumber     String
+  toNumber       String
+  direction      MessageDirection
+  messageType    String           @default("text")
+  content        Json?
+  text           String?
+  status         String           @default("sent")
+  waMessageId    String?
+  repliedById    String?
+  repliedBy      User?            @relation(fields: [repliedById], references: [id])
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([conversationId])
+  @@index([fromNumber])
+  @@index([createdAt])
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -136,6 +164,7 @@ model User {
   paymentsProcessed   Payment[]            @relation("PaymentProcessedBy")
   exchangeRatesSet    ExchangeRate[]       @relation("ExchangeRateSetBy")
   deliveriesCreated   PackageDelivery[]    @relation("DeliveryCreatedBy")
+  chatMessages        ChatMessage[]
 
   @@index([email])
   @@index([role])
