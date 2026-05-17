@@ -41,7 +41,7 @@ export class WhatsAppWebhookService {
         case 'PHONE':
           return this.handlePhoneCommand(from, args);
         default:
-          return this.sendReply(from, this.getHelpMessage());
+          return this.sendInteractiveList(from);
       }
     } catch (error) {
       this.logger.error(
@@ -205,18 +205,75 @@ export class WhatsAppWebhookService {
     return this.sendReply(from, lines.join('\n'));
   }
 
-  private getHelpMessage(): string {
-    return [
-      'Welcome to AOSTP Logistics 🚚',
-      '',
-      'Commands:',
-      'TRACK <code> — Track your shipment',
-      'PHONE <number> — View pending shipments for a phone number',
-      '',
-      'Example:',
-      'TRACK AOSTP-123',
-      'PHONE 0537776709',
-    ].join('\n');
+  private async sendInteractiveList(to: string): Promise<void> {
+    if (!this.accessToken || !this.phoneNumberId) {
+      this.logger.warn(
+        `Cannot send reply to ${to}: WhatsApp credentials not configured`,
+      );
+      return;
+    }
+
+    const companyName =
+      this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics';
+
+    const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: {
+          type: 'text',
+          text: `${companyName} 🚚`,
+        },
+        body: {
+          text: 'Welcome! How can we help you today?',
+        },
+        footer: {
+          text: 'Select an option below',
+        },
+        action: {
+          button: 'Menu',
+          sections: [
+            {
+              title: 'Shipment',
+              rows: [
+                {
+                  id: 'TRACK',
+                  title: 'Track Package',
+                  description: 'Track with your tracking code',
+                },
+                {
+                  id: 'PHONE',
+                  title: 'My Shipments',
+                  description: 'View pending shipments by phone',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(url, payload, { headers }),
+      );
+      this.logger.debug(
+        `Interactive list sent to ${to} — Message ID: ${response.data?.messages?.[0]?.id || 'unknown'}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send interactive list to ${to}:`,
+        error.response?.data || error.message,
+      );
+    }
   }
 
   private async sendReply(to: string, text: string): Promise<void> {
