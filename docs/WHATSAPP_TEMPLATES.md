@@ -9,7 +9,7 @@ All templates are **UTILITY** category (transactional). Create them exactly as s
 ## Template 1: `package_received`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -37,7 +37,7 @@ Thank you for choosing AOSTP Logistics.
 ## Template 2: `invoice_issued`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -67,7 +67,7 @@ Thank you for choosing AOSTP Logistics.
 ## Template 3: `shipment_update`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -98,7 +98,7 @@ Thank you for choosing AOSTP Logistics.
 ## Template 4: `payment_received`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -131,7 +131,7 @@ AOSTP Logistics
 ## Template 5: `container_arrival`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -163,7 +163,7 @@ AOSTP Logistics
 ## Template 6: `tracking_info`
 
 **Category:** UTILITY
-**Language:** English (US) — `en_US`
+**Language:** English — `en`
 
 ### Body
 
@@ -216,7 +216,7 @@ private readonly whatsAppProvider: WhatsAppProvider;
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'package_received',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',
@@ -236,7 +236,7 @@ await this.whatsAppProvider.sendTemplateMessage('233246092155', {
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'invoice_issued',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',
@@ -258,7 +258,7 @@ await this.whatsAppProvider.sendTemplateMessage('233246092155', {
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'shipment_update',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',
@@ -280,7 +280,7 @@ await this.whatsAppProvider.sendTemplateMessage('233246092155', {
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'payment_received',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',
@@ -303,7 +303,7 @@ await this.whatsAppProvider.sendTemplateMessage('233246092155', {
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'container_arrival',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',
@@ -326,7 +326,7 @@ await this.whatsAppProvider.sendTemplateMessage('233246092155', {
 ```typescript
 await this.whatsAppProvider.sendTemplateMessage('233246092155', {
   name: 'tracking_info',
-  language: { code: 'en_US' },
+  language: { code: 'en' },
   components: [
     {
       type: 'body',

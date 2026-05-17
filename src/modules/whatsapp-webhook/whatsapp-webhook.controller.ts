@@ -61,7 +61,7 @@ export class WhatsAppWebhookController {
 
     const result = await this.metaWhatsAppProvider.sendTemplateMessage(phone, {
       name: template,
-      language: { code: 'en_US' },
+      language: { code: 'en' },
       components: [
         {
           type: 'body',
