@@ -38,7 +38,7 @@ interface MetaWhatsAppMessageResponse {
 @Injectable()
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   private readonly logger = new Logger(MetaWhatsAppProvider.name);
-  private readonly baseUrl = 'https://graph.facebook.com/v18.0';
+  private readonly baseUrl = 'https://graph.facebook.com/v25.0';
   private readonly accessToken: string;
   private readonly phoneNumberId: string;
 
@@ -144,13 +144,17 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   private handleError(phone: string, error: any): WhatsAppResponse {
+    const status = error.response?.status;
+    const data = error.response?.data;
+    const url = error.config?.url;
     this.logger.error(
-      `Failed to send WhatsApp message to ${phone}:`,
-      error.response?.data || error.message,
+      `Failed to send WhatsApp message to ${phone} [${status}] ${url}: ${
+        data ? JSON.stringify(data) : error.message
+      }`,
     );
     return {
       success: false,
-      error: error.response?.data?.error?.message || error.message,
+      error: data?.error?.message || error.message,
     };
   }
 }
