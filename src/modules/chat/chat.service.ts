@@ -92,6 +92,11 @@ export class ChatService {
         waMessageId: data.waMessageId,
         repliedById: data.repliedById,
       },
+      include: {
+        repliedBy: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
     });
 
     this.logger.debug(
@@ -252,12 +257,19 @@ export class ChatService {
 
   async sendAdminReply(dto: SendMessageDto, userId: string): Promise<any> {
     const conversationId = this.normalizePhone(dto.to);
+    const messageType = dto.type || 'text';
 
     let waMessageId: string | undefined;
 
     if (this.accessToken && this.phoneNumberId) {
       try {
-        const result = await this.sendToWhatsApp(dto.to, dto.text);
+        const result = await this.sendToWhatsApp({
+          to: dto.to,
+          type: messageType,
+          text: dto.text,
+          mediaUrl: dto.mediaUrl,
+          filename: dto.filename,
+        });
         waMessageId = result.messageId;
       } catch (error) {
         this.logger.error(
@@ -270,13 +282,18 @@ export class ChatService {
       );
     }
 
+    const content: any = {};
+    if (dto.mediaUrl) content.mediaUrl = dto.mediaUrl;
+    if (dto.filename) content.filename = dto.filename;
+
     const message = await this.saveMessage({
       conversationId,
       fromNumber: this.phoneNumberId || 'business',
       toNumber: dto.to,
       direction: 'OUTBOUND',
-      messageType: 'text',
+      messageType,
       text: dto.text,
+      content: Object.keys(content).length > 0 ? content : undefined,
       status: waMessageId ? 'sent' : 'failed',
       waMessageId,
       repliedById: userId,
@@ -296,17 +313,45 @@ export class ChatService {
     });
   }
 
-  private async sendToWhatsApp(
-    to: string,
-    text: string,
-  ): Promise<{ messageId?: string }> {
+  private async sendToWhatsApp(config: {
+    to: string;
+    type: string;
+    text?: string;
+    mediaUrl?: string;
+    filename?: string;
+  }): Promise<{ messageId?: string }> {
     const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
-    const payload = {
+    const payload: any = {
       messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: text },
+      to: config.to,
+      type: config.type,
     };
+
+    switch (config.type) {
+      case 'image':
+        payload.image = { link: config.mediaUrl };
+        if (config.text) payload.image.caption = config.text;
+        break;
+      case 'document':
+        payload.document = {
+          link: config.mediaUrl,
+          filename: config.filename || 'document',
+        };
+        if (config.text) payload.document.caption = config.text;
+        break;
+      case 'audio':
+        payload.audio = { link: config.mediaUrl };
+        break;
+      case 'video':
+        payload.video = { link: config.mediaUrl };
+        if (config.text) payload.video.caption = config.text;
+        break;
+      case 'text':
+      default:
+        payload.text = { body: config.text || '' };
+        break;
+    }
+
     const headers = {
       Authorization: `Bearer ${this.accessToken}`,
       'Content-Type': 'application/json',

@@ -89,6 +89,7 @@ describe('ChatService', () => {
         status: 'sent',
         waMessageId: null,
         repliedById: null,
+        repliedBy: null,
         readAt: null,
         createdAt: new Date('2026-05-17T12:00:00Z'),
         updatedAt: new Date('2026-05-17T12:00:00Z'),
@@ -110,6 +111,9 @@ describe('ChatService', () => {
           direction: 'INBOUND',
           text: 'Hello',
         }),
+        include: {
+          repliedBy: { select: { id: true, firstName: true, lastName: true } },
+        },
       });
       expect(result).toEqual(savedMsg);
       expect(gateway.notifyNewMessage).toHaveBeenCalledWith(
@@ -133,6 +137,7 @@ describe('ChatService', () => {
         status: 'sent',
         waMessageId: 'wa_abc_123',
         repliedById: null,
+        repliedBy: null,
         readAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -153,6 +158,9 @@ describe('ChatService', () => {
           waMessageId: 'wa_abc_123',
           status: 'sent',
         }),
+        include: {
+          repliedBy: { select: { id: true, firstName: true, lastName: true } },
+        },
       });
       expect(result).toEqual(savedMsg);
       expect(gateway.notifyNewMessage).toHaveBeenCalled();
