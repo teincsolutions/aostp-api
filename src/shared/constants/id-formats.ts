@@ -33,20 +33,20 @@ export const ID_FORMATS = {
     FORMAT: 'PL-{YYYY}-{MM}-{DD}-{CONTAINER_NO}',
   },
 
-  // Invoice numbers: INV-YYYYMMDD-XXXX
+  // Invoice numbers: INV-YYMMDD-XXXX
   INVOICE: {
     PREFIX: 'INV',
-    FORMAT: 'INV-{YYYYMMDD}-{SEQUENCE}',
+    FORMAT: 'INV-{YYMMDD}-{SEQUENCE}',
     SEQUENCE_LENGTH: 4,
-    USE_DAILY_SEQUENCE: true, // Key change: daily sequence
+    USE_DAILY_SEQUENCE: true,
   },
 
-  // Receipt numbers: RCPT-YYYYMMDD-XXXX
+  // Receipt numbers: RCPT-YYMMDD-XXXX
   RECEIPT: {
-    PREFIX: 'RCPT', // Changed from PAY
-    FORMAT: 'RCPT-{YYYYMMDD}-{SEQUENCE}',
+    PREFIX: 'RCPT',
+    FORMAT: 'RCPT-{YYMMDD}-{SEQUENCE}',
     SEQUENCE_LENGTH: 4,
-    USE_DAILY_SEQUENCE: true, // Key change: daily sequence
+    USE_DAILY_SEQUENCE: true,
   },
 
   // Audit log entries use UUID

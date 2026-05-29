@@ -76,37 +76,35 @@ export class IdGeneratorService {
   }
 
   /**
-   * Generate invoice number: INV-YYYYMMDD-HHmmssSSS-XXXX
-   * Uses timestamp + random suffix to avoid race conditions
+   * Generate invoice number: INV-YYMMDD-XXXX
+   * Uses date + random suffix to avoid race conditions
    */
   generateInvoiceNumber(): string {
     const config = ID_FORMATS.INVOICE;
     const date = new Date();
-    const year = date.getFullYear();
+    const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-    const timestamp = this.generateTimestamp(date);
     const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
-    return `${config.PREFIX}-${dateStr}-${timestamp}-${suffix}`;
+    return `${config.PREFIX}-${dateStr}-${suffix}`;
   }
 
   /**
-   * Generate receipt number: RCPT-YYYYMMDD-HHmmssSSS-XXXX
-   * Uses timestamp + random suffix to avoid race conditions
+   * Generate receipt number: RCPT-YYMMDD-XXXX
+   * Uses date + random suffix to avoid race conditions
    */
   generateReceiptNumber(): string {
     const config = ID_FORMATS.RECEIPT;
     const date = new Date();
-    const year = date.getFullYear();
+    const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
 
     const dateStr = `${year}${month}${day}`;
-    const timestamp = this.generateTimestamp(date);
     const suffix = this.generateRandomSuffix(config.SEQUENCE_LENGTH);
-    return `${config.PREFIX}-${dateStr}-${timestamp}-${suffix}`;
+    return `${config.PREFIX}-${dateStr}-${suffix}`;
   }
 
   /**
