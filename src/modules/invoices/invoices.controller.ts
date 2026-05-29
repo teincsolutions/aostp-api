@@ -75,8 +75,12 @@ export class InvoicesController {
   @Roles(UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get pending invoices' })
   @ApiQuery({ name: 'customerId', required: false, type: String })
-  findPending(@Query('customerId') customerId?: string) {
-    return this.invoicesService.getPendingInvoices(customerId);
+  @ApiQuery({ name: 'search', required: false, type: String })
+  findPending(
+    @Query('customerId') customerId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.invoicesService.getPendingInvoices(customerId, search);
   }
 
   @Get('pending-delivery')

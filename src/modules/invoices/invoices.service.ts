@@ -670,7 +670,7 @@ export class InvoicesService {
     };
   }
 
-  async getPendingInvoices(customerId?: string) {
+  async getPendingInvoices(customerId?: string, search?: string) {
     const where: Prisma.InvoiceWhereInput = {
       status: { not: InvoiceStatus.PAID },
       OR: [
@@ -685,6 +685,21 @@ export class InvoicesService {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (search) {
+      where.AND = {
+        OR: [
+          { invoiceNumber: { contains: search, mode: 'insensitive' } },
+          {
+            packingList: {
+              container: {
+                containerNumber: { contains: search, mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      };
     }
 
     return this.prisma.invoice.findMany({

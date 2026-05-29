@@ -11,4 +11,14 @@ export class UpdatePaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'S3 key for reference document' })
+  @IsOptional()
+  @IsString()
+  referenceDocumentKey?: string;
+
+  @ApiPropertyOptional({ description: 'Payment method' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }
