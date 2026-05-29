@@ -24,6 +24,7 @@ import {
   UploadPackageDto,
   UploadUserDto,
   UploadPaymentDto,
+  UploadGenericDto,
   S3UploadResultDto,
 } from './dto';
 import { Public } from '../../shared/decorators/public.decorator';
@@ -229,6 +230,71 @@ export class UploadsController {
     }
 
     const result = await this.uploadsService.uploadPaymentFile(
+      dto,
+      file.buffer,
+      file.mimetype,
+    );
+    return result;
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.FINANCE_MANAGER,
+    UserRole.OPERATIONS_CLERK,
+  )
+  @ApiOperation({
+    summary: 'Upload a generic file (e.g. chat media)',
+    description:
+      'Uploads a file to S3 in the specified folder. No entity ID required.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'The file to upload',
+        },
+        folder: {
+          type: 'string',
+          description: 'Folder to upload to (e.g. chat-media)',
+        },
+        bucketType: {
+          type: 'string',
+          enum: ['packages', 'users', 'logs', 'payments'],
+          description: 'Bucket type (optional)',
+        },
+        fileName: {
+          type: 'string',
+          description: 'Original file name (optional)',
+        },
+      },
+      required: ['file', 'folder'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    type: S3UploadResultDto,
+    description: 'File uploaded successfully',
+  })
+  @ApiBadRequestResponse({
+    description: 'Bad request - File or required parameters missing',
+  })
+  @Post('generic')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGenericFile(
+    @Body() dto: UploadGenericDto,
+    @UploadedFile() file: Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    const result = await this.uploadsService.uploadGenericFile(
       dto,
       file.buffer,
       file.mimetype,

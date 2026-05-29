@@ -7,6 +7,7 @@ import {
   UploadUserDto,
   UploadLogDto,
   UploadPaymentDto,
+  UploadGenericDto,
   BucketType,
 } from './dto';
 
@@ -217,6 +218,39 @@ export class UploadsService {
    * Structure: folder/uuid/timestamp_random.extension
    */
   private generatePaymentKey(folder: string, fileName: string): string {
+    const uuid = randomUUID();
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const extension = fileName.split('.').pop() || 'bin';
+    const fileNameUnique = `${timestamp}_${random}.${extension}`;
+    return `${folder}/${uuid}/${fileNameUnique}`;
+  }
+
+  /**
+   * Upload a file for generic purposes (e.g. chat media)
+   */
+  async uploadGenericFile(
+    dto: UploadGenericDto,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<S3UploadResult> {
+    const bucket = dto.bucketType
+      ? this.getBucketByType(dto.bucketType)
+      : this.packagesBucket;
+    const key = this.generateGenericKey(dto.folder, dto.fileName || 'file');
+    return this.s3Service.uploadFileWithBucket(
+      bucket,
+      key,
+      buffer,
+      contentType,
+    );
+  }
+
+  /**
+   * Generate key for generic uploads
+   * Structure: folder/uuid/timestamp_random.extension
+   */
+  private generateGenericKey(folder: string, fileName: string): string {
     const uuid = randomUUID();
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 15);
