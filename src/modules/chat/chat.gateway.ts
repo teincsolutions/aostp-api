@@ -8,6 +8,7 @@ interface NewMessagePayload {
   toNumber: string;
   direction: 'INBOUND' | 'OUTBOUND';
   text?: string | null;
+  content?: any;
   messageType: string;
   status: string;
   createdAt: Date;
