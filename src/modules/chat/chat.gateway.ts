@@ -30,4 +30,16 @@ export class ChatGateway {
   notifyUnreadCount(total: number): void {
     this.server.emit('unread-count', { total });
   }
+
+  notifyMessageStatus(
+    messageId: string,
+    status: string,
+    waMessageId?: string,
+  ): void {
+    this.server.emit('message-status', { messageId, status, waMessageId });
+  }
+
+  notifyMessagesDeleted(messageIds: string[]): void {
+    this.server.emit('messages-deleted', { messageIds });
+  }
 }

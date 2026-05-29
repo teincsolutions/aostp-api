@@ -1,7 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { ChatGateway } from './chat.gateway';
 import { S3Service } from '../../providers/storage/s3.service';
@@ -73,6 +75,7 @@ export class ChatService {
     private readonly httpService: HttpService,
     private readonly chatGateway: ChatGateway,
     private readonly s3Service: S3Service,
+    @Optional() @InjectQueue('chat-outbox') private readonly chatOutboxQueue?: Queue,
   ) {
     this.accessToken =
       this.configService.get<string>('WHATSAPP_ACCESS_TOKEN') || '';
@@ -266,29 +269,6 @@ export class ChatService {
     const conversationId = this.normalizePhone(dto.to);
     const messageType = dto.type || 'text';
 
-    let waMessageId: string | undefined;
-
-    if (this.accessToken && this.phoneNumberId) {
-      try {
-        const result = await this.sendToWhatsApp({
-          to: dto.to,
-          type: messageType,
-          text: dto.text,
-          mediaUrl: dto.mediaUrl,
-          filename: dto.filename,
-        });
-        waMessageId = result.messageId;
-      } catch (error) {
-        this.logger.error(
-          `Failed to send WhatsApp message to ${dto.to}: ${error.message}`,
-        );
-      }
-    } else {
-      this.logger.warn(
-        'WhatsApp credentials not configured. Skipping actual send.',
-      );
-    }
-
     const content: any = {};
     if (dto.mediaUrl) content.mediaUrl = dto.mediaUrl;
     if (dto.filename) content.filename = dto.filename;
@@ -303,12 +283,123 @@ export class ChatService {
       messageType,
       text: dto.text,
       content: Object.keys(content).length > 0 ? content : undefined,
-      status: waMessageId ? 'sent' : 'failed',
-      waMessageId,
+      status: 'pending',
       repliedById: userId,
     });
 
+    await this.queueOutboxSend({
+      messageId: message.id,
+      to: dto.to,
+      type: messageType,
+      text: dto.text,
+      mediaUrl: dto.mediaUrl,
+      filename: dto.filename,
+    });
+
     return message;
+  }
+
+  async deleteMessages(ids: string[]): Promise<{ deleted: number }> {
+    const result = await this.prisma.chatMessage.deleteMany({
+      where: { id: { in: ids } },
+    });
+    if (result.count > 0) {
+      this.chatGateway.notifyMessagesDeleted(ids);
+    }
+    return { deleted: result.count };
+  }
+
+  async retryMessage(messageId: string): Promise<any> {
+    const message = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+    if (message.direction !== 'OUTBOUND')
+      throw new NotFoundException('Cannot retry inbound messages');
+    if (message.status !== 'failed')
+      throw new NotFoundException('Message is not in failed status');
+
+    const content = (message.content as Record<string, unknown>) || {};
+    delete content.retryCount;
+    delete content.lastError;
+    if (Object.keys(content).length === 0) {
+      await this.prisma.chatMessage.update({
+        where: { id: messageId },
+        data: { status: 'pending', content: undefined },
+      });
+    } else {
+      await this.prisma.chatMessage.update({
+        where: { id: messageId },
+        data: { status: 'pending', content: content as Prisma.InputJsonValue },
+      });
+    }
+
+    const convId = this.normalizePhone(message.toNumber);
+    await this.queueOutboxSend({
+      messageId,
+      to: message.toNumber,
+      type: message.messageType,
+      text: message.text || undefined,
+      mediaUrl: (content.mediaUrl as string) || undefined,
+      filename: (content.filename as string) || undefined,
+    });
+
+    this.chatGateway.notifyMessageStatus(messageId, 'pending');
+    return { ...message, status: 'pending' };
+  }
+
+  private async queueOutboxSend(data: {
+    messageId: string;
+    to: string;
+    type: string;
+    text?: string;
+    mediaUrl?: string;
+    filename?: string;
+  }): Promise<void> {
+    if (!this.chatOutboxQueue) {
+      this.logger.warn(
+        'Chat outbox queue not available. Sending synchronously.',
+      );
+      try {
+        const result = await this.sendToWhatsApp({
+          to: data.to,
+          type: data.type,
+          text: data.text,
+          mediaUrl: data.mediaUrl,
+          filename: data.filename,
+        });
+        await this.prisma.chatMessage.update({
+          where: { id: data.messageId },
+          data: {
+            status: 'sent',
+            waMessageId: result.messageId,
+          },
+        });
+        this.chatGateway.notifyMessageStatus(
+          data.messageId,
+          'sent',
+          result.messageId,
+        );
+      } catch (error) {
+        await this.prisma.chatMessage.update({
+          where: { id: data.messageId },
+          data: { status: 'failed' },
+        });
+        this.chatGateway.notifyMessageStatus(data.messageId, 'failed');
+      }
+      return;
+    }
+
+    await this.chatOutboxQueue.add(
+      'send-whatsapp',
+      data,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 3000 },
+        removeOnComplete: 100,
+        removeOnFail: false,
+      },
+    );
   }
 
   async markConversationRead(conversationId: string): Promise<void> {

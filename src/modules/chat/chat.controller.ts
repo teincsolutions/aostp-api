@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -57,6 +58,31 @@ export class ChatController {
   async getUnreadCount() {
     const total = await this.chatService.getUnreadCount();
     return { total };
+  }
+
+  @Post('messages/:id/retry')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
+  @HttpCode(HttpStatus.OK)
+  async retryMessage(@Param('id') id: string) {
+    return this.chatService.retryMessage(id);
+  }
+
+  @Delete('messages')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
+  @HttpCode(HttpStatus.OK)
+  async deleteMessages(@Body() body: { ids: string[] }) {
+    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new BadRequestException('ids array is required');
+    }
+    return this.chatService.deleteMessages(body.ids);
   }
 
   @Post('media/signed-urls')
