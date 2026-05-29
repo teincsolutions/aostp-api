@@ -29,4 +29,12 @@ export class SendMessageDto {
   @IsString()
   @IsNotEmpty()
   filename?: string;
+
+  @IsOptional()
+  @IsString()
+  key?: string;
+
+  @IsOptional()
+  @IsString()
+  bucket?: string;
 }

@@ -9,6 +9,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -56,6 +57,22 @@ export class ChatController {
   async getUnreadCount() {
     const total = await this.chatService.getUnreadCount();
     return { total };
+  }
+
+  @Post('media/signed-urls')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
+  @HttpCode(HttpStatus.OK)
+  async getSignedMediaUrls(
+    @Body() body: { items: { key: string; bucket?: string }[] },
+  ) {
+    if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
+      throw new BadRequestException('items array is required');
+    }
+    return this.chatService.getSignedMediaUrls(body.items);
   }
 
   @Post('send')

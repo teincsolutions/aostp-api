@@ -4,6 +4,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { ChatGateway } from './chat.gateway';
+import { S3Service } from '../../providers/storage/s3.service';
 import { ConversationQueryDto } from './dto/conversation-query.dto';
 import { MessagesQueryDto } from './dto/messages-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -71,6 +72,7 @@ export class ChatService {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
     private readonly chatGateway: ChatGateway,
+    private readonly s3Service: S3Service,
   ) {
     this.accessToken =
       this.configService.get<string>('WHATSAPP_ACCESS_TOKEN') || '';
@@ -290,6 +292,8 @@ export class ChatService {
     const content: any = {};
     if (dto.mediaUrl) content.mediaUrl = dto.mediaUrl;
     if (dto.filename) content.filename = dto.filename;
+    if (dto.key) content.key = dto.key;
+    if (dto.bucket) content.bucket = dto.bucket;
 
     const message = await this.saveMessage({
       conversationId,
@@ -325,6 +329,28 @@ export class ChatService {
         readAt: null,
       },
     });
+  }
+
+  async getSignedMediaUrls(
+    items: { key: string; bucket?: string }[],
+  ): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    for (const item of items) {
+      try {
+        const url = await this.s3Service.generatePresignedDownloadUrl(
+          item.key,
+          3600,
+          item.bucket,
+        );
+        result[item.key] = url;
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate signed URL for key ${item.key}`,
+          error,
+        );
+      }
+    }
+    return result;
   }
 
   private async sendToWhatsApp(config: {
