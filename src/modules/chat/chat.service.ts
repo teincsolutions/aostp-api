@@ -123,6 +123,9 @@ export class ChatService {
       repliedBy: repliedByUser,
     });
 
+    const totalUnread = await this.getUnreadCount();
+    this.chatGateway.notifyUnreadCount(totalUnread);
+
     return message;
   }
 
@@ -310,6 +313,15 @@ export class ChatService {
         readAt: null,
       },
       data: { readAt: new Date() },
+    });
+  }
+
+  async getUnreadCount(): Promise<number> {
+    return this.prisma.chatMessage.count({
+      where: {
+        direction: 'INBOUND',
+        readAt: null,
+      },
     });
   }
 

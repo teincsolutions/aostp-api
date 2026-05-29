@@ -25,4 +25,8 @@ export class ChatGateway {
   notifyNewMessage(message: NewMessagePayload): void {
     this.server.emit('new-message', message);
   }
+
+  notifyUnreadCount(total: number): void {
+    this.server.emit('unread-count', { total });
+  }
 }

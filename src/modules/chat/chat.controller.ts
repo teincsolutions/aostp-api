@@ -47,6 +47,17 @@ export class ChatController {
     return this.chatService.getConversationMessages(conversationId, query);
   }
 
+  @Get('unread-count')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
+  async getUnreadCount() {
+    const total = await this.chatService.getUnreadCount();
+    return { total };
+  }
+
   @Post('send')
   @Roles(
     UserRole.SUPER_ADMIN,
