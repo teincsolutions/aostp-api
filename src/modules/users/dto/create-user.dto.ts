@@ -7,8 +7,17 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
+
+const emptyToUndefined = ({ value }: { value: unknown }) => {
+  if (typeof value === 'string' && value.trim() === '') {
+    return undefined;
+  }
+
+  return value;
+};
 
 export class CreateUserDto {
   @ApiProperty({ description: 'User email address' })
@@ -41,6 +50,7 @@ export class CreateUserDto {
   role: UserRole;
 
   @ApiPropertyOptional({ description: 'Warehouse ID the user is assigned to' })
+  @Transform(emptyToUndefined)
   @IsOptional()
   @IsString()
   warehouseId?: string;
@@ -49,6 +59,7 @@ export class CreateUserDto {
     description: 'Whether the user account is active',
     default: true,
   })
+  @Transform(emptyToUndefined)
   @IsOptional()
   @IsBoolean()
   isActive?: boolean = true;
@@ -57,6 +68,7 @@ export class CreateUserDto {
     description: 'Whether two-factor authentication is enabled',
     default: false,
   })
+  @Transform(emptyToUndefined)
   @IsOptional()
   @IsBoolean()
   twoFactorEnabled?: boolean = false;
