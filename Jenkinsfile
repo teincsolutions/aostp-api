@@ -171,7 +171,8 @@ pipeline {
                                              string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS'),
                                              string(credentialsId: 'whatsapp-access-token-test', variable: 'WHATSAPP_ACCESS_TOKEN'),
                                              string(credentialsId: 'whatsapp-phone-number-id-test', variable: 'WHATSAPP_PHONE_NUMBER_ID'),
-                                             string(credentialsId: 'whatsapp-verify-token-test', variable: 'WHATSAPP_VERIFY_TOKEN')]) {
+                                             string(credentialsId: 'whatsapp-verify-token-test', variable: 'WHATSAPP_VERIFY_TOKEN'),
+                                             string(credentialsId: 'whatsapp-app-secret-test', variable: 'WHATSAPP_APP_SECRET')]) {
                     sh '''
                         if [ -f .env.example ]; then
                             envsubst < .env.example > .env.test
@@ -228,7 +229,8 @@ pipeline {
                                              string(credentialsId: 'smtp-pass', variable: 'SMTP_PASS'),
                                              string(credentialsId: 'whatsapp-access-token-prod', variable: 'WHATSAPP_ACCESS_TOKEN'),
                                              string(credentialsId: 'whatsapp-phone-number-id-prod', variable: 'WHATSAPP_PHONE_NUMBER_ID'),
-                                             string(credentialsId: 'whatsapp-verify-token-prod', variable: 'WHATSAPP_VERIFY_TOKEN')]) {
+                                             string(credentialsId: 'whatsapp-verify-token-prod', variable: 'WHATSAPP_VERIFY_TOKEN'),
+                                             string(credentialsId: 'whatsapp-app-secret-prod', variable: 'WHATSAPP_APP_SECRET')]) {
                     sh '''
                         if [ -f .env.example ]; then
                               envsubst < .env.example > .env.production
