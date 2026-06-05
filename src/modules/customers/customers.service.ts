@@ -316,14 +316,57 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
+    const hasField = (field: keyof UpdateCustomerDto): boolean =>
+      Object.prototype.hasOwnProperty.call(updateCustomerDto, field);
+
+    const data: Prisma.CustomerUpdateInput = {
+      ...updateCustomerDto,
+      ...(hasField('lastName') && updateCustomerDto.lastName === undefined
+        ? { lastName: null }
+        : {}),
+      ...(hasField('email') && updateCustomerDto.email === undefined
+        ? { email: null }
+        : {}),
+      ...(hasField('alternatePhone') &&
+      updateCustomerDto.alternatePhone === undefined
+        ? { alternatePhone: null }
+        : {}),
+      ...(hasField('address') && updateCustomerDto.address === undefined
+        ? { address: null }
+        : {}),
+      ...(hasField('warehouseId') && updateCustomerDto.warehouseId === undefined
+        ? { warehouseId: null }
+        : {}),
+      ...(hasField('cityId') && updateCustomerDto.cityId === undefined
+        ? { cityId: null }
+        : {}),
+      ...(hasField('idType') && updateCustomerDto.idType === undefined
+        ? { idType: null }
+        : {}),
+      ...(hasField('idNumber') && updateCustomerDto.idNumber === undefined
+        ? { idNumber: null }
+        : {}),
+    };
+
+    const nextPhoneNumber = updateCustomerDto.phoneNumber;
+    const nextEmail = hasField('email')
+      ? (updateCustomerDto.email ?? null)
+      : undefined;
+    const nextIdType = hasField('idType')
+      ? (updateCustomerDto.idType ?? null)
+      : undefined;
+    const nextIdNumber = hasField('idNumber')
+      ? (updateCustomerDto.idNumber ?? null)
+      : undefined;
+
     // Check if phone number is being updated and is unique
     if (
-      updateCustomerDto.phoneNumber &&
-      updateCustomerDto.phoneNumber !== customer.phoneNumber
+      typeof nextPhoneNumber === 'string' &&
+      nextPhoneNumber !== customer.phoneNumber
     ) {
       const phoneExists = await this.prisma.customer.findFirst({
         where: {
-          phoneNumber: updateCustomerDto.phoneNumber,
+          phoneNumber: nextPhoneNumber,
           NOT: { id },
         },
       });
@@ -334,10 +377,10 @@ export class CustomersService {
     }
 
     // Check if email is being updated and is unique
-    if (updateCustomerDto.email && updateCustomerDto.email !== customer.email) {
+    if (typeof nextEmail === 'string' && nextEmail !== customer.email) {
       const emailExists = await this.prisma.customer.findFirst({
         where: {
-          email: updateCustomerDto.email,
+          email: nextEmail,
           NOT: { id },
         },
       });
@@ -348,36 +391,26 @@ export class CustomersService {
     }
 
     // Check if ID is being updated and is unique
-    if (updateCustomerDto.idType && updateCustomerDto.idNumber) {
+    if (nextIdType && typeof nextIdNumber === 'string') {
       const isIdChanged =
-        updateCustomerDto.idType !== customer.idType ||
-        updateCustomerDto.idNumber !== customer.idNumber;
+        nextIdType !== customer.idType || nextIdNumber !== customer.idNumber;
 
       if (isIdChanged) {
         const idExists = await this.prisma.customer.findFirst({
           where: {
-            idType: updateCustomerDto.idType,
-            idNumber: updateCustomerDto.idNumber,
+            idType: nextIdType,
+            idNumber: nextIdNumber,
             NOT: { id },
           },
         });
 
         if (idExists) {
           throw new ConflictException(
-            `Customer with this ${updateCustomerDto.idType.toLowerCase().replace('_', ' ')} already exists`,
+            `Customer with this ${nextIdType.toLowerCase().replace('_', ' ')} already exists`,
           );
         }
       }
     }
-
-    const data = {
-      ...updateCustomerDto,
-      ...(updateCustomerDto.cityId === '' && { cityId: undefined }),
-      ...(updateCustomerDto.warehouseId === '' && { warehouseId: undefined }),
-      ...(updateCustomerDto.alternatePhone === '' && {
-        alternatePhone: undefined,
-      }),
-    };
 
     const updatedCustomer = await this.prisma.customer.update({
       where: { id },

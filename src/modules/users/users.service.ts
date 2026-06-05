@@ -281,6 +281,15 @@ export class UsersService {
 
     const updateData: any = { ...updateUserDto };
 
+    // Explicitly clear nullable warehouse assignment when empty is provided.
+    if (
+      Object.prototype.hasOwnProperty.call(updateUserDto, 'warehouseId') &&
+      (updateUserDto.warehouseId === '' ||
+        updateUserDto.warehouseId === undefined)
+    ) {
+      updateData.warehouseId = null;
+    }
+
     // Check for conflicts if email or username is being updated
     if (updateUserDto.email || updateUserDto.username) {
       const conflictUser = await this.prisma.user.findFirst({
