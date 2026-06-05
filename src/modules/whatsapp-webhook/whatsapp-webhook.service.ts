@@ -27,6 +27,11 @@ export class WhatsAppWebhookService {
       this.logger.warn(
         'WhatsApp credentials not configured. Webhook will not be able to reply.',
       );
+    } else {
+      this.logger.log('WhatsApp webhook service initialized');
+      this.logger.verbose(
+        `Webhook service using phone number id ${this.phoneNumberId}`,
+      );
     }
   }
 
@@ -35,6 +40,9 @@ export class WhatsAppWebhookService {
     replyId: string,
     rawMessage?: any,
   ): Promise<void> {
+    this.logger.verbose(
+      `Handling interactive reply ${replyId} from ${from}`,
+    );
     const conversationId = this.normalizePhone(from);
 
     const prompts: Record<string, string> = {
@@ -61,6 +69,7 @@ export class WhatsAppWebhookService {
     });
 
     if (!prompt) {
+      this.logger.warn(`Unknown interactive reply id received: ${replyId}`);
       return;
     }
 
@@ -73,9 +82,12 @@ export class WhatsAppWebhookService {
       text: prompt,
       waMessageId: waId,
     });
+
+    this.logger.log(`Interactive reply ${replyId} handled for ${from}`);
   }
 
   async handleTextMessage(from: string, text: string): Promise<void> {
+    this.logger.verbose(`Handling text message from ${from}`);
     const conversationId = this.normalizePhone(from);
 
     await this.chatService.saveMessage({
@@ -90,6 +102,7 @@ export class WhatsAppWebhookService {
       const response = await this.chatbotService.handleInput(from, text);
 
       if (response.type === 'menu') {
+        this.logger.debug(`Chatbot requested interactive menu for ${from}`);
         const waId = await this.sendInteractiveList(from);
         await this.chatService.saveMessage({
           conversationId,
@@ -101,6 +114,7 @@ export class WhatsAppWebhookService {
           waMessageId: waId,
         });
       } else {
+        this.logger.debug(`Chatbot generated text response for ${from}`);
         const waId = await this.sendReply(from, response.text);
         await this.chatService.saveMessage({
           conversationId,
@@ -111,6 +125,8 @@ export class WhatsAppWebhookService {
           waMessageId: waId,
         });
       }
+
+      this.logger.log(`Handled inbound text for ${from}`);
     } catch (error) {
       this.logger.error(
         `Failed to handle message from ${from}: ${error.message}`,
@@ -129,7 +145,12 @@ export class WhatsAppWebhookService {
   }
 
   async markAsRead(messageId: string): Promise<void> {
-    if (!this.accessToken || !this.phoneNumberId) return;
+    if (!this.accessToken || !this.phoneNumberId) {
+      this.logger.warn(`Skipping markAsRead for ${messageId}: credentials missing`);
+      return;
+    }
+
+    this.logger.verbose(`Marking message ${messageId} as read`);
 
     const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
     const payload = {
@@ -144,6 +165,7 @@ export class WhatsAppWebhookService {
 
     try {
       await firstValueFrom(this.httpService.post(url, payload, { headers }));
+      this.logger.debug(`Marked message ${messageId} as read`);
     } catch (error) {
       this.logger.debug(
         `Failed to mark message ${messageId} as read:`,
@@ -159,6 +181,8 @@ export class WhatsAppWebhookService {
       );
       return undefined;
     }
+
+    this.logger.verbose(`Sending interactive list to ${to}`);
 
     const companyName =
       this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics';
@@ -231,6 +255,7 @@ export class WhatsAppWebhookService {
       this.logger.debug(
         `Interactive list sent to ${to} — Message ID: ${messageId || 'unknown'}`,
       );
+      this.logger.log(`Interactive list dispatched to ${to}`);
       return messageId;
     } catch (error) {
       this.logger.error(
@@ -252,6 +277,8 @@ export class WhatsAppWebhookService {
       return undefined;
     }
 
+    this.logger.verbose(`Sending text reply to ${to}`);
+
     const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
     const payload = {
       messaging_product: 'whatsapp',
@@ -272,6 +299,7 @@ export class WhatsAppWebhookService {
       this.logger.debug(
         `Reply sent to ${to} — Message ID: ${messageId || 'unknown'}`,
       );
+      this.logger.log(`Text reply dispatched to ${to}`);
       return messageId;
     } catch (error) {
       this.logger.error(
@@ -284,6 +312,7 @@ export class WhatsAppWebhookService {
 
   private normalizePhone(phone: string): string {
     const digits = phone.replace(/\D/g, '');
+    this.logger.verbose(`Normalizing phone input ${phone} -> ${digits}`);
     if (digits.startsWith('0')) return '233' + digits.slice(1);
     if (digits.startsWith('233')) return digits;
     return digits;

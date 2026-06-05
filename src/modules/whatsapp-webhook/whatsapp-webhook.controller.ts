@@ -33,6 +33,7 @@ export class WhatsAppWebhookController {
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
   ): string {
+    this.logger.verbose(`Received webhook verification request with mode=${mode}`);
     const verifyToken = this.configService.get<string>(
       'WHATSAPP_VERIFY_TOKEN',
       '',
@@ -40,6 +41,7 @@ export class WhatsAppWebhookController {
 
     if (mode === 'subscribe' && token === verifyToken) {
       this.logger.log('Webhook verified successfully');
+      this.logger.debug('Returning webhook challenge to Meta');
       return challenge;
     }
 
@@ -57,9 +59,14 @@ export class WhatsAppWebhookController {
     @Req() req: Request & { rawBody?: Buffer },
     @Headers('x-hub-signature-256') signature?: string,
   ): Promise<{ status: string }> {
+    this.logger.verbose('Incoming WhatsApp webhook POST received');
+
     if (!this.verifySignature(signature, req.rawBody)) {
+      this.logger.warn('Rejected webhook request due to invalid signature');
       throw new HttpException('Invalid webhook signature', HttpStatus.FORBIDDEN);
     }
+
+    this.logger.debug('Webhook signature validated successfully');
 
     try {
       const entry = body?.entry?.[0];
@@ -68,6 +75,7 @@ export class WhatsAppWebhookController {
       const messages = value?.messages;
 
       if (!messages) {
+        this.logger.log('Webhook acknowledged with no message payload');
         return { status: 'ok' };
       }
 
@@ -104,6 +112,7 @@ export class WhatsAppWebhookController {
           this.logger.debug(`Ignoring message of type: ${message?.type}`);
       }
 
+      this.logger.log(`Webhook message ${messageId} processed successfully`);
       return { status: 'ok' };
     } catch (error: any) {
       this.logger.error('Error processing incoming webhook:', error.message);
@@ -145,11 +154,13 @@ export class WhatsAppWebhookController {
       const expectedBuffer = Buffer.from(expectedSignature, 'hex');
 
       if (incomingBuffer.length !== expectedBuffer.length) {
+        this.logger.debug('Webhook signature length mismatch');
         return false;
       }
 
       return timingSafeEqual(incomingBuffer, expectedBuffer);
     } catch {
+      this.logger.warn('Webhook signature format is invalid (non-hex payload)');
       return false;
     }
   }

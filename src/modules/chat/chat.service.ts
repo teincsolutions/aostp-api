@@ -81,9 +81,24 @@ export class ChatService {
       this.configService.get<string>('WHATSAPP_ACCESS_TOKEN') || '';
     this.phoneNumberId =
       this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID') || '';
+
+    if (!this.accessToken || !this.phoneNumberId) {
+      this.logger.warn(
+        'WhatsApp credentials missing. Chat replies may fail until configured.',
+      );
+    } else {
+      this.logger.log('Chat service initialized with WhatsApp configuration');
+      this.logger.verbose(
+        `WhatsApp phone number id configured: ${this.phoneNumberId}`,
+      );
+    }
   }
 
   async saveMessage(data: SaveMessageData): Promise<any> {
+    this.logger.verbose(
+      `Saving ${data.direction} ${data.messageType || 'text'} message for ${data.conversationId}`,
+    );
+
     const message = await this.prisma.chatMessage.create({
       data: {
         conversationId: data.conversationId,
@@ -107,6 +122,7 @@ export class ChatService {
     this.logger.debug(
       `Saved ${data.direction} message for conversation ${data.conversationId}`,
     );
+    this.logger.log(`Message ${message.id} persisted with status ${message.status}`);
 
     const repliedByUser = data.repliedById
       ? await this.prisma.user.findUnique({
@@ -138,6 +154,10 @@ export class ChatService {
   async getConversations(
     query: ConversationQueryDto,
   ): Promise<PaginatedConversations> {
+    this.logger.verbose(
+      `Fetching conversations (page=${query.page || 1}, limit=${query.limit || 20})`,
+    );
+
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
@@ -202,6 +222,9 @@ export class ChatService {
     );
 
     const totalCount = await this.getConversationCount();
+    this.logger.debug(
+      `Fetched ${enriched.length} conversations (total=${totalCount})`,
+    );
     return {
       conversations: enriched,
       total: totalCount,
@@ -215,6 +238,10 @@ export class ChatService {
     conversationId: string,
     query: MessagesQueryDto,
   ): Promise<PaginatedMessages> {
+    this.logger.verbose(
+      `Fetching messages for ${conversationId} (page=${query.page || 1}, limit=${query.limit || 50})`,
+    );
+
     const page = query.page || 1;
     const limit = query.limit || 50;
     const skip = (page - 1) * limit;
@@ -236,7 +263,7 @@ export class ChatService {
       this.prisma.chatMessage.count({ where }),
     ]);
 
-    await this.prisma.chatMessage.updateMany({
+    const markReadResult = await this.prisma.chatMessage.updateMany({
       where: {
         conversationId,
         direction: 'INBOUND',
@@ -244,6 +271,9 @@ export class ChatService {
       },
       data: { readAt: new Date() },
     });
+    this.logger.debug(
+      `Marked ${markReadResult.count} inbound messages as read for ${conversationId}`,
+    );
 
     return {
       messages: messages.map((m) => ({
@@ -266,6 +296,8 @@ export class ChatService {
   }
 
   async sendAdminReply(dto: SendMessageDto, userId: string): Promise<any> {
+    this.logger.log(`Admin ${userId} sending ${dto.type || 'text'} reply to ${dto.to}`);
+
     const conversationId = this.normalizePhone(dto.to);
     const messageType = dto.type || 'text';
 
@@ -296,20 +328,28 @@ export class ChatService {
       filename: dto.filename,
     });
 
+    this.logger.verbose(`Queued outbound message ${message.id} for ${dto.to}`);
+
     return message;
   }
 
   async deleteMessages(ids: string[]): Promise<{ deleted: number }> {
+    this.logger.verbose(`Deleting ${ids.length} chat message(s)`);
     const result = await this.prisma.chatMessage.deleteMany({
       where: { id: { in: ids } },
     });
+    if (result.count === 0) {
+      this.logger.warn('Delete messages requested but no rows matched');
+    }
     if (result.count > 0) {
       this.chatGateway.notifyMessagesDeleted(ids);
     }
+    this.logger.log(`Deleted ${result.count} chat message(s)`);
     return { deleted: result.count };
   }
 
   async retryMessage(messageId: string): Promise<any> {
+    this.logger.verbose(`Retry requested for message ${messageId}`);
     const message = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
     });
@@ -345,6 +385,7 @@ export class ChatService {
     });
 
     this.chatGateway.notifyMessageStatus(messageId, 'pending');
+    this.logger.log(`Message ${messageId} moved to pending for retry`);
     return { ...message, status: 'pending' };
   }
 
@@ -380,7 +421,13 @@ export class ChatService {
           'sent',
           result.messageId,
         );
+        this.logger.log(
+          `Message ${data.messageId} sent synchronously to ${data.to}`,
+        );
       } catch (error) {
+        this.logger.error(
+          `Synchronous send failed for message ${data.messageId}: ${error.message}`,
+        );
         await this.prisma.chatMessage.update({
           where: { id: data.messageId },
           data: { status: 'failed' },
@@ -400,10 +447,13 @@ export class ChatService {
         removeOnFail: false,
       },
     );
+    this.logger.debug(
+      `Queued outbox job for message ${data.messageId} (type=${data.type})`,
+    );
   }
 
   async markConversationRead(conversationId: string): Promise<void> {
-    await this.prisma.chatMessage.updateMany({
+    const result = await this.prisma.chatMessage.updateMany({
       where: {
         conversationId,
         direction: 'INBOUND',
@@ -411,20 +461,26 @@ export class ChatService {
       },
       data: { readAt: new Date() },
     });
+    this.logger.debug(
+      `markConversationRead updated ${result.count} messages for ${conversationId}`,
+    );
   }
 
   async getUnreadCount(): Promise<number> {
-    return this.prisma.chatMessage.count({
+    const count = await this.prisma.chatMessage.count({
       where: {
         direction: 'INBOUND',
         readAt: null,
       },
     });
+    this.logger.verbose(`Current unread inbound chat count: ${count}`);
+    return count;
   }
 
   async getSignedMediaUrls(
     items: { key: string; bucket?: string }[],
   ): Promise<Record<string, string>> {
+    this.logger.verbose(`Generating signed URLs for ${items.length} media item(s)`);
     const result: Record<string, string> = {};
     for (const item of items) {
       try {
@@ -441,6 +497,7 @@ export class ChatService {
         );
       }
     }
+    this.logger.log(`Generated ${Object.keys(result).length} signed media URL(s)`);
     return result;
   }
 
@@ -451,6 +508,9 @@ export class ChatService {
     mediaUrl?: string;
     filename?: string;
   }): Promise<{ messageId?: string }> {
+    this.logger.verbose(
+      `Sending WhatsApp ${config.type} message to ${config.to} from chat module`,
+    );
     const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
     const payload: any = {
       messaging_product: 'whatsapp',
@@ -488,13 +548,24 @@ export class ChatService {
       'Content-Type': 'application/json',
     };
 
-    const response = await firstValueFrom(
-      this.httpService.post(url, payload, { headers }),
-    );
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(url, payload, { headers }),
+      );
+      const messageId = response.data?.messages?.[0]?.id;
+      this.logger.debug(
+        `Chat module WhatsApp send success to ${config.to} with messageId=${messageId || 'unknown'}`,
+      );
 
-    return {
-      messageId: response.data?.messages?.[0]?.id,
-    };
+      return {
+        messageId,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Chat module WhatsApp send failed for ${config.to}: ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`,
+      );
+      throw error;
+    }
   }
 
   private async getConversationCount(): Promise<number> {

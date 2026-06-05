@@ -55,11 +55,17 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       this.logger.warn(
         'Meta WhatsApp credentials not configured. Provider will not work properly.',
       );
+    } else {
+      this.logger.log('Meta WhatsApp provider initialized');
+      this.logger.verbose(
+        `Meta provider configured for phone number id ${this.phoneNumberId}`,
+      );
     }
   }
 
   async sendMessage(phone: string, message: string): Promise<WhatsAppResponse> {
     try {
+      this.logger.verbose(`Preparing text WhatsApp message for ${phone}`);
       this.ensureCredentials();
       const formattedPhone = this.formatPhoneNumber(phone);
       const payload: MetaTextRequest = {
@@ -70,6 +76,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       };
       return this.postToMeta(payload, formattedPhone);
     } catch (error: any) {
+      this.logger.warn(`Text message send failed for ${phone}`);
       return this.handleError(phone, error);
     }
   }
@@ -79,6 +86,9 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     template: TemplateMessage,
   ): Promise<WhatsAppResponse> {
     try {
+      this.logger.verbose(
+        `Preparing template ${template.name} WhatsApp message for ${phone}`,
+      );
       this.ensureCredentials();
       const formattedPhone = this.formatPhoneNumber(phone);
       const payload: MetaTemplateRequest = {
@@ -89,6 +99,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       };
       return this.postToMeta(payload, formattedPhone);
     } catch (error: any) {
+      this.logger.warn(`Template message send failed for ${phone}`);
       return this.handleError(phone, error);
     }
   }
@@ -108,6 +119,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     };
 
     this.logger.debug(`Sending WhatsApp message to ${formattedPhone}`);
+    this.logger.verbose(`Posting payload type ${payload.type} to Meta API`);
 
     const response = await firstValueFrom(
       this.httpService.post<MetaWhatsAppMessageResponse>(url, payload, {
@@ -120,6 +132,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       this.logger.debug(
         `WhatsApp message sent successfully with ID: ${messageId}`,
       );
+      this.logger.log(`Meta API accepted message for ${formattedPhone}`);
       return { success: true, messageId };
     }
 
@@ -128,16 +141,19 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   private ensureCredentials(): void {
     if (!this.accessToken || !this.phoneNumberId) {
+      this.logger.error('Cannot send WhatsApp message: credentials missing');
       throw new Error('Meta WhatsApp credentials not configured');
     }
   }
 
   private formatPhoneNumber(phone: string): string {
     let cleaned = phone.replace(/[^\d+]/g, '');
+    this.logger.verbose(`Formatting phone number ${phone} -> ${cleaned}`);
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
     if (cleaned.length < 10) {
+      this.logger.warn(`Rejected invalid phone format: ${phone}`);
       throw new Error(`Invalid phone number format: ${phone}`);
     }
     return cleaned;
