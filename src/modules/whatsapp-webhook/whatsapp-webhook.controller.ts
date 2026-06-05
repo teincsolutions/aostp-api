@@ -4,11 +4,15 @@ import {
   Post,
   Query,
   Body,
+  Headers,
+  Req,
   HttpCode,
   HttpStatus,
   HttpException,
   Logger,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
+import { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Public } from '../../shared/decorators/public.decorator';
 import { WhatsAppWebhookService } from './whatsapp-webhook.service';
@@ -48,7 +52,15 @@ export class WhatsAppWebhookController {
   @Public()
   @Post()
   @HttpCode(HttpStatus.OK)
-  async handleIncoming(@Body() body: any): Promise<{ status: string }> {
+  async handleIncoming(
+    @Body() body: any,
+    @Req() req: Request & { rawBody?: Buffer },
+    @Headers('x-hub-signature-256') signature?: string,
+  ): Promise<{ status: string }> {
+    if (!this.verifySignature(signature, req.rawBody)) {
+      throw new HttpException('Invalid webhook signature', HttpStatus.FORBIDDEN);
+    }
+
     try {
       const entry = body?.entry?.[0];
       const change = entry?.changes?.[0];
@@ -96,6 +108,49 @@ export class WhatsAppWebhookController {
     } catch (error: any) {
       this.logger.error('Error processing incoming webhook:', error.message);
       return { status: 'ok' };
+    }
+  }
+
+  private verifySignature(
+    signature: string | undefined,
+    rawBody: Buffer | undefined,
+  ): boolean {
+    const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET', '');
+
+    if (!appSecret) {
+      this.logger.error('WHATSAPP_APP_SECRET is not configured');
+      return false;
+    }
+
+    if (!signature) {
+      this.logger.warn('Missing x-hub-signature-256 header');
+      return false;
+    }
+
+    if (!rawBody) {
+      this.logger.error('Missing raw request body; cannot verify webhook signature');
+      return false;
+    }
+
+    const incomingSignature = signature.startsWith('sha256=')
+      ? signature.slice('sha256='.length)
+      : signature;
+
+    const expectedSignature = createHmac('sha256', appSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    try {
+      const incomingBuffer = Buffer.from(incomingSignature, 'hex');
+      const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+
+      if (incomingBuffer.length !== expectedBuffer.length) {
+        return false;
+      }
+
+      return timingSafeEqual(incomingBuffer, expectedBuffer);
+    } catch {
+      return false;
     }
   }
 }

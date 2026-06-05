@@ -32,6 +32,8 @@ Meta sends a `GET` request during webhook setup to verify ownership.
 
 Meta delivers user messages via `POST`.
 
+Requests are authenticated using Meta's `X-Hub-Signature-256` header. The API validates this HMAC-SHA256 signature against the raw request body using `WHATSAPP_APP_SECRET`.
+
 **Always returns 200** to prevent retries (even on errors).
 
 **Request Body** (Meta payload):
@@ -178,8 +180,9 @@ PHONE 0537776709
 | `WHATSAPP_ACCESS_TOKEN`    | Meta Cloud API permanent access token                        |
 | `WHATSAPP_PHONE_NUMBER_ID` | Phone number ID from Meta Business Account                   |
 | `WHATSAPP_VERIFY_TOKEN`    | Arbitrary string chosen by you; used in webhook verification |
+| `WHATSAPP_APP_SECRET`      | Meta App Secret used to verify `X-Hub-Signature-256`         |
 
-Add these to `.env` or Jenkins credentials (`whatsapp-access-token-prod`, `whatsapp-phone-number-id-prod`, `whatsapp-verify-token-prod`).
+Add these to `.env` or Jenkins credentials (`whatsapp-access-token-prod`, `whatsapp-phone-number-id-prod`, `whatsapp-verify-token-prod`, `whatsapp-app-secret-prod`).
 
 ---
 
