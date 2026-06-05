@@ -144,6 +144,14 @@ export class EnvironmentVariables {
   @IsOptional()
   WHATSAPP_APP_SECRET?: string;
 
+  @IsString()
+  @IsOptional()
+  WHATSAPP_CUSTOMER_WELCOME_TEMPLATE?: string;
+
+  @IsString()
+  @IsOptional()
+  WHATSAPP_TEMPLATE_LANGUAGE?: string;
+
   // Payment Gateway (Optional)
   @IsString()
   @IsOptional()

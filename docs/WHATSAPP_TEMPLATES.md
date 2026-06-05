@@ -188,6 +188,30 @@ AOSTP Logistics
 
 ---
 
+## Template 7: `customer_account_created`
+
+**Category:** UTILITY
+**Language:** English — `en`
+
+### Body
+
+```
+Hi {{1}}, your customer profile has been created at {{2}}.
+
+You will receive shipment, invoice, and payment updates on this WhatsApp number.
+
+For account support, reply to this message.
+```
+
+| Variable | Example        |
+| -------- | -------------- |
+| `{{1}}`  | Customer name  |
+| `{{2}}`  | Company name   |
+
+This template is sent automatically when a customer is created and their preferred channel is set to `WHATSAPP`.
+
+---
+
 ## How to Create in Meta Dashboard
 
 1. Go to **Meta Business Platform** → **Your App** → **WhatsApp** → **Message Templates**

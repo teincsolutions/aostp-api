@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -10,10 +11,16 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { PaginatedResult } from '../../shared/interfaces';
 import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(CustomersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(
     createCustomerDto: CreateCustomerDto,
@@ -105,6 +112,13 @@ export class CustomersService {
         },
       });
     }
+
+    // Send welcome template asynchronously for WhatsApp-preferred customers.
+    this.notificationsService.notifyCustomerCreated(customer).catch((error) => {
+      this.logger.error(
+        `Failed to send customer welcome message for ${customer.customerCode}: ${error.message}`,
+      );
+    });
 
     return customer;
   }

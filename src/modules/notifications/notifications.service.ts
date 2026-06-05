@@ -1083,6 +1083,58 @@ export class NotificationsService {
     }
   }
 
+  // Send customer account-created message via WhatsApp template on customer creation
+  async notifyCustomerCreated(customer: Customer): Promise<any> {
+    if (!customer.phoneNumber) {
+      this.logger.warn(
+        `Cannot send customer welcome template for ${customer.id} - no phone number provided`,
+      );
+      return null;
+    }
+
+    if (customer.preferredChannel !== NotificationChannel.WHATSAPP) {
+      return null;
+    }
+
+    const templateName = this.configService.get<string>(
+      'WHATSAPP_CUSTOMER_WELCOME_TEMPLATE',
+      'customer_account_created',
+    );
+    const templateLanguage = this.configService.get<string>(
+      'WHATSAPP_TEMPLATE_LANGUAGE',
+      'en',
+    );
+    const companyName =
+      this.configService.get<string>('COMPANY_NAME') || 'AOSTP Logistics';
+
+    const result = await this.whatsAppProvider.sendTemplateMessage(
+      customer.phoneNumber,
+      {
+        name: templateName,
+        language: { code: templateLanguage },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: customer.firstName },
+              { type: 'text', text: companyName },
+            ],
+          },
+        ],
+      },
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || 'WhatsApp welcome template send failed');
+    }
+
+    this.logger.log(
+      `Customer welcome template sent to ${customer.phoneNumber} (${customer.customerCode})`,
+    );
+
+    return result;
+  }
+
   // Send password reset email
   async notifyPasswordReset(user: {
     email: string;
