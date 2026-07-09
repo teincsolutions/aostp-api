@@ -1,0 +1,37 @@
+name: Down
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
+
+jobs:
+  down-prod:
+    name: Bring down production
+    runs-on: [self-hosted, aostp-runner]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stop and remove containers
+        run: |
+          echo "Bringing down production environment..."
+          touch .env.production
+          docker compose -f docker-compose.production.yml down
+          rm -f .env.production
+          echo "✅ Production environment is down"
+
+  down-test:
+    name: Bring down test
+    runs-on: [self-hosted, aostp-runner]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stop and remove containers
+        run: |
+          echo "Bringing down test environment..."
+          touch .env.test
+          docker compose -f docker-compose.test.yml down
+          rm -f .env.test
+          echo "✅ Test environment is down"
