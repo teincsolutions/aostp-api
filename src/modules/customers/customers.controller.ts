@@ -12,7 +12,6 @@ import {
   Res,
   HttpCode,
   HttpStatus,
-  StreamableFile,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -164,8 +163,8 @@ export class CustomersController {
   })
   async export(
     @Query() exportDto: ExportCustomersDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
+    @Res() res: Response,
+  ): Promise<void> {
     const file = await this.customersService.exportCustomers(exportDto);
 
     res.set({
@@ -175,7 +174,7 @@ export class CustomersController {
       'Cache-Control': 'no-store',
     });
 
-    return new StreamableFile(file.buffer);
+    res.end(file.buffer);
   }
 
   @Get(':id')
