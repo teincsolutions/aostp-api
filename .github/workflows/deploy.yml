@@ -223,6 +223,8 @@ jobs:
         run: envsubst < .env.example > .env.test
 
       - name: Setup S3 bucket policies
+        # Infra-only concern: a transient S3 error must not block the app deploy.
+        continue-on-error: true
         run: chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
         env:
           AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
@@ -355,6 +357,8 @@ jobs:
         run: envsubst < .env.example > .env.production
 
       - name: Setup S3 bucket policies
+        # Infra-only concern: a transient S3 error must not block the app deploy.
+        continue-on-error: true
         run: |
           chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
         env:

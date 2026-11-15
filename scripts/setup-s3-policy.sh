@@ -64,7 +64,7 @@ mc alias set "${S3_ALIAS}" "${S3_ENDPOINT}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET
 
 # Test connection and bucket existence
 echo "✅ Testing connection and bucket..."
-if ! mc ls "${S3_ALIAS}/${BUCKET_NAME}" --quiet 2>/dev/null; then
+if ! mc stat "${S3_ALIAS}/${BUCKET_NAME}" >/dev/null 2>&1; then
     echo "⚠️  Bucket ${BUCKET_NAME} does not exist or is not accessible"
     echo "Creating bucket..."
     mc mb "${S3_ALIAS}/${BUCKET_NAME}"
