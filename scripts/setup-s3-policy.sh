@@ -30,8 +30,9 @@ if ! command -v mc &> /dev/null; then
     exit 1
 fi
 
-# Generate dynamic policy JSON
-POLICY_FILE="/tmp/package-photos-policy.json"
+# Generate dynamic policy JSON in a writable temp location
+POLICY_FILE="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/package-photos-policy.XXXXXX.json")"
+trap 'rm -f "$POLICY_FILE"' EXIT
 cat > "$POLICY_FILE" << EOF
 {
   "Version": "2012-10-17",
