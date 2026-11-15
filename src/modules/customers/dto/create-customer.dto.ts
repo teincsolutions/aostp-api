@@ -42,7 +42,9 @@ export class CreateCustomerDto {
     example: 'john.doe@example.com',
     format: 'email',
   })
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail()
   @IsOptional()
   email?: string;

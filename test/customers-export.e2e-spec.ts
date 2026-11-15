@@ -18,6 +18,23 @@ describe('Customers export (e2e)', () => {
 
   const customersService = {
     exportCustomers: jest.fn().mockResolvedValue(exportedFile),
+    getExportFileInfo: jest.fn((format: 'pdf' | 'excel', all: boolean) => {
+      const extension = format === 'excel' ? 'xlsx' : 'pdf';
+      return {
+        contentType:
+          format === 'excel'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'application/pdf',
+        filename: `${all ? 'customers-all' : 'customers'}-2026-11-15.${extension}`,
+      };
+    }),
+    streamExportCustomers: jest
+      .fn()
+      .mockImplementation(
+        async (_dto: unknown, res: { end: (chunk: Buffer) => void }) => {
+          res.end(Buffer.from('%PDF-1.4 all'));
+        },
+      ),
     findOne: jest.fn().mockResolvedValue({ id: 'customer-1' }),
   };
 
@@ -101,6 +118,23 @@ describe('Customers export (e2e)', () => {
       .expect(400);
 
     expect(customersService.exportCustomers).not.toHaveBeenCalled();
+  });
+
+  it('streams all customers when all=true', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/customers/export')
+      .query({ format: 'pdf', all: 'true' })
+      .expect(200);
+
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="customers-all-2026-11-15.pdf"',
+    );
+    expect(customersService.streamExportCustomers).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'pdf', all: true }),
+      expect.anything(),
+    );
+    expect(customersService.exportCustomers).not.toHaveBeenCalled();
+    expect(Buffer.from(response.body).toString()).toBe('%PDF-1.4 all');
   });
 
   it('still resolves GET /customers/:id normally', async () => {

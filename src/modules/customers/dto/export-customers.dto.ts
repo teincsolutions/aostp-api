@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 
@@ -32,6 +38,18 @@ export class ExportCustomersDto extends PaginationDto {
   @IsArray()
   @IsString({ each: true })
   ids?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Export every customer matching the filters, streaming the file and reading rows in batches. Ignored when ids are supplied.',
+    example: false,
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === undefined ? undefined : value === true || value === 'true',
+  )
+  @IsBoolean()
+  all?: boolean;
 
   @ApiProperty({
     description: 'Export file format',

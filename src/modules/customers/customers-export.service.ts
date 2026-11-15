@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Customer } from '@prisma/client';
+import type { Response } from 'express';
 import PDFDocument from 'pdfkit';
 import * as ExcelJS from 'exceljs';
 import { CustomerExportFormat } from './dto/export-customers.dto';
@@ -12,36 +13,149 @@ export interface CustomerExportRow extends Customer {
   _count: { packages: number; invoices: number; payments: number };
 }
 
-export interface CustomerExportFile {
-  buffer: Buffer;
+export interface CustomerExportFileInfo {
   filename: string;
   contentType: string;
+}
+
+export interface CustomerExportFile extends CustomerExportFileInfo {
+  buffer: Buffer;
 }
 
 const EXCEL_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+const EXCEL_COLUMNS: Array<{
+  header: string;
+  key: string;
+  width: number;
+}> = [
+  { header: 'Customer Code', key: 'customerCode', width: 18 },
+  { header: 'First Name', key: 'firstName', width: 18 },
+  { header: 'Last Name', key: 'lastName', width: 18 },
+  { header: 'Phone Number', key: 'phoneNumber', width: 18 },
+  { header: 'Alternate Phone', key: 'alternatePhone', width: 18 },
+  { header: 'Email', key: 'email', width: 28 },
+  { header: 'Address', key: 'address', width: 32 },
+  { header: 'City', key: 'city', width: 18 },
+  { header: 'Country', key: 'country', width: 16 },
+  { header: 'Warehouse', key: 'warehouse', width: 20 },
+  { header: 'ID Type', key: 'idType', width: 18 },
+  { header: 'ID Number', key: 'idNumber', width: 20 },
+  { header: 'Preferred Channel', key: 'preferredChannel', width: 18 },
+  { header: 'Status', key: 'status', width: 12 },
+  { header: 'Packages', key: 'packages', width: 12 },
+  { header: 'Invoices', key: 'invoices', width: 12 },
+  { header: 'Payments', key: 'payments', width: 12 },
+  { header: 'Created At', key: 'createdAt', width: 14 },
+];
+
+const PDF_COLUMNS: Array<{
+  header: string;
+  weight: number;
+  value: (row: CustomerExportRow) => string;
+}> = [
+  { header: 'Code', weight: 12, value: (row) => row.customerCode },
+  {
+    header: 'Customer Name',
+    weight: 20,
+    value: (row) => [row.firstName, row.lastName].filter(Boolean).join(' '),
+  },
+  { header: 'Phone', weight: 13, value: (row) => row.phoneNumber },
+  { header: 'Email', weight: 24, value: (row) => row.email ?? '' },
+  { header: 'City', weight: 12, value: (row) => row.cityRef?.name ?? '' },
+  {
+    header: 'Warehouse',
+    weight: 15,
+    value: (row) => row.warehouse?.name ?? '',
+  },
+  {
+    header: 'Status',
+    weight: 8,
+    value: (row) => (row.isActive ? 'Active' : 'Inactive'),
+  },
+  {
+    header: 'Pkgs',
+    weight: 6,
+    value: (row) => String(row._count?.packages ?? 0),
+  },
+];
+
+function toExcelRow(row: CustomerExportRow): Record<string, unknown> {
+  return {
+    customerCode: row.customerCode,
+    firstName: row.firstName,
+    lastName: row.lastName ?? '',
+    phoneNumber: row.phoneNumber,
+    alternatePhone: row.alternatePhone ?? '',
+    email: row.email ?? '',
+    address: row.address ?? '',
+    city: row.cityRef?.name ?? '',
+    country: row.cityRef?.country ?? '',
+    warehouse: row.warehouse?.name ?? '',
+    idType: row.idType ?? '',
+    idNumber: row.idNumber ?? '',
+    preferredChannel: row.preferredChannel,
+    status: row.isActive ? 'Active' : 'Inactive',
+    packages: row._count?.packages ?? 0,
+    invoices: row._count?.invoices ?? 0,
+    payments: row._count?.payments ?? 0,
+    createdAt: row.createdAt.toISOString().slice(0, 10),
+  };
+}
+
 @Injectable()
 export class CustomersExportService {
-  async generate(
-    rows: CustomerExportRow[],
+  describe(
     format: CustomerExportFormat,
-  ): Promise<CustomerExportFile> {
+    all: boolean = false,
+  ): CustomerExportFileInfo {
     const stamp = new Date().toISOString().slice(0, 10);
+    const prefix = all ? 'customers-all' : 'customers';
 
     if (format === 'excel') {
       return {
-        buffer: await this.buildExcel(rows),
-        filename: `customers-${stamp}.xlsx`,
+        filename: `${prefix}-${stamp}.xlsx`,
         contentType: EXCEL_CONTENT_TYPE,
       };
     }
 
     return {
-      buffer: await this.buildPdf(rows),
-      filename: `customers-${stamp}.pdf`,
+      filename: `${prefix}-${stamp}.pdf`,
       contentType: 'application/pdf',
     };
+  }
+
+  async generate(
+    rows: CustomerExportRow[],
+    format: CustomerExportFormat,
+    all: boolean = false,
+  ): Promise<CustomerExportFile> {
+    const info = this.describe(format, all);
+
+    if (format === 'excel') {
+      return { ...info, buffer: await this.buildExcel(rows) };
+    }
+
+    return { ...info, buffer: await this.buildPdf(rows) };
+  }
+
+  /**
+   * Stream an export directly to the HTTP response while consuming rows in
+   * batches. Memory stays bounded and the database is only ever asked for one
+   * batch at a time.
+   */
+  async stream(
+    batches: AsyncIterable<CustomerExportRow[]>,
+    format: CustomerExportFormat,
+    res: Response,
+  ): Promise<void> {
+    if (format === 'excel') {
+      await this.streamExcel(batches, res);
+      return;
+    }
+
+    await this.streamPdf(batches, res);
   }
 
   private async buildExcel(rows: CustomerExportRow[]): Promise<Buffer> {
@@ -53,50 +167,65 @@ export class CustomersExportService {
       views: [{ state: 'frozen', ySplit: 1 }],
     });
 
-    sheet.columns = [
-      { header: 'Customer Code', key: 'customerCode', width: 18 },
-      { header: 'First Name', key: 'firstName', width: 18 },
-      { header: 'Last Name', key: 'lastName', width: 18 },
-      { header: 'Phone Number', key: 'phoneNumber', width: 18 },
-      { header: 'Alternate Phone', key: 'alternatePhone', width: 18 },
-      { header: 'Email', key: 'email', width: 28 },
-      { header: 'Address', key: 'address', width: 32 },
-      { header: 'City', key: 'city', width: 18 },
-      { header: 'Country', key: 'country', width: 16 },
-      { header: 'Warehouse', key: 'warehouse', width: 20 },
-      { header: 'ID Type', key: 'idType', width: 18 },
-      { header: 'ID Number', key: 'idNumber', width: 20 },
-      { header: 'Preferred Channel', key: 'preferredChannel', width: 18 },
-      { header: 'Status', key: 'status', width: 12 },
-      { header: 'Packages', key: 'packages', width: 12 },
-      { header: 'Invoices', key: 'invoices', width: 12 },
-      { header: 'Payments', key: 'payments', width: 12 },
-      { header: 'Created At', key: 'createdAt', width: 14 },
-    ];
+    sheet.columns = EXCEL_COLUMNS;
 
     rows.forEach((row) => {
-      sheet.addRow({
-        customerCode: row.customerCode,
-        firstName: row.firstName,
-        lastName: row.lastName ?? '',
-        phoneNumber: row.phoneNumber,
-        alternatePhone: row.alternatePhone ?? '',
-        email: row.email ?? '',
-        address: row.address ?? '',
-        city: row.cityRef?.name ?? '',
-        country: row.cityRef?.country ?? '',
-        warehouse: row.warehouse?.name ?? '',
-        idType: row.idType ?? '',
-        idNumber: row.idNumber ?? '',
-        preferredChannel: row.preferredChannel,
-        status: row.isActive ? 'Active' : 'Inactive',
-        packages: row._count?.packages ?? 0,
-        invoices: row._count?.invoices ?? 0,
-        payments: row._count?.payments ?? 0,
-        createdAt: row.createdAt.toISOString().slice(0, 10),
-      });
+      sheet.addRow(toExcelRow(row));
     });
 
+    this.styleExcelHeader(sheet);
+    this.styleExcelBody(sheet);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    return Buffer.from(buffer);
+  }
+
+  private async streamExcel(
+    batches: AsyncIterable<CustomerExportRow[]>,
+    res: Response,
+  ): Promise<void> {
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res,
+      useStyles: true,
+      useSharedStrings: false,
+    });
+    workbook.creator = 'AOSTP';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Customers', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+
+    sheet.columns = EXCEL_COLUMNS;
+    this.styleExcelHeader(sheet);
+
+    let closed = false;
+    res.on('close', () => {
+      closed = true;
+    });
+
+    try {
+      for await (const rows of batches) {
+        if (closed) {
+          break;
+        }
+
+        for (const row of rows) {
+          sheet.addRow(toExcelRow(row)).commit();
+        }
+      }
+
+      sheet.commit();
+      await workbook.commit();
+    } catch (error) {
+      if (!res.writableEnded) {
+        res.destroy(error as Error);
+      }
+    }
+  }
+
+  private styleExcelHeader(sheet: ExcelJS.Worksheet): void {
     const headerRow = sheet.getRow(1);
     headerRow.height = 20;
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -113,17 +242,15 @@ export class CustomersExportService {
         to: { row: 1, column: sheet.columnCount },
       };
     }
+  }
 
+  private styleExcelBody(sheet: ExcelJS.Worksheet): void {
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) {
         return;
       }
       row.alignment = { vertical: 'top', horizontal: 'left' };
     });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-
-    return Buffer.from(buffer);
   }
 
   private buildPdf(rows: CustomerExportRow[]): Promise<Buffer> {
@@ -140,113 +267,138 @@ export class CustomersExportService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      const left = doc.page.margins.left;
-      const contentWidth =
-        doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      const bottomLimit = doc.page.height - doc.page.margins.bottom - 20;
+      const table = this.createPdfTable(doc, `${rows.length} customer(s)`);
 
-      const columns: Array<{
-        header: string;
-        weight: number;
-        value: (row: CustomerExportRow) => string;
-      }> = [
-        {
-          header: 'Code',
-          weight: 12,
-          value: (row) => row.customerCode,
-        },
-        {
-          header: 'Customer Name',
-          weight: 20,
-          value: (row) =>
-            [row.firstName, row.lastName].filter(Boolean).join(' '),
-        },
-        { header: 'Phone', weight: 13, value: (row) => row.phoneNumber },
-        { header: 'Email', weight: 24, value: (row) => row.email ?? '' },
-        { header: 'City', weight: 12, value: (row) => row.cityRef?.name ?? '' },
-        {
-          header: 'Warehouse',
-          weight: 15,
-          value: (row) => row.warehouse?.name ?? '',
-        },
-        {
-          header: 'Status',
-          weight: 8,
-          value: (row) => (row.isActive ? 'Active' : 'Inactive'),
-        },
-        {
-          header: 'Pkgs',
-          weight: 6,
-          value: (row) => String(row._count?.packages ?? 0),
-        },
-      ];
+      rows.forEach((row) => table.addRow(row));
+      table.finish(rows.length === 0);
 
-      const totalWeight = columns.reduce(
-        (total, column) => total + column.weight,
-        0,
+      doc.end();
+    });
+  }
+
+  private async streamPdf(
+    batches: AsyncIterable<CustomerExportRow[]>,
+    res: Response,
+  ): Promise<void> {
+    const doc = new PDFDocument({
+      size: 'A4',
+      layout: 'landscape',
+      margin: 30,
+    });
+
+    let closed = false;
+    res.on('close', () => {
+      closed = true;
+    });
+
+    doc.on('error', (error) => {
+      if (!res.writableEnded) {
+        res.destroy(error);
+      }
+    });
+
+    doc.pipe(res);
+
+    const table = this.createPdfTable(doc, 'all matching customers');
+    let count = 0;
+
+    try {
+      for await (const rows of batches) {
+        if (closed) {
+          break;
+        }
+
+        for (const row of rows) {
+          table.addRow(row);
+          count += 1;
+        }
+      }
+
+      table.finish(count === 0);
+      doc.end();
+    } catch (error) {
+      if (!res.writableEnded) {
+        res.destroy(error as Error);
+      }
+    }
+  }
+
+  private createPdfTable(
+    doc: PDFDocument,
+    subtitle: string,
+  ): {
+    addRow: (row: CustomerExportRow) => void;
+    finish: (empty: boolean) => void;
+  } {
+    const left = doc.page.margins.left;
+    const contentWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const bottomLimit = doc.page.height - doc.page.margins.bottom - 20;
+
+    const totalWeight = PDF_COLUMNS.reduce(
+      (total, column) => total + column.weight,
+      0,
+    );
+    const widths = PDF_COLUMNS.map(
+      (column) => (contentWidth * column.weight) / totalWeight,
+    );
+
+    const rowHeight = 18;
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(16)
+      .fillColor('#111827')
+      .text('Customer Export', left, 30, {
+        width: contentWidth,
+        align: 'center',
+      });
+
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#6B7280')
+      .text(
+        `Generated ${new Date().toLocaleString('en-GB')} • ${subtitle}`,
+        left,
+        52,
+        { width: contentWidth, align: 'center' },
       );
-      const widths = columns.map(
-        (column) => (contentWidth * column.weight) / totalWeight,
-      );
 
-      const rowHeight = 18;
-
+    const drawHeader = (position: number): number => {
       doc
-        .font('Helvetica-Bold')
-        .fontSize(16)
-        .fillColor('#111827')
-        .text('Customer Export', left, 30, {
-          width: contentWidth,
-          align: 'center',
-        });
+        .save()
+        .rect(left, position, contentWidth, rowHeight)
+        .fill('#E5E7EB')
+        .restore();
 
-      doc
-        .font('Helvetica')
-        .fontSize(9)
-        .fillColor('#6B7280')
-        .text(
-          `Generated ${new Date().toLocaleString('en-GB')} • ${rows.length} customer(s)`,
-          left,
-          52,
-          { width: contentWidth, align: 'center' },
-        );
-
-      let y = 78;
-
-      const drawHeader = (position: number): number => {
+      let x = left;
+      PDF_COLUMNS.forEach((column, index) => {
         doc
-          .save()
-          .rect(left, position, contentWidth, rowHeight)
-          .fill('#E5E7EB')
-          .restore();
+          .font('Helvetica-Bold')
+          .fontSize(8)
+          .fillColor('#111827')
+          .text(column.header, x + 4, position + 5, {
+            width: widths[index] - 8,
+            lineBreak: false,
+          });
+        x += widths[index];
+      });
 
-        doc.fillColor('#111827').font('Helvetica-Bold').fontSize(8);
+      return position + rowHeight;
+    };
 
-        let x = left;
-        columns.forEach((column, index) => {
-          doc
-            .font('Helvetica-Bold')
-            .fontSize(8)
-            .fillColor('#111827')
-            .text(column.header, x + 4, position + 5, {
-              width: widths[index] - 8,
-              lineBreak: false,
-            });
-          x += widths[index];
-        });
+    let y = drawHeader(78);
+    let rowIndex = 0;
 
-        return position + rowHeight;
-      };
-
-      y = drawHeader(y);
-
-      rows.forEach((row, index) => {
+    return {
+      addRow: (row: CustomerExportRow) => {
         if (y + rowHeight > bottomLimit) {
           doc.addPage();
           y = drawHeader(doc.page.margins.top);
         }
 
-        if (index % 2 === 1) {
+        if (rowIndex % 2 === 1) {
           doc
             .save()
             .rect(left, y, contentWidth, rowHeight)
@@ -255,7 +407,7 @@ export class CustomersExportService {
         }
 
         let x = left;
-        columns.forEach((column, columnIndex) => {
+        PDF_COLUMNS.forEach((column, columnIndex) => {
           const text = this.truncate(
             doc,
             column.value(row),
@@ -275,9 +427,13 @@ export class CustomersExportService {
         });
 
         y += rowHeight;
-      });
+        rowIndex += 1;
+      },
+      finish: (empty: boolean) => {
+        if (!empty) {
+          return;
+        }
 
-      if (rows.length === 0) {
         doc
           .font('Helvetica')
           .fontSize(9)
@@ -286,10 +442,8 @@ export class CustomersExportService {
             width: contentWidth,
             align: 'center',
           });
-      }
-
-      doc.end();
-    });
+      },
+    };
   }
 
   private truncate(doc: PDFDocument, text: string, maxWidth: number): string {

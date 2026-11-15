@@ -1,8 +1,39 @@
 import { NotificationChannel } from '@prisma/client';
+import { PassThrough } from 'stream';
+import type { Response } from 'express';
 import {
   CustomerExportRow,
   CustomersExportService,
 } from './customers-export.service';
+
+async function collectStream(
+  service: CustomersExportService,
+  batches: CustomerExportRow[][],
+  format: 'pdf' | 'excel',
+): Promise<Buffer> {
+  const response = new PassThrough();
+  const chunks: Buffer[] = [];
+  response.on('data', (chunk: Buffer) => chunks.push(chunk));
+  const ended = new Promise<void>((resolve, reject) => {
+    response.on('end', () => resolve());
+    response.on('error', reject);
+  });
+
+  async function* generate() {
+    for (const batch of batches) {
+      yield batch;
+    }
+  }
+
+  await service.stream(
+    generate(),
+    format,
+    response as unknown as Response,
+  );
+  await ended;
+
+  return Buffer.concat(chunks);
+}
 
 describe('CustomersExportService', () => {
   const service = new CustomersExportService();
@@ -56,5 +87,44 @@ describe('CustomersExportService', () => {
 
     expect(pdf.buffer.subarray(0, 4).toString()).toBe('%PDF');
     expect(excel.buffer.subarray(0, 2).toString()).toBe('PK');
+  });
+
+  it('streams a PDF while consuming batches lazily', async () => {
+    const buffer = await collectStream(
+      service,
+      [[rows[0]], [rows[0], rows[0]]],
+      'pdf',
+    );
+
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(buffer.length).toBeGreaterThan(1000);
+  });
+
+  it('streams an Excel workbook while consuming batches lazily', async () => {
+    const buffer = await collectStream(
+      service,
+      [[rows[0]], [rows[0], rows[0]]],
+      'excel',
+    );
+
+    expect(buffer.subarray(0, 2).toString()).toBe('PK');
+    expect(buffer.length).toBeGreaterThan(1000);
+  });
+
+  it('streams valid files when there are no batches', async () => {
+    const pdf = await collectStream(service, [], 'pdf');
+    const excel = await collectStream(service, [], 'excel');
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(excel.subarray(0, 2).toString()).toBe('PK');
+  });
+
+  it('names streaming exports customers-all-*', () => {
+    expect(service.describe('pdf', true).filename).toMatch(
+      /^customers-all-\d{4}-\d{2}-\d{2}\.pdf$/,
+    );
+    expect(service.describe('excel', true).filename).toMatch(
+      /^customers-all-\d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
   });
 });

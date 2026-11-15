@@ -14,8 +14,29 @@ import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
 import {
   CUSTOMER_EXPORT_ROW_LIMIT,
   CustomerExportFile,
+  CustomerExportFileInfo,
+  CustomerExportRow,
   CustomersExportService,
 } from './customers-export.service';
+import type { Response } from 'express';
+
+const CUSTOMER_EXPORT_BATCH_SIZE = 500;
+
+const CUSTOMER_SORT_FIELDS = new Set([
+  'customerCode',
+  'firstName',
+  'lastName',
+  'email',
+  'phoneNumber',
+  'alternatePhone',
+  'address',
+  'idType',
+  'idNumber',
+  'preferredChannel',
+  'isActive',
+  'createdAt',
+  'updatedAt',
+]);
 
 @Injectable()
 export class CustomersService {
@@ -179,57 +200,115 @@ export class CustomersService {
   }
 
   async exportCustomers(dto: ExportCustomersDto): Promise<CustomerExportFile> {
-    const {
-      format,
-      ids,
-      search,
-      isActive,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-    } = dto;
-
     const customers = await this.prisma.customer.findMany({
-      where: this.buildWhere(
-        {
-          search,
-          isActive:
-            isActive === 'true'
-              ? true
-              : isActive === 'false'
-                ? false
-                : undefined,
-        },
-        ids,
-      ),
+      where: this.buildWhere(this.parseExportFilters(dto), dto.ids),
       take: CUSTOMER_EXPORT_ROW_LIMIT,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        warehouse: {
-          select: {
-            id: true,
-            name: true,
-            location: true,
-          },
-        },
-        cityRef: {
-          select: {
-            id: true,
-            name: true,
-            country: true,
-          },
-        },
-        _count: {
-          select: {
-            packages: true,
-            invoices: true,
-            payments: true,
-          },
-        },
+      orderBy: {
+        [this.sortField(dto.sortBy)]: dto.sortOrder ?? 'desc',
       },
+      include: this.exportInclude,
     });
 
-    return this.customersExportService.generate(customers, format);
+    return this.customersExportService.generate(customers, dto.format);
   }
+
+  getExportFileInfo(
+    format: ExportCustomersDto['format'],
+    all: boolean,
+  ): CustomerExportFileInfo {
+    return this.customersExportService.describe(format, all);
+  }
+
+  /**
+   * Streams every matching customer to the response in batches. No transaction
+   * is held and only one batch of rows is in memory at a time.
+   */
+  async streamExportCustomers(
+    dto: ExportCustomersDto,
+    res: Response,
+  ): Promise<void> {
+    const where = this.buildWhere(this.parseExportFilters(dto));
+    const batches = this.customerBatches(
+      where,
+      this.sortField(dto.sortBy),
+      dto.sortOrder ?? 'desc',
+    );
+
+    await this.customersExportService.stream(batches, dto.format, res);
+  }
+
+  private parseExportFilters(dto: ExportCustomersDto): {
+    search?: string;
+    isActive?: boolean;
+  } {
+    return {
+      search: dto.search,
+      isActive:
+        dto.isActive === 'true'
+          ? true
+          : dto.isActive === 'false'
+            ? false
+            : undefined,
+    };
+  }
+
+  private sortField(sortBy?: string): string {
+    return sortBy && CUSTOMER_SORT_FIELDS.has(sortBy) ? sortBy : 'createdAt';
+  }
+
+  private async *customerBatches(
+    where: Prisma.CustomerWhereInput,
+    sortBy: string,
+    sortOrder: 'asc' | 'desc',
+  ): AsyncGenerator<CustomerExportRow[]> {
+    let skip = 0;
+
+    while (true) {
+      const rows = await this.prisma.customer.findMany({
+        where,
+        skip,
+        take: CUSTOMER_EXPORT_BATCH_SIZE,
+        orderBy: { [sortBy]: sortOrder },
+        include: this.exportInclude,
+      });
+
+      if (rows.length === 0) {
+        return;
+      }
+
+      yield rows;
+
+      if (rows.length < CUSTOMER_EXPORT_BATCH_SIZE) {
+        return;
+      }
+
+      skip += CUSTOMER_EXPORT_BATCH_SIZE;
+    }
+  }
+
+  private readonly exportInclude = {
+    warehouse: {
+      select: {
+        id: true,
+        name: true,
+        location: true,
+      },
+    },
+    cityRef: {
+      select: {
+        id: true,
+        name: true,
+        country: true,
+      },
+    },
+    _count: {
+      select: {
+        packages: true,
+        invoices: true,
+        payments: true,
+      },
+    },
+  } as const;
 
   private buildWhere(
     filters?: {
