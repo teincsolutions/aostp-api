@@ -167,27 +167,27 @@ jobs:
           fi
           echo "All required secrets are present."
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
-          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET_TEST }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY_TEST }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
 
       - name: Generate .env file
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
-          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET_TEST }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY_TEST }}
-          AWS_REGION: ${{ secrets.AWS_REGION_TEST }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
-          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME_TEST }}
-          AWS_USERS_BUCKET_NAME: ${{ secrets.AWS_USERS_BUCKET_NAME_TEST }}
-          AWS_LOGS_BUCKET_NAME: ${{ secrets.AWS_LOGS_BUCKET_NAME_TEST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME }}
+          AWS_USERS_BUCKET_NAME: ${{ secrets.AWS_USERS_BUCKET_NAME }}
+          AWS_LOGS_BUCKET_NAME: ${{ secrets.AWS_LOGS_BUCKET_NAME }}
           CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
           CORS_ORIGIN: ${{ env.CORS_ORIGIN }}
           FRONTEND_URL: ${{ env.FRONTEND_URL }}
@@ -209,19 +209,27 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           SMS_ONLINE_GH_API_KEY: ${{ secrets.SMS_ONLINE_GH_API_KEY }}
           ARKESEL_API_KEY: ${{ secrets.ARKESEL_API_KEY }}
+          ARKESEL_SENDER_ID: ${{ secrets.ARKESEL_SENDER_ID }}
+          SMS_ONLINE_GH_SENDER_ID: ${{ secrets.SMS_ONLINE_GH_SENDER_ID }}
           AWS_SNS_REGION: ${{ secrets.AWS_SNS_REGION }}
           AWS_SNS_ACCESS_KEY_ID: ${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
           AWS_SNS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+          AWS_SNS_SENDER_ID: ${{ secrets.AWS_SNS_SENDER_ID }}
+          AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          WHATSAPP_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
         run: envsubst < .env.example > .env.test
 
       - name: Setup S3 bucket policies
         run: chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
         env:
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
-          AWS_REGION: ${{ secrets.AWS_REGION_TEST }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
-          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME_TEST }}
+          AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME }}
           CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
 
       - name: Login to GitHub Container Registry
@@ -308,7 +316,7 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
           AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME }}
           AWS_USERS_BUCKET_NAME: ${{ secrets.AWS_USERS_BUCKET_NAME }}
           AWS_LOGS_BUCKET_NAME: ${{ secrets.AWS_LOGS_BUCKET_NAME }}
@@ -333,16 +341,24 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           SMS_ONLINE_GH_API_KEY: ${{ secrets.SMS_ONLINE_GH_API_KEY }}
           ARKESEL_API_KEY: ${{ secrets.ARKESEL_API_KEY }}
+          ARKESEL_SENDER_ID: ${{ secrets.ARKESEL_SENDER_ID }}
+          SMS_ONLINE_GH_SENDER_ID: ${{ secrets.SMS_ONLINE_GH_SENDER_ID }}
           AWS_SNS_REGION: ${{ secrets.AWS_SNS_REGION }}
           AWS_SNS_ACCESS_KEY_ID: ${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
           AWS_SNS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+          AWS_SNS_SENDER_ID: ${{ secrets.AWS_SNS_SENDER_ID }}
+          AWS_S3_BUCKET_NAME: ${{ secrets.AWS_S3_BUCKET_NAME }}
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          WHATSAPP_VERIFY_TOKEN: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          WHATSAPP_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
         run: envsubst < .env.example > .env.production
 
       - name: Setup S3 bucket policies
         run: |
           chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
         env:
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_S3_ENDPOINT: ${{ vars.AWS_S3_ENDPOINT }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
