@@ -8,19 +8,9 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IdType, NotificationChannel } from '@prisma/client';
 import { IsValidIdNumber } from '../../../shared/decorators/id-validation.decorator';
-
-const emptyToUndefined = ({ value }: { value: unknown }) => {
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const trimmed = value.trim();
-  return trimmed === '' ? undefined : trimmed;
-};
 
 export class CreateCustomerDto {
   @ApiProperty({
@@ -41,7 +31,6 @@ export class CreateCustomerDto {
     minLength: 2,
     maxLength: 50,
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   @MinLength(2)
@@ -53,7 +42,6 @@ export class CreateCustomerDto {
     example: 'john.doe@example.com',
     format: 'email',
   })
-  @Transform(emptyToUndefined)
   @ValidateIf(
     (o) => o.email !== undefined && o.email !== null && o.email !== '',
   )
@@ -73,7 +61,6 @@ export class CreateCustomerDto {
     description: 'Alternative phone number',
     example: '+233241234567',
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   alternatePhone?: string;
@@ -83,7 +70,6 @@ export class CreateCustomerDto {
     example: '123 Main Street, Accra',
     maxLength: 200,
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   @MaxLength(200)
@@ -93,7 +79,6 @@ export class CreateCustomerDto {
     description: 'Warehouse ID',
     example: 'uuid',
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   warehouseId?: string;
@@ -102,7 +87,6 @@ export class CreateCustomerDto {
     description: 'City ID from cities table',
     example: 'uuid',
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   cityId?: string;
@@ -112,7 +96,6 @@ export class CreateCustomerDto {
     enum: IdType,
     example: IdType.NATIONAL_ID,
   })
-  @Transform(emptyToUndefined)
   @IsEnum(IdType)
   @IsOptional()
   idType?: IdType;
@@ -122,7 +105,6 @@ export class CreateCustomerDto {
     example: 'GHA-123456789-0',
     maxLength: 50,
   })
-  @Transform(emptyToUndefined)
   @IsString()
   @IsOptional()
   @MaxLength(50)

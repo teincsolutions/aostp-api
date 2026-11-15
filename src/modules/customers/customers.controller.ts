@@ -148,7 +148,9 @@ export class CustomersController {
     summary: 'Export customers',
     description:
       'Downloads the filtered customer list, or a specific set of customers, as a PDF or Excel file. ' +
-      'When ids are supplied, other filters are ignored. Exports are capped at 5000 customers.',
+      'When ids are supplied, other filters are ignored. Set all=true to stream every matching customer ' +
+      'in batches without holding the database or buffering the whole file. ' +
+      'Non-streaming exports are capped at 5000 customers.',
   })
   @ApiProduces(
     'application/pdf',
@@ -165,15 +167,23 @@ export class CustomersController {
     @Query() exportDto: ExportCustomersDto,
     @Res() res: Response,
   ): Promise<void> {
-    const file = await this.customersService.exportCustomers(exportDto);
+    const all = exportDto.all === true;
+    const info = this.customersService.getExportFileInfo(exportDto.format, all);
 
     res.set({
-      'Content-Type': file.contentType,
-      'Content-Disposition': `attachment; filename="${file.filename}"`,
-      'Content-Length': file.buffer.length.toString(),
+      'Content-Type': info.contentType,
+      'Content-Disposition': `attachment; filename="${info.filename}"`,
       'Cache-Control': 'no-store',
     });
 
+    if (all) {
+      await this.customersService.streamExportCustomers(exportDto, res);
+      return;
+    }
+
+    const file = await this.customersService.exportCustomers(exportDto);
+
+    res.set('Content-Length', file.buffer.length.toString());
     res.end(file.buffer);
   }
 
