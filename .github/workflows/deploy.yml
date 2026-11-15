@@ -144,6 +144,7 @@ jobs:
       name: test
       url: https://test-aostp.akomapacargo.com
     env:
+      COMPOSE_PROJECT_NAME: aostp-api-test
       DOCKER_TAG: ${{ needs.build.outputs.docker_tag }}
       DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
       NEXT_PUBLIC_API_BASE_URL: https://test-api.akomapacargo.com/api/v1
@@ -310,6 +311,7 @@ jobs:
       name: production
       url: https://aostp.akomapacargo.com
     env:
+      COMPOSE_PROJECT_NAME: aostp-api-prod
       DOCKER_TAG: ${{ needs.build.outputs.docker_tag }}
       DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
     steps:
