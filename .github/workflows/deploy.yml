@@ -389,7 +389,8 @@ jobs:
         run: |
           PREV_TAG=$(docker inspect aostp-api-production --format '{{index .Config.Image}}' 2>/dev/null | rev | cut -d: -f1 | rev || echo "")
           if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$DOCKER_TAG" ]; then
-            echo "$PREV_TAG" > /tmp/aostp-api-previous-tag.txt
+            mkdir -p "$HOME/.aostp"
+            echo "$PREV_TAG" > "$HOME/.aostp/aostp-api-previous-tag.txt"
             echo "Saved previous tag: $PREV_TAG"
           else
             echo "No previous tag to save"

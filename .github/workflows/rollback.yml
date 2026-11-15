@@ -30,7 +30,7 @@ jobs:
           if [ -n "${{ github.event.inputs.image_tag }}" ]; then
             echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
           else
-            FILE="/tmp/aostp-api-previous-tag.txt"
+            FILE="$HOME/.aostp/aostp-api-previous-tag.txt"
             if [ -f "$FILE" ]; then
               TAG=$(cat "$FILE")
               echo "tag=$TAG" >> $GITHUB_OUTPUT
