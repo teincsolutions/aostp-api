@@ -1,0 +1,420 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, test]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
+  NODE_ENV: production
+  NODE_VERSION: '20'
+  CORS_ORIGIN: https://aostp.akomapacargo.com,https://test-aostp.akomapacargo.com
+  FRONTEND_URL: https://aostp.akomapacargo.com
+  CDN_DOMAIN: cdn.akomapacargo.com
+  JWT_EXPIRATION: 15m
+  JWT_REFRESH_EXPIRATION: 7d
+  SMS_PROVIDER: hubtel
+  EMAIL_PROVIDER: nodemailer
+  SMTP_SECURE: true
+  EMAIL_FROM: info@akomapacargo.com
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    # Push builds run on the deployment host: the image is built where it is
+    # deployed and Docker can reuse layers between runs. Pull requests stay on
+    # GitHub-hosted runners so untrusted PR code never executes on our infra.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'aostp-runner' }}
+    timeout-minutes: 45
+    outputs:
+      docker_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Docker tag
+        id: tag
+        run: echo "tag=${{ github.run_number }}-$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          docker build --target production \
+            --build-arg NODE_ENV=production \
+            --build-arg DATABASE_URL=${{ secrets.DATABASE_URL_BUILD }} \
+            --tag ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.tag.outputs.tag }} \
+            --tag ${{ env.DOCKER_IMAGE_NAME }}:latest \
+            .
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: Prune dangling images
+        if: always()
+        run: docker image prune -f
+
+  security-scan:
+    name: Security Scan
+    # Runs on the same host as the build for pushes, so the freshly built image
+    # is scanned without transferring it. PRs use the GitHub-hosted runner.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'aostp-runner' }}
+    needs: build
+    timeout-minutes: 20
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.2
+    steps:
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Ensure image is available locally
+        run: |
+          IMAGE="${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+          if docker image inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "Using locally built image: $IMAGE"
+          else
+            docker pull "$IMAGE"
+          fi
+
+      - name: Trivy security scan
+        # Trivy runs in a disposable container - nothing is installed on the
+        # runner. Scan failures are reported but do not block deployment.
+        continue-on-error: true
+        run: |
+          CACHE_DIR="$HOME/.cache/trivy"
+          REPORT_DIR="${{ runner.temp }}/trivy-report"
+          mkdir -p "$CACHE_DIR" "$REPORT_DIR"
+
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$CACHE_DIR":/root/.cache/trivy \
+            -v "$REPORT_DIR":/reports \
+            "$TRIVY_IMAGE" image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output /reports/trivy-report.json \
+            --no-progress \
+            "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+
+          docker run --rm \
+            -v "$REPORT_DIR":/reports \
+            "$TRIVY_IMAGE" convert --format table /reports/trivy-report.json
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ needs.build.outputs.docker_tag }}
+          path: ${{ runner.temp }}/trivy-report/trivy-report.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  verify-image:
+    name: Verify Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Pull and verify Docker image
+        run: |
+          docker pull "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+          docker inspect "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}" > /dev/null
+          echo "✅ Image verified: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+
+  deploy-test:
+    name: Deploy to Test Environment
+    needs: [build, security-scan, verify-image]
+    if: github.ref_name == 'test' && github.event_name == 'push'
+    runs-on: [self-hosted, aostp-runner]
+    environment:
+      name: test
+      url: https://test-aostp.akomapacargo.com
+    env:
+      DOCKER_TAG: ${{ needs.build.outputs.docker_tag }}
+      DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
+      NEXT_PUBLIC_API_BASE_URL: https://test-api.akomapacargo.com/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          MISSING=()
+          [[ -z "$DATABASE_URL" ]] && MISSING+=("DATABASE_URL")
+          [[ -z "$JWT_SECRET" ]] && MISSING+=("JWT_SECRET")
+          [[ -z "$JWT_REFRESH_SECRET" ]] && MISSING+=("JWT_REFRESH_SECRET")
+          [[ -z "$ENCRYPTION_KEY" ]] && MISSING+=("ENCRYPTION_KEY")
+          [[ -z "$AWS_ACCESS_KEY_ID" ]] && MISSING+=("AWS_ACCESS_KEY_ID")
+          [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && MISSING+=("AWS_SECRET_ACCESS_KEY")
+          [[ -z "$AWS_S3_ENDPOINT" ]] && MISSING+=("AWS_S3_ENDPOINT")
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Missing required secrets:"
+            for item in "${MISSING[@]}"; do echo "::error::  - $item"; done
+            exit 1
+          fi
+          echo "All required secrets are present."
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET_TEST }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY_TEST }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
+
+      - name: Generate .env file
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET_TEST }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY_TEST }}
+          AWS_REGION: ${{ secrets.AWS_REGION_TEST }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME_TEST }}
+          AWS_USERS_BUCKET_NAME: ${{ secrets.AWS_USERS_BUCKET_NAME_TEST }}
+          AWS_LOGS_BUCKET_NAME: ${{ secrets.AWS_LOGS_BUCKET_NAME_TEST }}
+          CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
+          CORS_ORIGIN: ${{ env.CORS_ORIGIN }}
+          FRONTEND_URL: ${{ env.FRONTEND_URL }}
+          JWT_EXPIRATION: ${{ env.JWT_EXPIRATION }}
+          JWT_REFRESH_EXPIRATION: ${{ env.JWT_REFRESH_EXPIRATION }}
+          SMS_PROVIDER: ${{ env.SMS_PROVIDER }}
+          EMAIL_PROVIDER: ${{ env.EMAIL_PROVIDER }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SECURE: ${{ env.SMTP_SECURE }}
+          EMAIL_FROM: ${{ env.EMAIL_FROM }}
+          HUBTEL_CLIENT_ID: ${{ secrets.HUBTEL_CLIENT_ID }}
+          HUBTEL_CLIENT_SECRET: ${{ secrets.HUBTEL_CLIENT_SECRET }}
+          HUBTEL_POS_SALES_ID: ${{ secrets.HUBTEL_POS_SALES_ID }}
+          HUBTEL_API_ID: ${{ secrets.HUBTEL_API_ID }}
+          HUBTEL_API_KEY: ${{ secrets.HUBTEL_API_KEY }}
+          HUBTEL_CALLBACK_URL: ${{ secrets.HUBTEL_CALLBACK_URL }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          SMS_ONLINE_GH_API_KEY: ${{ secrets.SMS_ONLINE_GH_API_KEY }}
+          ARKESEL_API_KEY: ${{ secrets.ARKESEL_API_KEY }}
+          AWS_SNS_REGION: ${{ secrets.AWS_SNS_REGION }}
+          AWS_SNS_ACCESS_KEY_ID: ${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
+          AWS_SNS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+        run: envsubst < .env.example > .env.test
+
+      - name: Setup S3 bucket policies
+        run: chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
+        env:
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT_TEST }}
+          AWS_REGION: ${{ secrets.AWS_REGION_TEST }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME_TEST }}
+          CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
+
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Stop existing containers
+        run: |
+          docker compose -f docker-compose.test.yml down --remove-orphans 2>/dev/null || true
+          docker rm -f aostp-api-test redis-production 2>/dev/null || true
+
+      - name: Deploy with docker-compose
+        run: |
+          docker compose -f docker-compose.test.yml pull
+          docker compose -f docker-compose.test.yml up -d
+
+      - name: Run database migrations
+        run: |
+          docker exec aostp-api-test npm run prisma:migrate:deploy || \
+          docker run --rm --network aostp-internal-net --env-file .env.test \
+            "${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}" \
+            npx prisma migrate deploy
+
+      - name: Wait for container readiness
+        run: sleep 15
+
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if curl -f http://localhost:3001/api/v1/health > /dev/null 2>&1; then
+              echo "✅ Test health check passed"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "❌ Health check failed after 10 attempts"
+              docker logs aostp-api-test || true
+              exit 1
+            fi
+            echo "Waiting... (attempt $i/10)"
+            sleep 5
+          done
+
+      - name: Cleanup env file
+        run: rm -f .env.test
+
+  deploy-prod:
+    name: Deploy to Production Environment
+    needs: [build, security-scan, verify-image]
+    if: github.ref_name == 'main' && github.event_name == 'push'
+    runs-on: [self-hosted, aostp-runner]
+    environment:
+      name: production
+      url: https://aostp.akomapacargo.com
+    env:
+      DOCKER_TAG: ${{ needs.build.outputs.docker_tag }}
+      DOCKER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/aostp-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          MISSING=()
+          [[ -z "$DATABASE_URL" ]] && MISSING+=("DATABASE_URL")
+          [[ -z "$JWT_SECRET" ]] && MISSING+=("JWT_SECRET")
+          [[ -z "$JWT_REFRESH_SECRET" ]] && MISSING+=("JWT_REFRESH_SECRET")
+          [[ -z "$ENCRYPTION_KEY" ]] && MISSING+=("ENCRYPTION_KEY")
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Missing required secrets:"
+            for item in "${MISSING[@]}"; do echo "::error::  - $item"; done
+            exit 1
+          fi
+          echo "All required secrets are present."
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+
+      - name: Generate .env file
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME }}
+          AWS_USERS_BUCKET_NAME: ${{ secrets.AWS_USERS_BUCKET_NAME }}
+          AWS_LOGS_BUCKET_NAME: ${{ secrets.AWS_LOGS_BUCKET_NAME }}
+          CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
+          CORS_ORIGIN: ${{ env.CORS_ORIGIN }}
+          FRONTEND_URL: ${{ env.FRONTEND_URL }}
+          JWT_EXPIRATION: ${{ env.JWT_EXPIRATION }}
+          JWT_REFRESH_EXPIRATION: ${{ env.JWT_REFRESH_EXPIRATION }}
+          SMS_PROVIDER: ${{ env.SMS_PROVIDER }}
+          EMAIL_PROVIDER: ${{ env.EMAIL_PROVIDER }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SECURE: ${{ env.SMTP_SECURE }}
+          EMAIL_FROM: ${{ env.EMAIL_FROM }}
+          HUBTEL_CLIENT_ID: ${{ secrets.HUBTEL_CLIENT_ID }}
+          HUBTEL_CLIENT_SECRET: ${{ secrets.HUBTEL_CLIENT_SECRET }}
+          HUBTEL_POS_SALES_ID: ${{ secrets.HUBTEL_POS_SALES_ID }}
+          HUBTEL_API_ID: ${{ secrets.HUBTEL_API_ID }}
+          HUBTEL_API_KEY: ${{ secrets.HUBTEL_API_KEY }}
+          HUBTEL_CALLBACK_URL: ${{ secrets.HUBTEL_CALLBACK_URL }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          SMS_ONLINE_GH_API_KEY: ${{ secrets.SMS_ONLINE_GH_API_KEY }}
+          ARKESEL_API_KEY: ${{ secrets.ARKESEL_API_KEY }}
+          AWS_SNS_REGION: ${{ secrets.AWS_SNS_REGION }}
+          AWS_SNS_ACCESS_KEY_ID: ${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
+          AWS_SNS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+        run: envsubst < .env.example > .env.production
+
+      - name: Setup S3 bucket policies
+        run: |
+          chmod +x ./scripts/setup-s3-policy.sh && ./scripts/setup-s3-policy.sh
+        env:
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_PACKAGES_BUCKET_NAME: ${{ secrets.AWS_PACKAGES_BUCKET_NAME }}
+          CDN_DOMAIN: ${{ env.CDN_DOMAIN }}
+
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Save previous image tag for rollback
+        run: |
+          PREV_TAG=$(docker inspect aostp-api-production --format '{{index .Config.Image}}' 2>/dev/null | rev | cut -d: -f1 | rev || echo "")
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$DOCKER_TAG" ]; then
+            echo "$PREV_TAG" > /tmp/aostp-api-previous-tag.txt
+            echo "Saved previous tag: $PREV_TAG"
+          else
+            echo "No previous tag to save"
+          fi
+
+      - name: Stop existing containers
+        run: |
+          docker compose -f docker-compose.production.yml down --remove-orphans 2>/dev/null || true
+          docker rm -f aostp-api-production redis-production 2>/dev/null || true
+
+      - name: Deploy with docker-compose
+        run: |
+          docker compose -f docker-compose.production.yml pull
+          docker compose -f docker-compose.production.yml up -d
+
+      - name: Run database migrations
+        run: |
+          docker exec aostp-api-production npm run prisma:migrate:deploy || \
+          docker run --rm --network aostp-internal-net --env-file .env.production \
+            "${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}" \
+            npx prisma migrate deploy
+
+      - name: Wait for container readiness
+        run: sleep 15
+
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if curl -f http://localhost:3000/api/v1/health > /dev/null 2>&1; then
+              echo "✅ Production health check passed"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "❌ Health check failed after 10 attempts"
+              docker logs aostp-api-production || true
+              exit 1
+            fi
+            echo "Waiting... (attempt $i/10)"
+            sleep 5
+          done
+
+      - name: Cleanup docker images (keep last 3)
+        run: |
+          docker images "${{ env.DOCKER_IMAGE_NAME }}" --format "{{.Tag}}" | grep -E "^[0-9]+" | sort -n | head -n -3 | xargs -r -I {} docker rmi "${{ env.DOCKER_IMAGE_NAME}}:{}" || true
+          docker image prune -f || true
+
+      - name: Cleanup env file
+        run: rm -f .env.production
+
+      - name: Send Slack success notification
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H "Content-type: application/json" \
+            --data '{"text":"✅ AOSTP API production deployment successful\nCommit: ${{ github.sha }}\nTag: ${{ env.DOCKER_TAG }}"}' \
+            "$SLACK_WEBHOOK_URL" || true
+
+      - name: Send Slack failure notification
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H "Content-type: application/json" \
+            --data '{"text":"❌ AOSTP API production deployment failed\nCommit: ${{ github.sha }}\nBuild: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            "$SLACK_WEBHOOK_URL" || true

@@ -9,9 +9,12 @@ import {
   Query,
   UseGuards,
   Request,
+  Res,
   HttpCode,
   HttpStatus,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -19,11 +22,13 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiProduces,
 } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerFilterDto } from './dto/customer-filter.dto';
+import { ExportCustomersDto } from './dto/export-customers.dto';
 import { ForceDeleteCustomerDto } from './dto/force-delete-customer.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -131,6 +136,46 @@ export class CustomersController {
         isActive === 'true' ? true : isActive === 'false' ? false : undefined,
     };
     return this.customersService.findAll(paginationDto, filters);
+  }
+
+  @Get('export')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.OPERATIONS_CLERK,
+    UserRole.PAYMENT_CLERK,
+    UserRole.FINANCE_MANAGER,
+  )
+  @ApiOperation({
+    summary: 'Export customers',
+    description:
+      'Downloads the filtered customer list, or a specific set of customers, as a PDF or Excel file. ' +
+      'When ids are supplied, other filters are ignored. Exports are capped at 5000 customers.',
+  })
+  @ApiProduces(
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiResponse({ status: 200, description: 'Export file generated' })
+  @ApiResponse({ status: 400, description: 'Invalid export parameters' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - insufficient permissions',
+  })
+  async export(
+    @Query() exportDto: ExportCustomersDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const file = await this.customersService.exportCustomers(exportDto);
+
+    res.set({
+      'Content-Type': file.contentType,
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Content-Length': file.buffer.length.toString(),
+      'Cache-Control': 'no-store',
+    });
+
+    return new StreamableFile(file.buffer);
   }
 
   @Get(':id')
