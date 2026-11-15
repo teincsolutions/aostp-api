@@ -7,15 +7,27 @@ import {
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { ExportCustomersDto } from './dto/export-customers.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { PaginatedResult } from '../../shared/interfaces';
 import { Customer, InvoiceStatus, Prisma } from '@prisma/client';
+import {
+  CUSTOMER_EXPORT_ROW_LIMIT,
+  CustomerExportFile,
+  CustomersExportService,
+} from './customers-export.service';
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly customersExportService: CustomersExportService,
+  ) {}
 
-  async create(createCustomerDto: CreateCustomerDto, userId?: string): Promise<Customer> {
+  async create(
+    createCustomerDto: CreateCustomerDto,
+    userId?: string,
+  ): Promise<Customer> {
     // Check if customer with same phone number exists
     const existingCustomer = await this.prisma.customer.findFirst({
       where: { phoneNumber: createCustomerDto.phoneNumber },
@@ -116,18 +128,7 @@ export class CustomersService {
     } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.CustomerWhereInput = {
-      ...(filters?.isActive !== undefined && { isActive: filters.isActive }),
-      ...(filters?.search && {
-        OR: [
-          { firstName: { contains: filters.search, mode: 'insensitive' } },
-          { lastName: { contains: filters.search, mode: 'insensitive' } },
-          { email: { contains: filters.search, mode: 'insensitive' } },
-          { phoneNumber: { contains: filters.search } },
-          { customerCode: { contains: filters.search, mode: 'insensitive' } },
-        ],
-      }),
-    };
+    const where = this.buildWhere(filters);
 
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
@@ -174,6 +175,84 @@ export class CustomersService {
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
       },
+    };
+  }
+
+  async exportCustomers(dto: ExportCustomersDto): Promise<CustomerExportFile> {
+    const {
+      format,
+      ids,
+      search,
+      isActive,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = dto;
+
+    const customers = await this.prisma.customer.findMany({
+      where: this.buildWhere(
+        {
+          search,
+          isActive:
+            isActive === 'true'
+              ? true
+              : isActive === 'false'
+                ? false
+                : undefined,
+        },
+        ids,
+      ),
+      take: CUSTOMER_EXPORT_ROW_LIMIT,
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+          },
+        },
+        cityRef: {
+          select: {
+            id: true,
+            name: true,
+            country: true,
+          },
+        },
+        _count: {
+          select: {
+            packages: true,
+            invoices: true,
+            payments: true,
+          },
+        },
+      },
+    });
+
+    return this.customersExportService.generate(customers, format);
+  }
+
+  private buildWhere(
+    filters?: {
+      search?: string;
+      isActive?: boolean;
+    },
+    ids?: string[],
+  ): Prisma.CustomerWhereInput {
+    if (ids && ids.length > 0) {
+      return { id: { in: ids } };
+    }
+
+    return {
+      ...(filters?.isActive !== undefined && { isActive: filters.isActive }),
+      ...(filters?.search && {
+        OR: [
+          { firstName: { contains: filters.search, mode: 'insensitive' } },
+          { lastName: { contains: filters.search, mode: 'insensitive' } },
+          { email: { contains: filters.search, mode: 'insensitive' } },
+          { phoneNumber: { contains: filters.search } },
+          { customerCode: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      }),
     };
   }
 

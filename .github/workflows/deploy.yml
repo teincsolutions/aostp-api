@@ -28,7 +28,11 @@ env:
 jobs:
   build:
     name: Build and Push Docker Image
-    runs-on: ubuntu-latest
+    # Push builds run on the deployment host: the image is built where it is
+    # deployed and Docker can reuse layers between runs. Pull requests stay on
+    # GitHub-hosted runners so untrusted PR code never executes on our infra.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'aostp-runner' }}
+    timeout-minutes: 45
     outputs:
       docker_tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -52,40 +56,65 @@ jobs:
           docker push ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
           docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
 
+      - name: Prune dangling images
+        if: always()
+        run: docker image prune -f
+
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    # Runs on the same host as the build for pushes, so the freshly built image
+    # is scanned without transferring it. PRs use the GitHub-hosted runner.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'aostp-runner' }}
     needs: build
+    timeout-minutes: 20
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.2
     steps:
       - name: Login to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-      - name: Pull Docker image
-        run: docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}
+      - name: Ensure image is available locally
+        run: |
+          IMAGE="${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+          if docker image inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "Using locally built image: $IMAGE"
+          else
+            docker pull "$IMAGE"
+          fi
 
       - name: Trivy security scan
+        # Trivy runs in a disposable container - nothing is installed on the
+        # runner. Scan failures are reported but do not block deployment.
         continue-on-error: true
         run: |
-          TRIVY_TEMP_DIR="/tmp/trivy-$(date +%s)"
-          mkdir -p "$TRIVY_TEMP_DIR"
-          if [ -f .trivyignore ]; then
-            cp .trivyignore "$TRIVY_TEMP_DIR/.trivyignore"
-          fi
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_TEMP_DIR":/root/.trivyignore.d \
-            -v "$TRIVY_TEMP_DIR":/tmp/trivy aquasec/trivy:latest image \
-            --ignorefile /root/.trivyignore.d/.trivyignore \
-            --format json --output /tmp/trivy/trivy-report.json \
-            "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}" || true
-          if [ -f "$TRIVY_TEMP_DIR/trivy-report.json" ]; then
-            cp "$TRIVY_TEMP_DIR/trivy-report.json" ./trivy-report.json || true
-          fi
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_TEMP_DIR":/root/.trivyignore.d \
-            aquasec/trivy:latest image --severity HIGH,CRITICAL \
-            --ignorefile /root/.trivyignore.d/.trivyignore \
-            "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}" || true
-          rm -rf "$TRIVY_TEMP_DIR" || true
+          CACHE_DIR="$HOME/.cache/trivy"
+          REPORT_DIR="${{ runner.temp }}/trivy-report"
+          mkdir -p "$CACHE_DIR" "$REPORT_DIR"
+
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$CACHE_DIR":/root/.cache/trivy \
+            -v "$REPORT_DIR":/reports \
+            "$TRIVY_IMAGE" image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output /reports/trivy-report.json \
+            --no-progress \
+            "${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build.outputs.docker_tag }}"
+
+          docker run --rm \
+            -v "$REPORT_DIR":/reports \
+            "$TRIVY_IMAGE" convert --format table /reports/trivy-report.json
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ needs.build.outputs.docker_tag }}
+          path: ${{ runner.temp }}/trivy-report/trivy-report.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   verify-image:
     name: Verify Docker Image
