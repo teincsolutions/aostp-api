@@ -253,7 +253,19 @@ jobs:
               --network aostp-internal-net --network-alias redis \
               -p 6379:6379 redis:latest
           fi
-          docker exec redis-production redis-cli ping
+
+          for i in {1..15}; do
+            if docker exec redis-production redis-cli ping > /dev/null 2>&1; then
+              echo "✅ Redis is ready"
+              exit 0
+            fi
+            echo "Waiting for Redis... (attempt $i/15)"
+            sleep 1
+          done
+
+          echo "❌ Redis did not become ready"
+          docker logs redis-production || true
+          exit 1
 
       - name: Deploy with docker-compose
         run: |
