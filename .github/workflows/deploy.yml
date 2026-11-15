@@ -240,7 +240,20 @@ jobs:
       - name: Stop existing containers
         run: |
           docker compose -f docker-compose.test.yml down --remove-orphans 2>/dev/null || true
-          docker rm -f aostp-api-test redis-production 2>/dev/null || true
+          docker rm -f aostp-api-test 2>/dev/null || true
+
+      - name: Ensure shared Redis is running
+        # redis-production is shared with the production stack and is not part
+        # of docker-compose.test.yml, so never leave it stopped.
+        run: |
+          if docker inspect redis-production > /dev/null 2>&1; then
+            docker start redis-production > /dev/null 2>&1 || true
+          else
+            docker run -d --name redis-production --restart always \
+              --network aostp-internal-net --network-alias redis \
+              -p 6379:6379 redis:latest
+          fi
+          docker exec redis-production redis-cli ping
 
       - name: Deploy with docker-compose
         run: |
