@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { PendingDeliveryQueryDto } from './dto/pending-delivery-query.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import {
   Prisma,
@@ -111,8 +112,7 @@ export class InvoicesService {
       }
 
       // Generate invoice number
-      const invoiceNumber =
-        this.idGeneratorService.generateInvoiceNumber();
+      const invoiceNumber = this.idGeneratorService.generateInvoiceNumber();
 
       // Use container's ETA as due date, fallback to 30 days from now
       const dueDate = packingList.container?.eta
@@ -727,14 +727,13 @@ export class InvoicesService {
     });
   }
 
-  async getPendingDeliveryInvoices(
-    customerId?: string,
-    paginationDto?: PaginationDto,
-  ) {
-    const { page = 1, limit = 20 } = paginationDto || {};
+  async getPendingDeliveryInvoices(query: PendingDeliveryQueryDto = {}) {
+    const { page = 1, limit = 100, customerId, search } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.InvoiceWhereInput = {
+      // Only fully paid invoices can be released for pickup.
+      status: InvoiceStatus.PAID,
       package: {
         delivery: null, // Package has no delivery record
         status: {
@@ -745,6 +744,16 @@ export class InvoicesService {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (search) {
+      where.OR = [
+        { invoiceNumber: { contains: search, mode: 'insensitive' } },
+        {
+          package: { trackingCode: { contains: search, mode: 'insensitive' } },
+        },
+        { package: { pickupCode: { contains: search, mode: 'insensitive' } } },
+      ];
     }
 
     const [invoices, total] = await Promise.all([
@@ -967,9 +976,12 @@ export class InvoicesService {
       // Send notification with the new PDF attached (non-blocking with timeout)
       // Re-fetch invoice to get updated invoicePdfKey
       const updatedInvoice = await this.findOne(id);
-      
+
       // Queue notification in background - don't block the response
-      this.queueInvoiceNotificationWithTimeout(updatedInvoice, invoice.invoiceNumber);
+      this.queueInvoiceNotificationWithTimeout(
+        updatedInvoice,
+        invoice.invoiceNumber,
+      );
 
       return result;
     } catch (error) {
@@ -1037,7 +1049,9 @@ export class InvoicesService {
       company: companyInfo,
       invoice: {
         number: invoice.invoiceNumber,
-        date: invoice.packingList.container.loadingDate.toISOString().split('T')[0],
+        date: invoice.packingList.container.loadingDate
+          .toISOString()
+          .split('T')[0],
         dueDate: invoice.dueDate.toISOString().split('T')[0],
         status: invoice.status,
       },
