@@ -23,6 +23,7 @@ import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceFilterDto } from './dto/invoice-filter.dto';
+import { PendingDeliveryQueryDto } from './dto/pending-delivery-query.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -57,11 +58,7 @@ export class InvoicesController {
   }
 
   @Get()
-  @Roles(
-    UserRole.FINANCE_MANAGER,
-    UserRole.PAYMENT_CLERK,
-    UserRole.SUPER_ADMIN,
-  )
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.PAYMENT_CLERK, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get all invoices with filters and pagination' })
   findAll(@Query() filterDto: InvoiceFilterDto) {
     const { page, limit, sortBy, sortOrder, ...filters } = filterDto;
@@ -83,28 +80,21 @@ export class InvoicesController {
   @Roles(
     UserRole.FINANCE_MANAGER,
     UserRole.PAYMENT_CLERK,
+    UserRole.OPERATIONS_CLERK,
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
-    summary: 'Get invoices pending delivery',
+    summary: 'Get paid invoices ready for pickup',
     description:
-      'Retrieves invoices whose packages have not been delivered yet',
+      'Retrieves PAID invoices whose packages have not been picked up yet. ' +
+      'Invoices for packages that are already released or have a delivery record are excluded.',
   })
-  @ApiQuery({ name: 'customerId', required: false, type: String })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({
     status: 200,
-    description: 'Invoices pending delivery retrieved successfully',
+    description: 'Invoices ready for pickup retrieved successfully',
   })
-  findPendingDelivery(
-    @Query('customerId') customerId?: string,
-    @Query() paginationDto?: PaginationDto,
-  ) {
-    return this.invoicesService.getPendingDeliveryInvoices(
-      customerId,
-      paginationDto,
-    );
+  findPendingDelivery(@Query() query: PendingDeliveryQueryDto) {
+    return this.invoicesService.getPendingDeliveryInvoices(query);
   }
 
   @Get('customer/:customerId')
@@ -139,10 +129,7 @@ export class InvoicesController {
   }
 
   @Patch(':id')
-  @Roles(
-    UserRole.FINANCE_MANAGER,
-    UserRole.SUPER_ADMIN,
-  )
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update an invoice' })
   @ApiResponse({ status: 200, description: 'Invoice updated successfully' })
   @ApiResponse({ status: 404, description: 'Invoice not found' })
@@ -170,11 +157,7 @@ export class InvoicesController {
   }
 
   @Post(':id/regenerate-pdf')
-  @Roles(
-    UserRole.FINANCE_MANAGER,
-    UserRole.SUPER_ADMIN,
-    UserRole.PAYMENT_CLERK,
-  )
+  @Roles(UserRole.FINANCE_MANAGER, UserRole.SUPER_ADMIN, UserRole.PAYMENT_CLERK)
   @ApiOperation({ summary: 'Regenerate invoice PDF' })
   @ApiResponse({ status: 200, description: 'PDF regenerated successfully' })
   @ApiResponse({ status: 404, description: 'Invoice not found' })
