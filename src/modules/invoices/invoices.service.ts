@@ -616,6 +616,11 @@ export class InvoicesService {
       return updatedInvoice;
     });
 
+    // Keep the cached PDF in sync with the updated invoice details.
+    if (result.invoicePdfKey) {
+      await this.refreshInvoicePdfs([id]);
+    }
+
     this.logger.log(`Invoice ${result.invoiceNumber} updated`);
     return result;
   }
@@ -981,6 +986,41 @@ export class InvoicesService {
   }
 
   /**
+   * Refresh existing invoice PDFs without sending notifications.
+   * Invoices that have never had a PDF generated are skipped; they are
+   * generated on demand with current data when first downloaded.
+   */
+  async refreshInvoicePdfs(invoiceIds: string[]): Promise<void> {
+    const uniqueIds = [...new Set(invoiceIds)];
+
+    for (const invoiceId of uniqueIds) {
+      try {
+        const invoice = await this.findOne(invoiceId);
+        if (!invoice.invoicePdfKey) {
+          continue;
+        }
+
+        const pkg = await this.prisma.package.findUnique({
+          where: { id: invoice.packageId || '' },
+        });
+
+        const result = await this.generateInvoicePdfData(
+          invoice,
+          pkg?.shippingRate || 0,
+        );
+
+        this.logger.log(
+          `PDF refreshed for invoice ${invoice.invoiceNumber}: ${result.key}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to refresh PDF for invoice ${invoiceId}: ${error.message}`,
+        );
+      }
+    }
+  }
+
+  /**
    * Queue invoice notification with timeout (non-blocking)
    * This prevents the endpoint from hanging if Redis/queue is unavailable
    */
@@ -1034,7 +1074,12 @@ export class InvoicesService {
       company: companyInfo,
       invoice: {
         number: invoice.invoiceNumber,
-        date: invoice.packingList.container.loadingDate
+        date: (
+          invoice.packingList?.container?.loadingDate ??
+          invoice.packingList?.loadingDate ??
+          invoice.createdAt ??
+          new Date()
+        )
           .toISOString()
           .split('T')[0],
         dueDate: invoice.dueDate.toISOString().split('T')[0],

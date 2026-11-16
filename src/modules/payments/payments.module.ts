@@ -6,10 +6,11 @@ import { PaymentGatewayModule } from '../../providers/payment-gateway/payment-ga
 import { StorageModule } from '../../providers/storage/storage.module';
 import { PDFService } from '../../providers/pdf/pdf.service';
 import { CallbackTokenService } from '../../providers/payment-gateway/callback-token.service';
+import { InvoicesModule } from '../invoices/invoices.module';
 import { JwtService } from '@nestjs/jwt';
 
 @Module({
-  imports: [PaymentGatewayModule, StorageModule],
+  imports: [PaymentGatewayModule, StorageModule, InvoicesModule],
   controllers: [PaymentsController, WebhookController],
   providers: [PaymentsService, PDFService, CallbackTokenService, JwtService],
   exports: [PaymentsService],
