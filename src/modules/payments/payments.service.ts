@@ -10,7 +10,13 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaginationDto } from '../../shared/dto/pagination.dto';
-import { Prisma, Payment, InvoiceStatus, PaymentStatus } from '@prisma/client';
+import {
+  Prisma,
+  Payment,
+  InvoiceStatus,
+  PaymentStatus,
+  PaymentGatewayStatus,
+} from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import {
   PaymentStatus as GatewayPaymentStatus,
@@ -23,6 +29,7 @@ import { S3Service } from '../../providers/storage/s3.service';
 import { CallbackTokenService } from '../../providers/payment-gateway/callback-token.service';
 import { roundToTwoDecimals } from '../../shared/utils/decimal.utils';
 import { HubtelCallbackData } from '../../providers/payment-gateway/providers/hubtel.provider';
+import { InvoicesService } from '../invoices/invoices.service';
 
 @Injectable()
 export class PaymentsService {
@@ -35,6 +42,7 @@ export class PaymentsService {
     private readonly callbackTokenService: CallbackTokenService,
     private readonly pdfService: PDFService,
     private readonly s3Service: S3Service,
+    private readonly invoicesService: InvoicesService,
   ) {}
 
   async create(
@@ -191,7 +199,9 @@ export class PaymentsService {
             const notesParts: string[] = [];
             if (notes) notesParts.push(notes);
             if (gatewayResult.paymentUrl) {
-              notesParts.push(`GATEWAY PAYMENT URL: ${gatewayResult.paymentUrl}`);
+              notesParts.push(
+                `GATEWAY PAYMENT URL: ${gatewayResult.paymentUrl}`,
+              );
             }
             notesParts.push(`GATEWAY STATUS: PENDING`);
             if (gatewayResult.gatewayTransactionId) {
@@ -318,6 +328,11 @@ export class PaymentsService {
         );
         // Don't fail the payment creation if receipt generation fails
       }
+    }
+
+    // Payment allocations change invoice balances/status, so refresh existing PDFs.
+    if (!isGatewayPayment && invoiceIds && invoiceIds.length > 0) {
+      await this.invoicesService.refreshInvoicePdfs(invoiceIds);
     }
 
     this.logger.log(
@@ -589,6 +604,32 @@ export class PaymentsService {
 
       return updatedPayment;
     });
+
+    // Regenerate the receipt so it reflects the updated method/reference/notes.
+    const shouldRegenerateReceipt =
+      !!result.receiptKey ||
+      result.gatewayStatus === null ||
+      result.gatewayStatus === PaymentGatewayStatus.COMPLETED;
+
+    if (shouldRegenerateReceipt) {
+      try {
+        const receiptResult = await this.generatePaymentReceipt(id);
+        this.logger.log(
+          `Payment receipt regenerated for ${result.paymentCode}: ${receiptResult.key}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to regenerate receipt for ${result.paymentCode}: ${error.message}`,
+        );
+        // Don't fail the payment update if document regeneration fails
+      }
+    }
+
+    // Invoice PDFs contain payment allocations/status, so refresh any that exist.
+    const invoiceIds = result.invoices?.map((invoice) => invoice.id) ?? [];
+    if (invoiceIds.length > 0) {
+      await this.invoicesService.refreshInvoicePdfs(invoiceIds);
+    }
 
     this.logger.log(`Payment ${result.paymentCode} updated`);
     return result;
@@ -1218,6 +1259,13 @@ export class PaymentsService {
         `Failed to generate receipt for successful gateway payment ${payment.paymentCode}: ${error.message}`,
       );
       // Don't fail the callback processing if receipt generation fails
+    }
+
+    // Refresh invoice PDFs now that the payment has been applied.
+    if (payment.invoices && payment.invoices.length > 0) {
+      await this.invoicesService.refreshInvoicePdfs(
+        payment.invoices.map((invoice) => invoice.id),
+      );
     }
 
     this.logger.log(
