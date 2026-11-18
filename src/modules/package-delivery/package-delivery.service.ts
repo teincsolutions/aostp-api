@@ -8,6 +8,7 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { CreatePackageDeliveryDto } from './dto/create-package-delivery.dto';
 import { IdGeneratorService } from '../../shared/utils/id-generator.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PackageStatus } from '@prisma/client';
 
 @Injectable()
 export class PackageDeliveryService {
@@ -109,6 +110,20 @@ export class PackageDeliveryService {
       packagesToDeliver = allPackages;
     }
 
+    // A released package must never be picked up again, even if it has no
+    // delivery record (for example, legacy/manually released packages).
+    const alreadyReleased = packagesToDeliver.filter(
+      (pkg) => pkg.status === PackageStatus.RELEASED,
+    );
+
+    if (alreadyReleased.length > 0) {
+      throw new BadRequestException(
+        `Packages already released: ${alreadyReleased
+          .map((pkg) => pkg.trackingCode)
+          .join(', ')}`,
+      );
+    }
+
     // Check for existing deliveries
     const packageIds = packagesToDeliver.map((pkg) => pkg.id);
 
@@ -134,8 +149,7 @@ export class PackageDeliveryService {
         const invoice = invoiceByPackageId.get(pkg.id);
 
         // Generate delivery ID
-        const deliveryId =
-          this.idGeneratorService.generatePackageDeliveryId();
+        const deliveryId = this.idGeneratorService.generatePackageDeliveryId();
 
         // Create delivery record
         const created = await tx.packageDelivery.create({

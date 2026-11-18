@@ -1,4 +1,4 @@
-import { InvoiceStatus, PackageStatus } from '@prisma/client';
+import { PackageStatus } from '@prisma/client';
 import { InvoicesService } from './invoices.service';
 
 describe('InvoicesService - getPendingDeliveryInvoices', () => {
@@ -23,7 +23,7 @@ describe('InvoicesService - getPendingDeliveryInvoices', () => {
     prisma.invoice.count.mockResolvedValue(0);
   });
 
-  it('only returns PAID invoices whose packages are not delivered or released', async () => {
+  it('returns invoices of every payment status whose packages are not delivered or released', async () => {
     const result = await service.getPendingDeliveryInvoices({
       customerId: 'customer-1',
     });
@@ -31,13 +31,13 @@ describe('InvoicesService - getPendingDeliveryInvoices', () => {
     const args = prisma.invoice.findMany.mock.calls[0][0];
 
     expect(args.where).toMatchObject({
-      status: InvoiceStatus.PAID,
       customerId: 'customer-1',
       package: {
         delivery: null,
         status: { not: PackageStatus.RELEASED },
       },
     });
+    expect(args.where.status).toBeUndefined();
     expect(args.take).toBe(100);
     expect(result).toEqual({
       data: [],
@@ -52,8 +52,14 @@ describe('InvoicesService - getPendingDeliveryInvoices', () => {
 
     expect(args.where.OR).toEqual([
       { invoiceNumber: { contains: 'INV-2026', mode: 'insensitive' } },
-      { package: { trackingCode: { contains: 'INV-2026', mode: 'insensitive' } } },
-      { package: { pickupCode: { contains: 'INV-2026', mode: 'insensitive' } } },
+      {
+        package: {
+          trackingCode: { contains: 'INV-2026', mode: 'insensitive' },
+        },
+      },
+      {
+        package: { pickupCode: { contains: 'INV-2026', mode: 'insensitive' } },
+      },
     ]);
   });
 
