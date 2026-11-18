@@ -737,8 +737,8 @@ export class InvoicesService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.InvoiceWhereInput = {
-      // Only fully paid invoices can be released for pickup.
-      status: InvoiceStatus.PAID,
+      // Any invoice status (UNPAID, PARTIALLY_PAID, PAID) can be picked up,
+      // but only while its package has not already been released.
       package: {
         delivery: null, // Package has no delivery record
         status: {

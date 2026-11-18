@@ -88,9 +88,9 @@ export class InvoicesController {
     UserRole.SUPER_ADMIN,
   )
   @ApiOperation({
-    summary: 'Get paid invoices ready for pickup',
+    summary: 'Get invoices ready for pickup',
     description:
-      'Retrieves PAID invoices whose packages have not been picked up yet. ' +
+      'Retrieves UNPAID, PARTIALLY_PAID, and PAID invoices whose packages have not been picked up yet. ' +
       'Invoices for packages that are already released or have a delivery record are excluded.',
   })
   @ApiResponse({
