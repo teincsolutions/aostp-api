@@ -36,7 +36,7 @@ This document describes the payment deletion endpoint that allows Super Admin us
 
 ```bash
 curl -X DELETE https://api.example.com/payments/550e8400-e29b-41d4-a716-446655440000 \
-  -H "Authorization: Bearer REDACTED_JWT..."
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
 ---

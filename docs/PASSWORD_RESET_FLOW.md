@@ -39,7 +39,7 @@ Content-Type: application/json
 
 ```http
 POST /api/users/550e8400-e29b-41d4-a716-446655440000/reset-password
-Authorization: Bearer REDACTED_JWT...
+Authorization: Bearer <ACCESS_TOKEN>
 ```
 
 **Success Response (200):**
